@@ -46,21 +46,21 @@
       "bench": "sst2-choice",
       "state": "{\"text\": \"<a review sentence>\"}",
       "measured": "accuracy 0.91 (AUC 0.96) on 200 SST-2 review sentences, chance 0.50",
-      "source": "verdict bench, suite sst2-choice, scorecard v0.2.3"
+      "source": "verdict bench, suite sst2-choice, scorecard v0.2.4"
     },
     {
       "name": "is_spam",
       "bench": "spam-yesno",
       "state": "{\"text\": \"<an SMS message>\"}",
       "measured": "AUC 0.98 on 200 SMS messages; 97% of spam over 0.5",
-      "source": "verdict bench, suite spam-yesno, scorecard v0.2.3"
+      "source": "verdict bench, suite spam-yesno, scorecard v0.2.4"
     },
     {
       "name": "prompt_injection",
       "bench": "injection-choice",
       "state": "{\"text\": \"<a prompt to an assistant>\"}",
       "measured": "accuracy 0.83 (AUC 0.95) on 200 English prompts; injection recall 0.70, so rank or fit a cut",
-      "source": "verdict bench, suite injection-choice, scorecard v0.2.3"
+      "source": "verdict bench, suite injection-choice, scorecard v0.2.4"
     }
   ]
 }
