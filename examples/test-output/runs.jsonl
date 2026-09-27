@@ -1,0 +1,12 @@
+{"state": {"output": "============ 48 passed in 3.21s ============"}, "expected": {"failed": false}}
+{"state": {"output": "FAILED tests/test_api.py::test_login - AssertionError: assert 401 == 200\n============ 1 failed, 47 passed in 3.40s ============"}, "expected": {"failed": true}}
+{"state": {"output": "Compiling app v0.3.1\n    Finished release [optimized] target(s) in 41.2s"}, "expected": {"failed": false}}
+{"state": {"output": "error[E0308]: mismatched types\n  --> src/main.rs:14:9\nerror: could not compile `app` due to previous error"}, "expected": {"failed": true}}
+{"state": {"output": "Test Suites: 12 passed, 12 total\nTests:       96 passed, 96 total\nTime:        4.87 s"}, "expected": {"failed": false}}
+{"state": {"output": "Test Suites: 1 failed, 11 passed, 12 total\nTests:       2 failed, 94 passed, 96 total"}, "expected": {"failed": true}}
+{"state": {"output": "ok  \tgithub.com/acme/store\t0.412s\nok  \tgithub.com/acme/store/api\t0.803s"}, "expected": {"failed": false}}
+{"state": {"output": "--- FAIL: TestCheckout (0.02s)\n    checkout_test.go:31: got 3 items, want 2\nFAIL\tgithub.com/acme/store\t0.398s"}, "expected": {"failed": true}}
+{"state": {"output": "Successfully built 3f2a9c1d7e44\nSuccessfully tagged acme/web:latest"}, "expected": {"failed": false}}
+{"state": {"output": "ModuleNotFoundError: No module named 'requests'"}, "expected": {"failed": true}}
+{"state": {"output": "============ 30 passed, 2 skipped, 5 warnings in 1.92s ============"}, "expected": {"failed": false}}
+{"state": {"output": "npm ERR! code ELIFECYCLE\nnpm ERR! errno 1\nnpm ERR! web@1.0.0 build: `next build`\nnpm ERR! Exit status 1"}, "expected": {"failed": true}}

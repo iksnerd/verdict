@@ -1,0 +1,12 @@
+{"state": {"comment": "This builds the SQL query with string formatting from user input, which is an injection hole. Please use a parameterized query."}, "expected": {"kind": "blocking"}}
+{"state": {"comment": "nit: I'd call this `user_count` rather than `n`, but up to you."}, "expected": {"kind": "nit"}}
+{"state": {"comment": "Why do we retry three times here rather than using the client's built-in backoff?"}, "expected": {"kind": "question"}}
+{"state": {"comment": "Really clean refactor, the new module boundaries make this much easier to follow."}, "expected": {"kind": "praise"}}
+{"state": {"comment": "This deletes the migration that production already ran; the next deploy will fail. Must restore it before merge."}, "expected": {"kind": "blocking"}}
+{"state": {"comment": "Minor: trailing whitespace on line 42."}, "expected": {"kind": "nit"}}
+{"state": {"comment": "What happens if the cache is empty on first boot? Is that path covered anywhere?"}, "expected": {"kind": "question"}}
+{"state": {"comment": "LGTM, thanks for adding the tests."}, "expected": {"kind": "praise"}}
+{"state": {"comment": "The endpoint now returns 200 on auth failure instead of 401, which breaks every client that checks the status. Needs fixing."}, "expected": {"kind": "blocking"}}
+{"state": {"comment": "Optional: these two imports could be combined onto one line."}, "expected": {"kind": "nit"}}
+{"state": {"comment": "Is this flag still used anywhere, or can it go?"}, "expected": {"kind": "question"}}
+{"state": {"comment": "Nice catch on the off-by-one, great work."}, "expected": {"kind": "praise"}}

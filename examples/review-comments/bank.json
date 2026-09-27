@@ -1,0 +1,6 @@
+{"kind": {"type": "choice",
+          "instructions": "What kind of code review `comment` is this?",
+          "criteria": {"blocking": "asks for a change that must be made before merging, such as a bug, a security problem or a broken contract",
+                       "nit": "an optional style, naming or formatting suggestion",
+                       "question": "asks the author to explain something, without requesting a change",
+                       "praise": "approval or appreciation, nothing to change"}}}

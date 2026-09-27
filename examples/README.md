@@ -1,6 +1,6 @@
 # Examples
 
-Ten runnable examples. Every input is invented, and no real data is in this folder.
+Fourteen runnable examples. Every input is invented, and no real data is in this folder.
 `tests/test_examples.py` checks that each bank still validates and that its inputs have the fields
 the questions name.
 
@@ -35,6 +35,10 @@ than one-off questions (`docs/api.md`).
 | `task-verification/` | one yes/no | checking a reported result against the task's own acceptance criteria |
 | `citation-check/` | one three-way choice | does a passage support, contradict or say nothing about a claim |
 | `checklist-check/` | three three-way choices | per-criterion met / uncertain / absent against a checklist |
+| `test-output/` | one yes/no | did a test run or build fail, read from its output |
+| `pii-check/` | one yes/no | does a snippet hold someone's contact details, before it is logged or shared |
+| `review-comments/` | one four-way choice | sorting code-review comments: blocking, nit, question, praise |
+| `turn-intent/` | one yes/no | is a user's turn an instruction or a question (library `is_instruction`) |
 
 ## room-triage/
 
@@ -287,6 +291,107 @@ And the schema-bump description's one hedge ("not sure if anyone still uses it")
 all (it should read `absent`) — the tone of one sentence bleeding into a question that is supposed
 to read only its own slice of the text.
 
+
+## test-output/
+
+The output an agent reads after every test run or build, from six toolchains (pytest, cargo,
+jest, go test, docker, npm). `bank.json` asks one yes/no: does `output` report a failing test,
+a failed build or an error.
+
+```
+0.04  48 passed in 3.21s                                  0.99  FAILED tests/test_api.py::test_login ...
+0.04  Finished release [optimized] target(s) in 41.2s    0.98  error[E0308]: mismatched types ...
+0.08  Tests: 96 passed, 96 total                          0.98  Tests: 2 failed, 94 passed, 96 total
+0.03  ok  github.com/acme/store  0.412s                   0.99  --- FAIL: TestCheckout (0.02s) ...
+0.01  Successfully built 3f2a9c1d7e44                     0.97  ModuleNotFoundError: No module named ...
+0.09  30 passed, 2 skipped, 5 warnings in 1.92s           0.98  npm ERR! code ELIFECYCLE ...
+```
+
+`verdict examples test-output` reproduces this (`12/12 match the recorded expectation`). Every
+answer is far from 0.5, including the two traps: `2 skipped, 5 warnings` is a pass, and `2
+failed, 94 passed` is a failure despite the large pass count. This is the question on the page
+at its plainest, which is where verdict is strongest. A regex over `FAIL|error` gets most of
+these too; the question earns its place across toolchains whose wording you did not anticipate.
+
+## pii-check/
+
+A gate before a snippet goes into a log, a ticket or a prompt to a hosted model. `bank.json` asks
+whether `text` holds a person's email, phone number, home address or similar contact details.
+Every name, address and number is invented (`example.com` addresses, 555 and Ofcom drama numbers).
+
+```
+0.94  Contact Dana at dana.whitfield@example.com ...
+0.01  The build broke again after the dependency upgrade ...
+0.72  Call me on +1 415 555 0142 after 6pm ...
+0.32  The support line is open 9am to 6pm on weekdays.
+0.96  Ship the replacement to Marta Ruiz, 18 Linden Road ...
+0.12  The replacement ships from our Springfield warehouse ...
+0.06  user_id=48213 session=9f1c status=active plan=pro
+0.99  Signup: name=Tom Becker, email=tbecker@example.org, phone=555-0199
+0.01  Q3 revenue grew 12% with churn flat at 2.1%.
+0.16  Forwarding from jl.moreau@example.net: 'please remove me ...'   <- a miss
+0.59  Set SMTP_HOST=smtp.example.com and SMTP_PORT=587 ...             <- a miss
+0.47  Emergency contact: Priya Nair (sister), 07700 900123.            <- a miss
+```
+
+`verdict examples pii-check` reproduces this (`9/12 match the recorded expectation`). The misses
+go both ways: an address inside a quoted forward scores low, a mail server's hostname scores as
+personal, and a UK phone number with a name lands just under 0.5. Nine of twelve is not a
+privacy gate. Use it to rank a large batch so the likely ones are read first, and keep a regex for
+the formats you know (emails, phone patterns) in front of it.
+
+## review-comments/
+
+Sorting code-review comments so the blocking ones are answered first. `bank.json` is one choice:
+`blocking`, `nit`, `question` or `praise`, each with a one-line description.
+
+```
+nit (0.35)       This builds the SQL query with string formatting from user input ...   <- a miss (blocking)
+nit (0.70)       nit: I'd call this `user_count` rather than `n` ...
+question (0.22)  Why do we retry three times here ...
+praise (0.63)    Really clean refactor ...
+blocking (0.31)  This deletes the migration that production already ran ...
+nit (0.74)       Minor: trailing whitespace on line 42.
+question (0.35)  What happens if the cache is empty on first boot? ...
+praise (0.48)    LGTM, thanks for adding the tests.
+nit (0.30)       The endpoint now returns 200 on auth failure instead of 401 ...        <- a miss (blocking)
+nit (0.35)       Optional: these two imports could be combined onto one line.
+question (0.44)  Is this flag still used anywhere, or can it go?
+praise (0.78)    Nice catch on the off-by-one, great work.
+```
+
+`verdict examples review-comments` reproduces this (`10/12 match the recorded expectation`), but
+the two misses are the two that matter most: an injection hole and a broken status code, both read
+as `nit`, and every probability is low. Questions, praise and labelled nits are easy because the
+wording says so; whether a change is *required* depends on knowing what the code does, which is
+not on the page. Fine for ordering a review queue; never for deciding that nothing blocks a merge.
+
+## turn-intent/
+
+The library's `is_instruction` question (`verdict questions`), on turns a person might send a
+coding agent: half ask for an action, half ask something.
+
+```
+0.97  run the tests and fix whatever fails
+0.04  why does the login test fail only on CI?
+0.92  rename the config module to settings and update the imports
+0.85  what does the retry decorator do?                    <- a miss
+0.98  commit this and push it to main
+0.82  is it safe to delete the old migrations folder?      <- a miss
+0.98  add a --dry-run flag to the deploy script
+0.02  how long does the full suite take to run?
+0.95  can you bump the version to 2.1 and tag it
+0.14  where is the rate limit configured?
+0.99  delete the unused feature flags
+0.06  which of these two approaches would you pick?
+```
+
+`verdict examples turn-intent` reproduces this (`10/12 match the recorded expectation`). Polite
+instructions phrased as a question (`can you bump ...`) land correctly. Both misses are questions
+about something actionable: `delete` and `the retry decorator` pull them toward instruction. On
+real agent turns this question measured AUC 0.77 at predicting that the agent then used tools
+(FINDINGS §26, §27), so these twelve are about what to expect: right most of the time, and
+confidently wrong on a question that names an action.
 
 When comparing Laya and Jev, pin the upstream model with `--systemone-model jev-1.13.0`.
 `--systemone` sends the original banks and states without Laya's CLI rewriting or clipping, so

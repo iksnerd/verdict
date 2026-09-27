@@ -87,7 +87,7 @@ claude plugin install verdict@verdict
 
 - [docs/guide.md](docs/guide.md): writing questions, bulk runs, calibration, recipes,
   troubleshooting, and the command reference.
-- [examples/](examples/README.md): ten runnable banks with invented inputs and their real
+- [examples/](examples/README.md): fourteen runnable banks with invented inputs and their real
   measured output, including what each one gets wrong.
 - [docs/api.md](docs/api.md): the HTTP API.
 - [docs/FINDINGS.md](docs/FINDINGS.md): every measurement behind these docs, with sample sizes

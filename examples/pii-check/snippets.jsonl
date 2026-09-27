@@ -1,0 +1,12 @@
+{"state": {"text": "Contact Dana at dana.whitfield@example.com if the build breaks again."}, "expected": {"personal_data": true}}
+{"state": {"text": "The build broke again after the dependency upgrade; rolling back."}, "expected": {"personal_data": false}}
+{"state": {"text": "Call me on +1 415 555 0142 after 6pm, my work line is down."}, "expected": {"personal_data": true}}
+{"state": {"text": "The support line is open 9am to 6pm on weekdays."}, "expected": {"personal_data": false}}
+{"state": {"text": "Ship the replacement to Marta Ruiz, 18 Linden Road, Springfield 62704."}, "expected": {"personal_data": true}}
+{"state": {"text": "The replacement ships from our Springfield warehouse within two days."}, "expected": {"personal_data": false}}
+{"state": {"text": "user_id=48213 session=9f1c status=active plan=pro"}, "expected": {"personal_data": false}}
+{"state": {"text": "Signup: name=Tom Becker, email=tbecker@example.org, phone=555-0199"}, "expected": {"personal_data": true}}
+{"state": {"text": "Q3 revenue grew 12% with churn flat at 2.1%."}, "expected": {"personal_data": false}}
+{"state": {"text": "Forwarding from jl.moreau@example.net: 'please remove me from the list'."}, "expected": {"personal_data": true}}
+{"state": {"text": "Set SMTP_HOST=smtp.example.com and SMTP_PORT=587 in the environment."}, "expected": {"personal_data": false}}
+{"state": {"text": "Emergency contact: Priya Nair (sister), 07700 900123."}, "expected": {"personal_data": true}}

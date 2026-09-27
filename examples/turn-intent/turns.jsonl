@@ -1,0 +1,12 @@
+{"state": "run the tests and fix whatever fails", "expected": {"is_instruction": true}}
+{"state": "why does the login test fail only on CI?", "expected": {"is_instruction": false}}
+{"state": "rename the config module to settings and update the imports", "expected": {"is_instruction": true}}
+{"state": "what does the retry decorator do?", "expected": {"is_instruction": false}}
+{"state": "commit this and push it to main", "expected": {"is_instruction": true}}
+{"state": "is it safe to delete the old migrations folder?", "expected": {"is_instruction": false}}
+{"state": "add a --dry-run flag to the deploy script", "expected": {"is_instruction": true}}
+{"state": "how long does the full suite take to run?", "expected": {"is_instruction": false}}
+{"state": "can you bump the version to 2.1 and tag it", "expected": {"is_instruction": true}}
+{"state": "where is the rate limit configured?", "expected": {"is_instruction": false}}
+{"state": "delete the unused feature flags", "expected": {"is_instruction": true}}
+{"state": "which of these two approaches would you pick?", "expected": {"is_instruction": false}}
