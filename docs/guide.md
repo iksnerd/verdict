@@ -269,6 +269,7 @@ The rules that came out of doing it once:
 | "a yes/no cut needs both yes and no labels" | every labelled example in the calibration set has the same answer | label some of the other class; there is no cut to fit on one |
 | "the state looks like es ..." on English text | Laya's language guess on short prose | `--lang en` for that run |
 | "`<url>`/v1/systemone ... it may still be loading" | a `--systemone` server (Kev, Von, another verdict) hasn't answered a request yet; verdict retries this automatically and says so on stderr | wait for it, or start the server earlier; if it persists after 5 attempts, check that server's own logs -- it may have crashed on an earlier request |
+| `verdict update` fails with "fatal: unable to read tree" (or `verdict` disappears from PATH afterward) | `uv`'s own git cache for this repo got into a bad state; a plain re-fetch doesn't self-heal, and `uv tool install` isn't atomic against it -- a failed reinstall can remove the old install without completing the new one | `uv cache clean verdict --force`, then re-run `verdict update` (or the `uv tool install` line from the README); confirm with `uv tool list` |
 
 ## Command reference
 
