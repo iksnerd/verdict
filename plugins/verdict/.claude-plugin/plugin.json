@@ -1,7 +1,7 @@
 {
   "name": "verdict",
   "description": "When and how an agent should use verdict, a local System 1 for fast typed judgments (yes/no, choice, score) over many texts.",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "author": {
     "name": "iksnerd"
   },

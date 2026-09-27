@@ -190,8 +190,8 @@ thresholds for the actual model version, question shape, and preprocessing budge
 The upstream backend is not yet wired into `verdict serve`'s CLI or `verdict.toml`: today it is a `Backend` you
 construct yourself in a custom entry point, the same way `MlxBackend` is. `verdict examples
 NAME... --systemone URL` runs `examples/`'s own real inputs against it, reports ms/call, and where
-a row carries an `expected` label (citation-check, checklist-check, task-verification and
-passage-filter all have one) prints how many match it — a new backend gets a real accuracy and
+a row carries an `expected` label (most banks do; `examples/README.md` gives each one's
+count) prints how many match it — a new backend gets a real accuracy and
 latency number against the same rows `examples/README.md` already documents for Laya, not a
 one-off question and an eyeballed guess at whether it's "close enough".
 

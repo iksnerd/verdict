@@ -127,8 +127,8 @@ one-off ad hoc questions — a handful of hand-picked questions can't tell you w
 actual weaknesses are; the existing example banks were built (and are checked by
 `tests/test_examples.py`) precisely to cover several different question shapes at once.
 
-Where a row carries an `expected` label (`citation-check`, `checklist-check`, `task-verification`
-and `passage-filter` all have one), it prints how many answers match it — grade against that, not
+Where a row carries an `expected` label (most banks do; `examples/README.md` gives each one's
+documented count), it prints how many answers match it — grade against that, not
 against how confident the answer looks. **Low confidence is not the same as wrong.** One session
 read a backend's uniformly low confidence on `checklist-check` as "not working" without checking
 it against the recorded labels; graded, it was actually *more* accurate than Laya's own documented
@@ -155,7 +155,8 @@ close-enough approximation, and worth saying so.
 
 ## 7. Clean up
 
-Stop whatever server process you started (`pkill -f`, or the PID you captured), confirm the port
+Stop whatever server process you started, by the PID you captured or the one listening on its
+port (never by name: that also stops another session's), confirm the port
 is free, and leave cloned repos in the session scratchpad rather than inside this checkout unless
 asked to keep them. Nothing from this exercise should still be running, or still be downloading,
 after you report the result.

@@ -40,7 +40,9 @@ has real runs.
 
 For one item, read it yourself: you are the stronger model. It reads the surface
 of the text, so it cannot say whether Postgres beats SQLite. It can say whether a
-message is asking a question.
+message is asking a question. In `examples/`, "does this output report a failure?"
+scored 12/12, while "must this review comment block a merge?" read an SQL injection as a nit:
+the first is on the page, the second needs to know what the code does.
 
 **Pick the right fast model.** Measured head to head on the same held-out items (FINDINGS
 §32): on a yes/no question about what the text shows, verdict matched Claude Haiku 4.5 (0.77
@@ -73,8 +75,10 @@ consistent number to rank or gate on.
    a missing server then fails with exit 2 instead of loading the model into your process.
 4. Score a sample of 200 to 400 items first. `--jsonl` and `calibrate` already
    pause 50 ms between calls; keep it.
-5. **Stop the server when you are done** (`pkill -f 'verdict.*serve'`). It holds the model in GPU
-   memory.
+5. **Stop the server you started when you are done**: `kill $(lsof -ti TCP:8799 -sTCP:LISTEN)`
+   (your `url`'s port). It holds the model in GPU memory. Never kill by name (`pkill -f`): that
+   also stops another session's server. If the port was already taken when you began, the
+   server is someone else's; use it and leave it running.
 
 ## Ask the question that is on the page
 
@@ -82,6 +86,10 @@ consistent number to rank or gate on.
 what each was measured on; use them by name (`-q is_instruction,touches_secret`). Then read
 `references/questions.md`: every question asked on a real task so far, including the ones that
 failed. Reuse a question that worked; don't retry one that failed for a reason that still holds.
+The repo's `examples/README.md` has banks for common agent tasks with labelled rows and their
+measured match rates, misses included: did a test run fail (12/12), is a turn an instruction
+(10/12), does a snippet hold contact details (9/12), does a passage answer a question. Copy the
+closest bank rather than writing one from nothing; `verdict examples NAME` reruns it.
 
 Measured on real agent traffic (FINDINGS §25 to §33):
 
@@ -152,13 +160,14 @@ A user asks which of the 1,500 shell commands their agent ran last month touched
    LLM's job instead (FINDINGS §32).
 2. `verdict questions` lists `touches_secret` (AUC 0.77 on real blocked commands, Haiku 4.5
    0.73). Use it by name, with states shaped as it says: `{"command": "..."}`.
-3. Check what is loaded, then `verdict serve &`. Score a sample of 200 first:
+3. Check what is loaded, then start `verdict serve` in the background, or reuse one already
+   answering on the port. Score a sample of 200 first:
    `verdict decide --jsonl -q touches_secret --server-only < commands.jsonl > scored.jsonl`.
 4. Sort by the answer and read the top 30 yourself. Then read a slice further down as well: a
    command that pulls secrets without naming one (`vercel env pull`) ranks low, because verdict
    reads the surface (`examples/secret-commands/`).
 5. Report the ranking and what you read, not "0.5 means secret". For a repeatable gate, label a
-   few dozen and fit a cut with `verdict calibrate`. Stop the server.
+   few dozen and fit a cut with `verdict calibrate`. Stop the server you started.
 
 The repo's `examples/secret-commands/` is this procedure with real output.
 

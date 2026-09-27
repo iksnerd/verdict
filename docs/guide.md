@@ -26,7 +26,7 @@ where each claim here comes from, [FINDINGS.md](FINDINGS.md). For runnable input
 verdict runs on Apple Silicon with Python 3.11:
 
 ```sh
-uv tool install --python 3.11 'verdict[mlx,laya] @ git+https://github.com/iksnerd/verdict.git@v0.4.0'
+uv tool install --python 3.11 'verdict[mlx,laya] @ git+https://github.com/iksnerd/verdict.git@v0.4.1'
 verdict init      # writes ~/.config/verdict/config.toml
 verdict --version
 ```
@@ -71,7 +71,8 @@ $ verdict ask "the app crashed again, fix it NOW" "How frustrated?" -l calm -l a
 ```
 
 `ask` reads the text from stdin with `-`, so `git diff | verdict ask - "Does this change touch
-authentication?"` works. Stop the server when you're done: `pkill -f 'verdict serve'`.
+authentication?"` works. Stop the server when you're done: `kill $(lsof -ti TCP:8799 -sTCP:LISTEN)` (your `url`'s
+port). Killing by name would also stop a server another session or user started.
 
 ## Many items at once
 

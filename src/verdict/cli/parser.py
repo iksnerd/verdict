@@ -387,9 +387,8 @@ Exit status: 0; with --verify, 1 when any suite regressed (the release workflow 
     ex = command("examples", "run examples/ banks against a backend",
                 "Runs one or more examples/ banks against a backend and prints each row's "
                 "answers plus ms/call, the same real inputs examples/README.md's own numbers "
-                "came from. Where a row carries an `expected` label (citation-check, "
-                "checklist-check, task-verification, passage-filter), also prints how many "
-                "answers match it, so a new backend gets a real accuracy and latency number "
+                "came from. Where a row carries an `expected` label (most banks; examples/README.md "
+                "lists them), also prints how many answers match it, so a new backend gets a real accuracy and latency number "
                 "instead of one-off questions and an eyeballed guess.",
                 """Examples:
   verdict examples                                       # every example, the served checkpoint
