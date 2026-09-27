@@ -12,7 +12,7 @@ tickets, messages, agent turns) and a person or an LLM should read only what it 
 Apple Silicon, Python 3.11.
 
 ```sh
-uv tool install --python 3.11 'verdict[mlx,laya] @ git+https://github.com/iksnerd/verdict.git@v0.2.4'
+uv tool install --python 3.11 'verdict[mlx,laya] @ git+https://github.com/iksnerd/verdict.git@v0.3.0'
 verdict init        # picks a free port and writes ~/.config/verdict/config.toml
 verdict serve &     # holds the model, so each call costs milliseconds
 
@@ -58,6 +58,10 @@ consequences or difficulty, which score at chance. verdict refuses those questio
 - **Other languages:** `--lang multi` switches to Laya's multilingual checkpoint.
 - **An HTTP API** on localhost ([docs/api.md](docs/api.md)), including TypeSafe Jev's
   `/v1/systemone` protocol, so Jev's SDKs work against it.
+- **Swap the backend:** `[model.extra]` names further local laya checkpoints; `SystemOneBackend`
+  swaps to any other `/v1/systemone` server instead (a real, differently-trained model, not another
+  laya checkpoint). `verdict examples --systemone URL` checks it against the same real inputs
+  `examples/README.md` documents for Laya, with a match count and ms/call, not one-off questions.
 - **The docs ship with the tool:** `verdict docs`, `verdict docs guide`, `verdict docs findings N`.
 
 ## How it works
@@ -81,7 +85,8 @@ claude plugin install verdict@verdict
 
 - [docs/guide.md](docs/guide.md): writing questions, bulk runs, calibration, recipes,
   troubleshooting, and the command reference.
-- [examples/](examples/README.md): runnable banks with invented inputs and their real output.
+- [examples/](examples/README.md): ten runnable banks with invented inputs and their real
+  measured output, including what each one gets wrong.
 - [docs/api.md](docs/api.md): the HTTP API.
 - [docs/FINDINGS.md](docs/FINDINGS.md): every measurement behind these docs, with sample sizes
   and intervals.

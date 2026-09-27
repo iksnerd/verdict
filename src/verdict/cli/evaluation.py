@@ -92,8 +92,11 @@ def _bench_cmd(args: argparse.Namespace) -> int:
         except ValueError as exc:
             return support._fail(str(exc))
         print(f"{s.name}: asking {len(items)} items...", file=sys.stderr)
-        r = results[s.name] = bench.score(
-            s, items, lambda st, q, _lang=s.lang: paced(st, q, _lang))
+        try:
+            r = results[s.name] = bench.score(
+                s, items, lambda st, q, _lang=s.lang: paced(st, q, _lang))
+        except ValueError as exc:
+            return support._fail(f"{s.name}: {exc}")
         extra = (f"  target over 0.5: {r['target_over_half']:.2f}  cut {r['fit']['cut']:.4f}"
                  if r["metric"] == "auc" else f"  chance {r['chance']:.2f}"
                  + (f"  auc {r['auc']:.3f}" if "auc" in r else ""))

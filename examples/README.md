@@ -1,6 +1,6 @@
 # Examples
 
-Five runnable examples. Every input is invented, and no real data is in this folder.
+Ten runnable examples. Every input is invented, and no real data is in this folder.
 `tests/test_examples.py` checks that each bank still validates and that its inputs have the fields
 the questions name.
 
@@ -17,6 +17,12 @@ with exit status 2 if the server is unavailable, instead of loading a local fall
 The output below is real, from the default model (base Laya), and includes the misses, because
 knowing what it gets wrong is the point.
 
+`verdict examples [NAME...]` runs the same real inputs against any backend and prints each row's
+answers without needing per-example commands; `--systemone URL` points it at a different backend
+(another `verdict serve`, a local [Kev](https://github.com/jaredpalmer/kev) server, a real hosted
+Jev) instead of the served checkpoint, for checking a new one against the numbers below rather
+than one-off questions (`docs/api.md`).
+
 | example | question types | what it shows |
 |---|---|---|
 | `room-triage/` | three yes/no | the strongest use: yes/no about what a status update says |
@@ -25,6 +31,10 @@ knowing what it gets wrong is the point.
 | `ticket-search/` | five yes/no, ranked with `verdict rank` | named answers as a searchable vector |
 | `commit-kinds/` | seven-way choice | where a small LLM beats verdict (FINDINGS §32) |
 | `emoji-search/` | one 15-way choice | picking the best match from a bounded candidate set |
+| `passage-filter/` | one yes/no | filtering a retrieved passage: does it answer the question, or just share its topic |
+| `task-verification/` | one yes/no | checking a reported result against the task's own acceptance criteria |
+| `citation-check/` | one three-way choice | does a passage support, contradict or say nothing about a claim |
+| `checklist-check/` | three three-way choices | per-criterion met / uncertain / absent against a checklist |
 
 ## room-triage/
 
@@ -154,3 +164,125 @@ Nine of ten land on a defensible answer. `just noticed this` is the clean miss: 
 read of "noticed", and `eyes` never got close. `hallowe'en plans?` is the low-confidence one worth
 flagging rather than trusting: it landed on the right answer, but `sunny` was one point behind,
 which is what a 0.38 confidence is for.
+
+## passage-filter/
+
+The last step of a RAG pipeline, after retrieval has already run: for each of six questions,
+`passages.jsonl` pairs a passage that answers it with one that only shares its topic. `bank.json`
+asks a single yes/no question: does `passage` actually answer `question`, or is it merely
+keyword-adjacent.
+
+```
+0.86  How do I reset my password?                -> "go to Settings > Security > Reset Password..."
+0.12  "                                           -> "must be at least 12 characters and include a number."
+0.87  What is the refund window for annual plans? -> "refunded within 30 days of purchase..."
+0.33  "                                           -> "both monthly and annual billing, 20% discount"
+0.83  Does the free tier include API access?      -> "up to 1,000 requests a month to the public API."
+0.63  "                                           -> "REST and GraphQL, with SDKs in Python, JS and Go."   <- a miss
+0.90  How long does shipping take internationally? -> "7 to 14 business days after dispatch."
+0.20  "                                            -> "ships to over 40 countries, tracked delivery."
+0.87  Can I cancel my subscription at any time?    -> "cancelled anytime from the billing page..."
+0.66  "                                            -> "billed monthly or annually, prices may change..."   <- a miss
+0.79  Is there a mobile app?                       -> "available on iOS and Android, feature parity..."
+0.14  "                                            -> "any modern browser; no installation required."
+```
+
+Ten of twelve land on the right side of 0.5. Both misses share a shape: the passage is about the
+same product area (API in general, billing terms in general), closely enough that verdict reads
+it as answering the question instead of merely surrounding it. The clean misses (`0.12`, `0.20`,
+`0.14`) are the useful signal: a passage with nothing to do with the question scores low and
+confidently, which is exactly what a RAG filter step needs before the retrieved text reaches a
+generation prompt.
+
+## task-verification/
+
+The "did the agent actually do it" check: `reports.jsonl` pairs six tasks with a result that meets
+the stated acceptance criteria and one that doesn't. `bank.json` asks whether `result` satisfies
+`task`: evidence on the page, not a guess at how hard the task was (the distinction FINDINGS §26
+is about).
+
+```
+0.94  Add a test for the empty-input case for parse_config.        -> added the test, asserts ValueError
+0.44  "                                                             -> refactored the function; no test added
+0.96  Fix /health returning 500 when the database is unreachable.  -> catches the error, returns 503
+0.90  "                                                             -> added a retry with backoff               <- a miss
+0.93  Document the new --dry-run flag in the README.                -> README has a --dry-run section
+0.15  "                                                              -> added a CHANGELOG entry instead
+0.64  Make /export stream CSV instead of loading it all into memory. -> generator + StreamingResponse
+0.57  "                                                              -> added pagination instead                <- a miss
+0.95  Reject a Score question with fewer than two levels.           -> added the validator, verdict validate errors
+0.44  "                                                              -> only a docs warning, nothing enforced
+0.86  Remove the unused legacy_router module and its imports.       -> deleted it, imports removed
+0.03  "                                                              -> left it in, just marked deprecated
+```
+
+`verdict examples task-verification` reproduces this (`10/12 match the recorded expectation`) against
+`reports.jsonl`'s own `expected` field. Ten of twelve land on the right side of 0.5; the two misses
+share a shape the passage-filter misses didn't: catching them needs knowing whether the *approach*
+satisfies the ask, not just whether the result is on-topic. A retry with backoff sounds like a fix
+for the same endpoint and scores confidently right (0.90) though it never touches the 500 status;
+pagination-instead-of-streaming lands just over chance (0.57), because telling "satisfies" from
+"adjacent, plausible-sounding change" here takes domain knowledge, not just reading comprehension.
+
+## citation-check/
+
+The fact-checking step in a RAG answer, after `passage-filter/` has already kept only the relevant
+passages: `citations.jsonl` pairs four claims with a passage that supports it, one that contradicts
+it, and one that's unrelated. `bank.json` asks a three-way choice: how does `passage` relate to
+`claim`.
+
+```
+supports 0.53      Python 3.10+    "requires Python 3.10+; earlier versions are not supported"
+contradicts 0.37   Python 3.10+    "supported on Python 3.8 through 3.12"
+unrelated 0.41     Python 3.10+    "available via pip or from source"
+supports 0.07      refund 5 days   "appear within 3 to 5 business days"
+contradicts 0.15   refund 5 days   "typically take 2 to 3 weeks"
+unrelated 0.03     refund 5 days   "request a refund from the billing page"
+supports 0.16      rate limit      "limited to 1,000 requests per minute"
+unrelated 0.41     rate limit      "capped at 100 requests per minute"                <- a miss
+unrelated 0.31     rate limit      "responses are returned as JSON"
+supports 0.23      waterproof 50m  "IP68, water resistant to 50 meters"
+contradicts 0.01   waterproof 50m  "splash resistant, should not be submerged"
+unrelated 0.32     waterproof 50m  "battery lasts up to 18 hours"
+```
+
+`verdict examples citation-check` reproduces this (`11/12 match the recorded expectation`) against
+`citations.jsonl`'s own `expected` field. Eleven of twelve land on the right label, but every
+confidence here is well below the yes/no examples elsewhere in this folder: a three-way relation
+is a harder read than "does this say X", and confidence swings between runs on the closer calls
+(the waterproof row's `contradicts` call landed at 0.01 here — a near-exact three-way tie, so
+don't be surprised if a re-run flips it). The one clean miss is the instructive kind: "100
+requests per minute" against a claimed 1,000 reads as merely off-topic instead of as a second,
+incompatible number.
+
+## checklist-check/
+
+A compliance-style read on a PR description: three separate three-way questions (`met` /
+`uncertain` / `absent`) against the same text, for whether it documents its tests, whether it says
+it's a breaking change, and whether it explains how to roll back. `prs.jsonl` has six descriptions,
+from full coverage down to none.
+
+```
+tests            breaking         rollback         description
+met (0.49)       met (0.37)       met (0.01)       dry-run flag: tests added, not breaking, revert with no migrations
+absent (0.13)    met (0.05)       absent (0.13)    cleanup: renames variables, no other detail                    <- breaking
+met (0.21)       met (0.09)       absent (0.14)    pagination-cursor fix, with a regression test                  <- breaking
+met (0.06)       met (0.29)       absent (0.23)    retry rework, changes the error type callers catch             <- tests
+absent (0.08)    met (0.20)       absent (0.00)    redis migration, CACHE_BACKEND=memory documented as a fallback <- breaking, rollback
+met (0.29)       uncertain (0.07) uncertain (0.16) schema bump: fixture tests added, hedges on downstream use     <- rollback
+```
+
+`verdict examples checklist-check` reproduces this (`12/18 match the recorded expectation`) against
+`prs.jsonl`'s own `expected` field (the ground truth needed real judgment calls on a few rows —
+see the row-by-row reasoning committed there). Every miss is the same kind of leak: a fact from one
+part of the text bleeds into a different criterion. Two descriptions that never raise breaking
+changes at all (rows 2 and 3) still get `breaking_change_documented: met`. The retry-rework
+description only says it "ran the existing suite", which is not the same as confirming tests were
+added or updated for *this* change, so `tests_documented` should read `uncertain`, not the shown
+`met`. The Redis migration states a concrete fallback, which is exactly what
+`rollback_documented: met` exists to catch, but the description never says whether the migration
+itself is breaking, so `breaking_change_documented` should be `uncertain`, not the shown `met`.
+And the schema-bump description's one hedge ("not sure if anyone still uses it") pulls
+`rollback_documented` toward `uncertain` even though the description never mentions a rollback at
+all (it should read `absent`) — the tone of one sentence bleeding into a question that is supposed
+to read only its own slice of the text.

@@ -5,7 +5,8 @@ import argparse
 import os
 import sys
 
-from . import catalog, decisions, docs_cmd, evaluation, inference, routing, setup, support, update
+from . import (catalog, decisions, docs_cmd, evaluation, examples_cmd, inference, routing, setup,
+              support, update)
 from .. import client
 from ..config import ConfigError
 from ..errors import QuestionError
@@ -382,6 +383,34 @@ Exit status: 0; with --verify, 1 when any suite regressed (the release workflow 
                    help="the model field sent with --systemone (default: jev-latest)")
     server_flags(b)
     b.set_defaults(fn=evaluation._bench_cmd)
+
+    ex = command("examples", "run examples/ banks against a backend",
+                "Runs one or more examples/ banks against a backend and prints each row's "
+                "answers plus ms/call, the same real inputs examples/README.md's own numbers "
+                "came from. Where a row carries an `expected` label (citation-check, "
+                "checklist-check, task-verification, passage-filter), also prints how many "
+                "answers match it, so a new backend gets a real accuracy and latency number "
+                "instead of one-off questions and an eyeballed guess.",
+                """Examples:
+  verdict examples                                       # every example, the served checkpoint
+  verdict examples citation-check checklist-check        # just these two
+  verdict examples citation-check --systemone http://127.0.0.1:8009 --systemone-model kev-latest
+
+Needs a checkout (or an install that packs examples/) to find the banks.
+""")
+    ex.add_argument("name", nargs="*", metavar="NAME", help="an examples/ directory name; omit for all")
+    ex.add_argument("--pause", type=float, default=0.05, metavar="SEC",
+                    help="between calls (default: 0.05)")
+    ex.add_argument("--systemone", metavar="URL",
+                    help="score with a TypeSafe-compatible /v1/systemone endpoint instead of "
+                         "verdict: a `verdict serve`, a Kev server, or https://api.typesafe.ai "
+                         "(needs TYPESAFE_API_KEY)")
+    ex.add_argument("--systemone-model", default="jev-latest", metavar="NAME",
+                    help="the model field sent with --systemone (default: jev-latest)")
+    quality_flag(ex)
+    yesno_flag(ex)
+    server_flags(ex)
+    ex.set_defaults(fn=examples_cmd._examples_cmd)
 
     r = command("route", "big model or small one, the switch example",
                 "Route a prompt to a big or a small model: two questions and a fitted switch.",

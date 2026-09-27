@@ -1,0 +1,546 @@
+{
+  "version": "0.3.0",
+  "model": "verdict-v1-mlx",
+  "budget": 128,
+  "bits": 16,
+  "date": "2026-09-27",
+  "suites": {
+    "sst2-yesno": {
+      "metric": "auc",
+      "value": 0.7972,
+      "ci": [
+        0.731,
+        0.8591
+      ],
+      "n": 200,
+      "target_over_half": 0.0,
+      "fit": {
+        "type": "noul",
+        "cut": 0.059899999999999995,
+        "n": 200,
+        "positives": 100,
+        "train": {
+          "n": 140,
+          "auc": 0.8255,
+          "balanced_accuracy": 0.7598
+        },
+        "heldout": {
+          "n": 60,
+          "auc": 0.7262,
+          "balanced_accuracy": 0.6742,
+          "accuracy": 0.6667
+        }
+      }
+    },
+    "sst2-choice": {
+      "metric": "accuracy",
+      "value": 0.905,
+      "ci": [
+        0.865,
+        0.945
+      ],
+      "n": 200,
+      "chance": 0.5,
+      "fit": {
+        "type": "choice",
+        "temperature": 0.7499,
+        "n": 200,
+        "per_option": {
+          "negative": {
+            "n": 100,
+            "recall": 0.91
+          },
+          "positive": {
+            "n": 100,
+            "recall": 0.9
+          }
+        },
+        "confusions": [
+          {
+            "true": "positive",
+            "predicted": "negative",
+            "n": 10
+          },
+          {
+            "true": "negative",
+            "predicted": "positive",
+            "n": 9
+          }
+        ],
+        "train": {
+          "n": 140,
+          "accuracy": 0.8786,
+          "nll_raw": 0.3113,
+          "nll_fitted": 0.3005
+        },
+        "heldout": {
+          "n": 60,
+          "accuracy": 0.9667,
+          "nll_raw": 0.1879,
+          "nll_fitted": 0.1306
+        }
+      },
+      "auc": 0.9622
+    },
+    "spam-yesno": {
+      "metric": "auc",
+      "value": 0.9849,
+      "ci": [
+        0.9613,
+        0.9996
+      ],
+      "n": 200,
+      "target_over_half": 0.97,
+      "fit": {
+        "type": "noul",
+        "cut": 0.54965,
+        "n": 200,
+        "positives": 100,
+        "train": {
+          "n": 140,
+          "auc": 0.9928,
+          "balanced_accuracy": 0.9857
+        },
+        "heldout": {
+          "n": 60,
+          "auc": 0.9706,
+          "balanced_accuracy": 0.9514,
+          "accuracy": 0.95
+        }
+      }
+    },
+    "spam-choice": {
+      "metric": "accuracy",
+      "value": 0.965,
+      "ci": [
+        0.935,
+        0.99
+      ],
+      "n": 200,
+      "chance": 0.5,
+      "fit": {
+        "type": "choice",
+        "temperature": 0.335,
+        "n": 200,
+        "per_option": {
+          "ham": {
+            "n": 100,
+            "recall": 0.97
+          },
+          "spam": {
+            "n": 100,
+            "recall": 0.96
+          }
+        },
+        "confusions": [
+          {
+            "true": "spam",
+            "predicted": "ham",
+            "n": 4
+          },
+          {
+            "true": "ham",
+            "predicted": "spam",
+            "n": 3
+          }
+        ],
+        "train": {
+          "n": 140,
+          "accuracy": 0.9714,
+          "nll_raw": 0.2463,
+          "nll_fitted": 0.1171
+        },
+        "heldout": {
+          "n": 60,
+          "accuracy": 0.95,
+          "nll_raw": 0.2277,
+          "nll_fitted": 0.1338
+        }
+      },
+      "auc": 0.9877
+    },
+    "injection-yesno": {
+      "metric": "auc",
+      "value": 0.952,
+      "ci": [
+        0.924,
+        0.9767
+      ],
+      "n": 200,
+      "target_over_half": 0.61,
+      "fit": {
+        "type": "noul",
+        "cut": 0.2837,
+        "n": 200,
+        "positives": 100,
+        "train": {
+          "n": 140,
+          "auc": 0.9607,
+          "balanced_accuracy": 0.9232
+        },
+        "heldout": {
+          "n": 60,
+          "auc": 0.9276,
+          "balanced_accuracy": 0.8213,
+          "accuracy": 0.8333
+        }
+      }
+    },
+    "injection-choice": {
+      "metric": "accuracy",
+      "value": 0.83,
+      "ci": [
+        0.775,
+        0.88
+      ],
+      "n": 200,
+      "chance": 0.5,
+      "fit": {
+        "type": "choice",
+        "temperature": 0.4467,
+        "n": 200,
+        "per_option": {
+          "injection": {
+            "n": 100,
+            "recall": 0.7
+          },
+          "ordinary": {
+            "n": 100,
+            "recall": 0.96
+          }
+        },
+        "confusions": [
+          {
+            "true": "injection",
+            "predicted": "ordinary",
+            "n": 30
+          },
+          {
+            "true": "ordinary",
+            "predicted": "injection",
+            "n": 4
+          }
+        ],
+        "train": {
+          "n": 140,
+          "accuracy": 0.85,
+          "nll_raw": 0.4295,
+          "nll_fitted": 0.3534
+        },
+        "heldout": {
+          "n": 60,
+          "accuracy": 0.7833,
+          "nll_raw": 0.4608,
+          "nll_fitted": 0.4006
+        }
+      },
+      "auc": 0.9516
+    },
+    "agnews-topic": {
+      "metric": "accuracy",
+      "value": 0.945,
+      "ci": [
+        0.915,
+        0.975
+      ],
+      "n": 200,
+      "chance": 0.25,
+      "fit": {
+        "type": "choice",
+        "temperature": 0.4217,
+        "n": 200,
+        "per_option": {
+          "business": {
+            "n": 50,
+            "recall": 0.94
+          },
+          "scitech": {
+            "n": 50,
+            "recall": 0.94
+          },
+          "sports": {
+            "n": 50,
+            "recall": 1.0
+          },
+          "world": {
+            "n": 50,
+            "recall": 0.9
+          }
+        },
+        "confusions": [
+          {
+            "true": "world",
+            "predicted": "business",
+            "n": 3
+          },
+          {
+            "true": "business",
+            "predicted": "scitech",
+            "n": 2
+          },
+          {
+            "true": "scitech",
+            "predicted": "world",
+            "n": 2
+          },
+          {
+            "true": "business",
+            "predicted": "world",
+            "n": 1
+          },
+          {
+            "true": "scitech",
+            "predicted": "business",
+            "n": 1
+          }
+        ],
+        "train": {
+          "n": 140,
+          "accuracy": 0.95,
+          "nll_raw": 0.351,
+          "nll_fitted": 0.1703
+        },
+        "heldout": {
+          "n": 60,
+          "accuracy": 0.9333,
+          "nll_raw": 0.3648,
+          "nll_fitted": 0.1878
+        }
+      }
+    },
+    "emotion": {
+      "metric": "accuracy",
+      "value": 0.4667,
+      "ci": [
+        0.4042,
+        0.5292
+      ],
+      "n": 240,
+      "chance": 0.1667,
+      "fit": {
+        "type": "choice",
+        "temperature": 1.7783,
+        "n": 240,
+        "per_option": {
+          "anger": {
+            "n": 40,
+            "recall": 0.475
+          },
+          "fear": {
+            "n": 40,
+            "recall": 0.225
+          },
+          "joy": {
+            "n": 40,
+            "recall": 0.75
+          },
+          "love": {
+            "n": 40,
+            "recall": 0.325
+          },
+          "sadness": {
+            "n": 40,
+            "recall": 0.65
+          },
+          "surprise": {
+            "n": 40,
+            "recall": 0.375
+          }
+        },
+        "confusions": [
+          {
+            "true": "fear",
+            "predicted": "sadness",
+            "n": 18
+          },
+          {
+            "true": "love",
+            "predicted": "joy",
+            "n": 17
+          },
+          {
+            "true": "surprise",
+            "predicted": "joy",
+            "n": 15
+          },
+          {
+            "true": "anger",
+            "predicted": "sadness",
+            "n": 14
+          },
+          {
+            "true": "love",
+            "predicted": "sadness",
+            "n": 8
+          }
+        ],
+        "train": {
+          "n": 168,
+          "accuracy": 0.5119,
+          "nll_raw": 1.5182,
+          "nll_fitted": 1.3331
+        },
+        "heldout": {
+          "n": 72,
+          "accuracy": 0.3611,
+          "nll_raw": 1.8222,
+          "nll_fitted": 1.5129
+        }
+      }
+    },
+    "bg-choice": {
+      "metric": "accuracy",
+      "value": 0.925,
+      "ci": [
+        0.885,
+        0.96
+      ],
+      "n": 200,
+      "chance": 0.5,
+      "fit": {
+        "type": "choice",
+        "temperature": 1.9953,
+        "n": 200,
+        "per_option": {
+          "negative": {
+            "n": 100,
+            "recall": 0.96
+          },
+          "positive": {
+            "n": 100,
+            "recall": 0.89
+          }
+        },
+        "confusions": [
+          {
+            "true": "positive",
+            "predicted": "negative",
+            "n": 11
+          },
+          {
+            "true": "negative",
+            "predicted": "positive",
+            "n": 4
+          }
+        ],
+        "train": {
+          "n": 140,
+          "accuracy": 0.9357,
+          "nll_raw": 0.2719,
+          "nll_fitted": 0.2018
+        },
+        "heldout": {
+          "n": 60,
+          "accuracy": 0.9,
+          "nll_raw": 0.4459,
+          "nll_fitted": 0.2918
+        }
+      },
+      "auc": 0.9697
+    },
+    "bg-yesno": {
+      "metric": "auc",
+      "value": 0.9629,
+      "ci": [
+        0.935,
+        0.9865
+      ],
+      "n": 200,
+      "target_over_half": 0.69,
+      "fit": {
+        "type": "noul",
+        "cut": 0.0076,
+        "n": 200,
+        "positives": 100,
+        "train": {
+          "n": 140,
+          "auc": 0.9612,
+          "balanced_accuracy": 0.9208
+        },
+        "heldout": {
+          "n": 60,
+          "auc": 0.9683,
+          "balanced_accuracy": 0.8891,
+          "accuracy": 0.9
+        }
+      }
+    },
+    "ru-choice": {
+      "metric": "accuracy",
+      "value": 0.88,
+      "ci": [
+        0.835,
+        0.925
+      ],
+      "n": 200,
+      "chance": 0.5,
+      "fit": {
+        "type": "choice",
+        "temperature": 2.1135,
+        "n": 200,
+        "per_option": {
+          "negative": {
+            "n": 100,
+            "recall": 0.97
+          },
+          "positive": {
+            "n": 100,
+            "recall": 0.79
+          }
+        },
+        "confusions": [
+          {
+            "true": "positive",
+            "predicted": "negative",
+            "n": 21
+          },
+          {
+            "true": "negative",
+            "predicted": "positive",
+            "n": 3
+          }
+        ],
+        "train": {
+          "n": 140,
+          "accuracy": 0.8786,
+          "nll_raw": 0.3839,
+          "nll_fitted": 0.286
+        },
+        "heldout": {
+          "n": 60,
+          "accuracy": 0.8833,
+          "nll_raw": 0.4828,
+          "nll_fitted": 0.3223
+        }
+      },
+      "auc": 0.9584
+    },
+    "ru-yesno": {
+      "metric": "auc",
+      "value": 0.9436,
+      "ci": [
+        0.9078,
+        0.9716
+      ],
+      "n": 200,
+      "target_over_half": 0.59,
+      "fit": {
+        "type": "noul",
+        "cut": 0.004200000000000001,
+        "n": 200,
+        "positives": 100,
+        "train": {
+          "n": 140,
+          "auc": 0.949,
+          "balanced_accuracy": 0.9005
+        },
+        "heldout": {
+          "n": 60,
+          "auc": 0.9316,
+          "balanced_accuracy": 0.8495,
+          "accuracy": 0.85
+        }
+      }
+    }
+  }
+}

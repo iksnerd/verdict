@@ -118,8 +118,10 @@ class DecideRequest(BaseModel):
     state: Union[str, dict[str, Any], list[Any]]
     questions: dict[str, Question]
     #: Which checkpoint answers, named as laya's `Router.predict(model=...)` names them. Omitted
-    #: means the served one. `multilingual` is loaded only when a request asks for it.
-    model: Optional[Literal["english", "multilingual"]] = None
+    #: means the served one. The valid names are server-configured (config.py's [model.extra],
+    #: plus multilingual), not fixed here, so an unknown one is refused by the backend
+    #: (UnknownModel -> 400) rather than by this schema.
+    model: Optional[str] = None
 
     @model_validator(mode="after")
     def _non_empty(self):

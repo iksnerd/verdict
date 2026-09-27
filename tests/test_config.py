@@ -97,6 +97,34 @@ def test_there_is_no_thresholds_key():
     """A key that is read and ignored is worse than no key: the cuts are applied inside the
     server process, so a [thresholds] table could not affect the server path."""
     assert "thresholds" not in config.DEFAULTS
+
+
+def test_extra_checkpoints_default_to_empty(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(config, "CONFIG_PATHS", (pathlib.Path("verdict.toml"),))
+    assert config.load().extra_checkpoints == {}
+
+
+def test_a_file_can_name_extra_checkpoints(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(config, "CONFIG_PATHS", (pathlib.Path("verdict.toml"),))
+    write(tmp_path, MINIMAL + '\n[model.extra]\nsupport = "org/support-mlx"\nlegal = "org/legal-mlx"\n')
+    s = config.load()
+    assert s.extra_checkpoints == {"support": "org/support-mlx", "legal": "org/legal-mlx"}
+
+
+def test_extra_checkpoints_round_trip_through_the_written_file(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("VERDICT_URL", raising=False)
+    monkeypatch.delenv("VERDICT_MULTILINGUAL", raising=False)
+    monkeypatch.setattr(config, "CONFIG_PATHS", (pathlib.Path("verdict.toml"),))
+    original = config.Settings(
+        url="http://127.0.0.1:9100", model_path="models/x-mlx", prompt_token_budget=96,
+        multilingual_path="models/m-mlx", extra_checkpoints={"support": "org/support-mlx"},
+    )
+    (tmp_path / "verdict.toml").write_text(config.to_toml(original))
+    back = config.load()
+    assert back.extra_checkpoints == {"support": "org/support-mlx"}
     assert not hasattr(config.Settings("u", "m", 1, "s", "b"), "t_difficulty")
 
 

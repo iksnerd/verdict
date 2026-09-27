@@ -1,0 +1,12 @@
+{"state": {"question": "How do I reset my password?", "passage": "To reset your password, go to Settings > Security > Reset Password and follow the emailed link."}, "expected": {"answers": true}}
+{"state": {"question": "How do I reset my password?", "passage": "Your password must be at least 12 characters and include a number."}, "expected": {"answers": false}}
+{"state": {"question": "What is the refund window for annual plans?", "passage": "Annual plans can be refunded within 30 days of purchase; monthly plans are non-refundable."}, "expected": {"answers": true}}
+{"state": {"question": "What is the refund window for annual plans?", "passage": "We offer both monthly and annual billing, with annual plans priced at a 20% discount."}, "expected": {"answers": false}}
+{"state": {"question": "Does the free tier include API access?", "passage": "The free tier includes up to 1,000 requests per month to the public API."}, "expected": {"answers": true}}
+{"state": {"question": "Does the free tier include API access?", "passage": "Our API supports REST and GraphQL, with SDKs in Python, JavaScript and Go."}, "expected": {"answers": false}}
+{"state": {"question": "How long does shipping take internationally?", "passage": "International orders typically arrive within 7 to 14 business days after dispatch."}, "expected": {"answers": true}}
+{"state": {"question": "How long does shipping take internationally?", "passage": "We ship to over 40 countries and offer tracked delivery on all international orders."}, "expected": {"answers": false}}
+{"state": {"question": "Can I cancel my subscription at any time?", "passage": "Subscriptions can be cancelled anytime from the billing page; you keep access until the period ends."}, "expected": {"answers": true}}
+{"state": {"question": "Can I cancel my subscription at any time?", "passage": "Subscription plans are billed monthly or annually, and prices may change with 30 days notice."}, "expected": {"answers": false}}
+{"state": {"question": "Is there a mobile app?", "passage": "The mobile app is available on iOS and Android, with feature parity to the web dashboard."}, "expected": {"answers": true}}
+{"state": {"question": "Is there a mobile app?", "passage": "You can access your dashboard from any modern browser; no installation is required."}, "expected": {"answers": false}}

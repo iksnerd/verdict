@@ -96,6 +96,10 @@ def create_app(backend: Backend | None = None) -> FastAPI:
             return backend.decide(request)
         except UnknownModel as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except ValueError as exc:
+            # A SystemOneBackend's upstream (Kev, Von, another verdict) didn't answer: we are a
+            # proxy here, so its failure is a bad gateway, not our own 500 with a traceback.
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
 
     @app.post("/v1/systemone", response_model=SystemOneResponse)
     def systemone(request: SystemOneRequest) -> SystemOneResponse:
@@ -106,11 +110,18 @@ def create_app(backend: Backend | None = None) -> FastAPI:
             out = backend.decide(to_decide_request(request))
         except UnknownModel as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
         return SystemOneResponse(model=out.model, answers=out.answers,
                                  usage=out.usage or Usage(input_tokens=0))
 
     @app.get("/v1/models", response_model=ModelList)
     def models() -> ModelList:
+        if hasattr(backend, "models"):
+            #: A proxied backend (SystemOneBackend) has its own real model list; the cards below
+            #: describe laya/Jev's fixed vocabulary and would misdescribe whatever this actually
+            #: forwards to.
+            return ModelList(models=[ModelCard(**card) for card in backend.models()])
         date = _release_date(backend)
         cards = [
             ModelCard(name="jev-latest", release_date=date,
@@ -119,10 +130,15 @@ def create_app(backend: Backend | None = None) -> FastAPI:
             ModelCard(name="english", release_date=date,
                       description=f"The served checkpoint, {backend.name}."),
         ]
-        if getattr(backend, "multilingual_id", None):
+        known = getattr(backend, "known_models", lambda: set())()
+        if "multilingual" in known:
             cards.append(ModelCard(name="multilingual", release_date=date,
                                    description=f"laya's multilingual checkpoint, "
                                                f"{backend.multilingual_id}; loaded on first use."))
+        for name in sorted(known - {"multilingual"}):
+            cards.append(ModelCard(name=name, release_date=date,
+                                   description=f"{backend.extra_checkpoints[name]}; "
+                                               "loaded on first use. [model.extra] in verdict.toml."))
         return ModelList(models=cards)
 
     def _answers_for(prompt: str):

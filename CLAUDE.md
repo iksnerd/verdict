@@ -80,7 +80,9 @@ Do not re-derive these. Each is measured, in `docs/FINDINGS.md`.
   the package version and refuses private paths in what ships.
 - Releases: a `vX.Y.Z` tag with a committed scorecard (`bench/scorecards/vX.Y.Z.json`, run at
   normal priority); `.github/workflows/release.yml` runs the suite on macOS arm64 on tags only
-  (10x-billed minutes), checks the tag against the version and refuses a missing or regressed
+  (macOS is the only runner with the mlx and laya extras, and downloading model weights plus the
+  full suite is real wall-clock time to spend on every push; the pre-commit hook gates day-to-day
+  changes instead), checks the tag against the version and refuses a missing or regressed
   scorecard. The default model is base Laya (`aac6fef/laya-mlx`); the fine-tune is private, in
   the Hugging Face repo `iksnerd/verdict-v1-mlx`, used only where `model.path` points at it.
   Scorecards come from the release machine's configured model (the fine-tune).
@@ -111,7 +113,9 @@ Do not re-derive these. Each is measured, in `docs/FINDINGS.md`.
   (JSON state; `--questions` preset, library names comma-separated, JSON or file; `--jsonl`;
   `--calibration`; `--server-only` to fail instead of loading locally), `verdict validate -q BANK
   [--json]` (checks a bank with no model), `verdict questions` (the measured library), `verdict presets`,
-  `verdict calibrate`, `verdict bench [--verify CARD]`, `verdict rank`, `verdict docs`. The plugin's `verdict` skill says
+  `verdict calibrate`, `verdict bench [--verify CARD]`, `verdict examples [NAME...] [--systemone URL]`
+  (scores `examples/` banks with a backend, real or `--systemone`, for comparing one against another),
+  `verdict rank`, `verdict docs`. The plugin's `verdict` skill says
   when an agent should reach for it.
 - The everyday `verdict` on PATH is a `uv tool` install of a release tag, not this checkout:
   `uv tool install --python 3.11 'verdict[mlx,laya] @ git+https://github.com/iksnerd/verdict.git@vX.Y.Z'`.

@@ -27,8 +27,8 @@ class MlxBackend:
     """`load_options` go straight through to `laya_mlx.load`; see `engine.load` for which ones."""
 
     def __init__(self, model_id: str = DEFAULT_MODEL, agent: Any = None,
-                 multilingual_id: str | None = None, budget: int | None = None,
-                 bits: int = 16, **load_options: Any):
+                 multilingual_id: str | None = None, extra_checkpoints: dict[str, str] | None = None,
+                 budget: int | None = None, bits: int = 16, **load_options: Any):
         # `bits` applies to the fine-tune only: §36 measured it, not the multilingual checkpoint.
         self.engine: Engine = (
             Engine(model_id, agent=agent, bits=bits, **load_options) if agent is not None
@@ -37,22 +37,39 @@ class MlxBackend:
         self.model_id = model_id
         self.name = self.engine.name
         self.multilingual_id = multilingual_id
+        #: Further named checkpoints a request can select (config.py's [model.extra]). Named
+        #: separately from `multilingual`, which keeps its own dedicated config key and
+        #: lang-detection behaviour; this is plain alternates with neither.
+        self.extra_checkpoints = dict(extra_checkpoints) if extra_checkpoints else {}
         #: Tokens of each `decide` state the model sees; None reads it whole (up to laya's 512).
         self.budget = budget
         self.load_options = load_options
-        self._multilingual: Engine | None = None
+        #: Lazily loaded and cached by name, `multilingual` included: loading any of these at
+        #: startup would put a second model on the GPU for traffic that may never ask for it.
+        self._loaded: dict[str, Engine] = {}
+
+    def known_models(self) -> set[str]:
+        """Names besides the served checkpoint that a request may select."""
+        names = set(self.extra_checkpoints)
+        if self.multilingual_id:
+            names.add("multilingual")
+        return names
 
     def engine_for(self, model: str | None) -> Engine:
-        """The engine a request names. `multilingual` loads on first use and stays: loading it
-        at startup would put a second model on the GPU for traffic that may never need it."""
-        if model != "multilingual":
+        """The engine a request names, loading and caching it on first use."""
+        if model is None or model == "english":
             return self.engine
-        if not self.multilingual_id:
-            raise UnknownModel("this server has no multilingual checkpoint; set "
+        checkpoint_id = self.extra_checkpoints.get(model)
+        if model == "multilingual" and self.multilingual_id:
+            checkpoint_id = self.multilingual_id
+        if checkpoint_id is None:
+            known = ", ".join(sorted(self.known_models())) or "none"
+            raise UnknownModel(f"this server does not know a checkpoint named {model!r}; "
+                               f"known extra checkpoints: {known}. Set [model.extra] or "
                                "[model].multilingual in verdict.toml and restart it")
-        if self._multilingual is None:
-            self._multilingual = load(self.multilingual_id, **self.load_options)
-        return self._multilingual
+        if checkpoint_id not in self._loaded:
+            self._loaded[checkpoint_id] = load(checkpoint_id, **self.load_options)
+        return self._loaded[checkpoint_id]
 
     def decide(self, request: DecideRequest) -> DecideResponse:
         questions = laya_questions(request.questions)

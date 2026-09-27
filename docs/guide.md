@@ -18,14 +18,15 @@ where each claim here comes from, [FINDINGS.md](FINDINGS.md). For runnable input
 8. [Running it without cooking the laptop](#running-it-without-cooking-the-laptop)
 9. [Troubleshooting](#troubleshooting)
 10. [Command reference](#command-reference)
-11. [Scripts and agents](#scripts-and-agents)
+11. [Configuration reference](#configuration-reference)
+12. [Scripts and agents](#scripts-and-agents)
 
 ## Install and update
 
 verdict runs on Apple Silicon with Python 3.11:
 
 ```sh
-uv tool install --python 3.11 'verdict[mlx,laya] @ git+https://github.com/iksnerd/verdict.git@v0.2.4'
+uv tool install --python 3.11 'verdict[mlx,laya] @ git+https://github.com/iksnerd/verdict.git@v0.3.0'
 verdict init      # writes ~/.config/verdict/config.toml
 verdict --version
 ```
@@ -242,6 +243,16 @@ The rules that came out of doing it once:
   between chance and usable: Bulgarian reviews 0.58 against 0.93, Russian 0.64 against 0.88 (§37).
   If most of your text is not English, set `lang = "multi"` under `[model]` (or `VERDICT_LANG=multi`)
   instead of passing the flag every time.
+- **More than one local checkpoint:** `[model.extra]` names further ones a request can select by
+  name (`support = "org/support-mlx"`), loaded on first use like `multilingual` is. Each one that
+  gets used stays resident, so naming several in one session puts that many models on the GPU —
+  it is for a checkpoint you will actually use across the session, not a menu to sample from.
+- **A genuinely different model, not another laya checkpoint:** `SystemOneBackend` (`docs/api.md`)
+  forwards to any other `/v1/systemone` server instead of loading anything into this process — a
+  local [Kev](https://github.com/jaredpalmer/kev) server, say. It runs in its own process with its
+  own memory footprint (Kev-0.8B: about 1.8 GB of weights), so "one model at a time" still means
+  checking what that other server is holding before you start it, the same as checking `ollama ps`
+  before `verdict serve`.
 
 ## Troubleshooting
 
@@ -257,6 +268,7 @@ The rules that came out of doing it once:
 | "... Refused, because answers to this shape measured at chance" | the question asks about a consequence, difficulty or absence, or names a field the state lacks | reword it to ask what the text says; `--allow-unmeasured` to ask anyway, or `calibrate` it on real labels |
 | "a yes/no cut needs both yes and no labels" | every labelled example in the calibration set has the same answer | label some of the other class; there is no cut to fit on one |
 | "the state looks like es ..." on English text | Laya's language guess on short prose | `--lang en` for that run |
+| "`<url>`/v1/systemone ... it may still be loading" | a `--systemone` server (Kev, Von, another verdict) hasn't answered a request yet; verdict retries this automatically and says so on stderr | wait for it, or start the server earlier; if it persists after 5 attempts, check that server's own logs -- it may have crashed on an earlier request |
 
 ## Command reference
 
@@ -271,6 +283,7 @@ The rules that came out of doing it once:
 | `verdict presets [NAME]` | Laya's built-in banks |
 | `verdict validate -q BANK [--json]` | checks a bank with no server or model: structure, wording, truncation ([scripts and agents](#scripts-and-agents)) |
 | `verdict bench [--verify CARD]` | answer quality on pinned public datasets; the release gate; `--systemone URL` scores a Jev-compatible endpoint |
+| `verdict examples [NAME...]` | runs `examples/` banks against a backend, printing ms/call and, where a row carries an `expected` label, a match count against it; `--systemone URL` checks a different backend (Kev, another verdict) against the same real inputs |
 | `verdict serve` | holds the model on localhost:8799; also speaks TypeSafe's Jev protocol ([api.md](api.md)) |
 | `verdict update [--check]` | installs the newest release (or pulls, in a dev checkout) |
 | `verdict init` | writes the config from what the machine has |
@@ -279,6 +292,28 @@ The rules that came out of doing it once:
 
 Exit status is 2 for a usage error everywhere. `ask --cut` exits 0 for yes and 1 for no.
 `update --check` exits 1 when a newer release is available.
+
+## Configuration reference
+
+Settings resolve flag > environment > `verdict.toml` (or `~/.config/verdict/config.toml`) >
+built-in default. These five override a `[section].key` in that file:
+
+| variable | overrides | default |
+|---|---|---|
+| `VERDICT_URL` | `[server].url`, the server every command asks | `http://127.0.0.1:8799` |
+| `VERDICT_MODEL` | `[model].path`, the checkpoint to load | base Laya |
+| `VERDICT_MULTILINGUAL` | `[model].multilingual`, the checkpoint `"model": "multilingual"` answers from | unset |
+| `VERDICT_BITS` | `[model].bits`, quantization at load (16 or 8, §36) | 16 |
+| `VERDICT_LANG` | `[model].lang`, `auto`, `en` or `multi` | `auto` |
+
+`VERDICT_REPO` is different: it names the release source for `verdict update`
+(`cli/update.py`), not a `verdict.toml` setting, so it has no flag or config-file form. Default
+`https://github.com/iksnerd/verdict.git`.
+
+There is deliberately no `[thresholds]` key: cuts live in the server process, so a file value
+would be ignored (see [init](#install-and-update)). `[model.extra]` names further checkpoints
+the same way as `[model].path`, each loaded on first request that names it; it is TOML-only, with
+no environment-variable form.
 
 ## Scripts and agents
 

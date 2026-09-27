@@ -1,0 +1,6 @@
+{"relation": {"type": "choice",
+              "instructions": "How does `passage` relate to `claim`?",
+              "criteria": {
+                "supports": "the passage states or implies the claim is true",
+                "contradicts": "the passage states or implies the claim is false",
+                "unrelated": "the passage says nothing that bears on whether the claim is true or false"}}}

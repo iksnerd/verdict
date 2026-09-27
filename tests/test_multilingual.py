@@ -62,9 +62,11 @@ def test_multilingual_without_a_configured_checkpoint_is_a_400(fake_laya):
 
 
 def test_unknown_model_name_is_rejected():
+    """`model` is a plain string now (config decides the valid set, not a fixed Literal), so a
+    typo like this is refused by the backend (400, UnknownModel) rather than by pydantic (422)."""
     r = TestClient(create_app(MlxBackend("main"))).post(
         "/v1/decide", json={"state": "x", "questions": Q, "model": "klingon"})
-    assert r.status_code == 422
+    assert r.status_code == 400
 
 
 def fake_server(monkeypatch):

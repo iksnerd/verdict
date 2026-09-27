@@ -252,6 +252,44 @@ def test_systemone_asker_gives_up_with_the_status_in_the_error():
         ask({"text": "x"}, {"q": {"type": "noul"}})
 
 
+def flaky_transport(calls, exc=httpx.TimeoutException, fail_first=0):
+    """A server that raises a transport-level error (not an HTTP status) for its first calls --
+    a cold-starting model, or one that hasn't accepted a connection yet -- then answers."""
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request)
+        if len(calls) <= fail_first:
+            raise exc("simulated: not answering yet")
+        return httpx.Response(200, json={
+            "model": "jev-1.13", "usage": {"input_tokens": 9, "output_tokens": 0},
+            "answers": {"q": {"type": "noul", "noul": 0.9}}})
+    return httpx.MockTransport(handler)
+
+
+def test_systemone_asker_retries_a_timeout_and_says_so(capsys):
+    calls = []
+    ask = bench.systemone_asker("https://api.example", "jev-latest", "k", backoff=0,
+                                transport=flaky_transport(calls, fail_first=2))
+    assert ask({"text": "x"}, {"q": {"type": "noul"}})["answers"]["q"]["noul"] == 0.9
+    assert len(calls) == 3
+    err = capsys.readouterr().err
+    assert "loading" in err and "api.example" in err
+
+
+def test_systemone_asker_retries_a_connection_error_the_same_way():
+    calls = []
+    ask = bench.systemone_asker("https://api.example", "jev-latest", "k", backoff=0,
+                                transport=flaky_transport(calls, exc=httpx.ConnectError, fail_first=1))
+    assert ask({"text": "x"}, {"q": {"type": "noul"}})["answers"]["q"]["noul"] == 0.9
+    assert len(calls) == 2
+
+
+def test_systemone_asker_gives_up_on_persistent_timeouts_with_a_clear_message():
+    ask = bench.systemone_asker("https://api.example", "jev-latest", "k", backoff=0, attempts=2,
+                                transport=flaky_transport([], fail_first=99))
+    with pytest.raises(ValueError, match="loading"):
+        ask({"text": "x"}, {"q": {"type": "noul"}})
+
+
 def test_bench_scores_a_systemone_endpoint(toy_bench, monkeypatch, capsys):
     monkeypatch.setattr(client, "decide", lambda *a, **k: pytest.fail("must not ask verdict"))
     monkeypatch.setattr(bench, "_default_transport", lambda: jev_transport([]))
@@ -267,6 +305,26 @@ def test_bench_scores_a_systemone_endpoint(toy_bench, monkeypatch, capsys):
 def test_bench_against_a_remote_systemone_needs_a_key(toy_bench, monkeypatch):
     monkeypatch.delenv("TYPESAFE_API_KEY", raising=False)
     assert cli.main(["bench", "--systemone", "https://api.example", "--pause", "0"]) == 2
+
+
+def dead_transport():
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("simulated: server never answered")
+    return httpx.MockTransport(handler)
+
+
+def test_bench_against_a_persistently_unreachable_systemone_server_fails_cleanly(
+        toy_bench, monkeypatch, capsys):
+    """Same failure `verdict examples` guards against: a dead --systemone endpoint must not
+    surface as an unhandled traceback from inside `bench.score`."""
+    monkeypatch.setattr(bench, "_default_transport", dead_transport)
+    monkeypatch.setattr("time.sleep", lambda s: None)
+    monkeypatch.setenv("TYPESAFE_API_KEY", "k")
+    code = cli.main(["bench", "--systemone", "https://api.example", "--pause", "0"])
+    assert code == 2
+    err = capsys.readouterr().err
+    assert "loading" in err
+    assert "Traceback" not in err
 
 
 # ---- suites in other languages -------------------------------------------------------------------

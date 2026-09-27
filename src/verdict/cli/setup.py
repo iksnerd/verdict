@@ -49,7 +49,8 @@ def _serve_cmd(args: argparse.Namespace) -> int:
 
     budget = args.budget if args.budget is not None else settings.prompt_token_budget
     bits = args.bits or settings.bits
-    backend = MlxBackend(args.model, multilingual_id=settings.multilingual_path, budget=budget or None,
+    backend = MlxBackend(args.model, multilingual_id=settings.multilingual_path,
+                         extra_checkpoints=settings.extra_checkpoints, budget=budget or None,
                          bits=bits)
     print(f"loading {args.model} ...", flush=True)
     backend.engine.agent

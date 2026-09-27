@@ -201,23 +201,46 @@ def systemone_asker(base_url: str, model: str, key: str, *, attempts: int = 5,
                     backoff: float = 1.0, timeout: float = 30.0, transport=None) -> Ask:
     """An `Ask` over TypeSafe's Jev protocol, `POST {base_url}/v1/systemone`. Pointed at
     api.typesafe.ai it benchmarks Jev; pointed at `verdict serve` it benchmarks us through the same
-    wire. The state goes as given: Jev reads it whole, where verdict clips to its token budget."""
+    wire. The state goes as given: Jev reads it whole, where verdict clips to its token budget.
+
+    A server that just started (Kev, Von, a `verdict serve`) can take longer than one request to
+    answer while it loads weights, and one has been observed to drop the connection entirely on
+    its first request rather than answering slowly. A timeout or connection failure is therefore
+    retried the same as a 429/529, with a line on stderr each time so a slow load looks like
+    progress, not a hang; only once `attempts` is exhausted does this raise, and the message says
+    it may still be loading rather than showing the raw exception."""
+    import sys
+    import time
+
     import httpx
 
     http = httpx.Client(base_url=base_url.rstrip("/"), timeout=timeout,
                         transport=transport or _default_transport(),
                         headers={"Authorization": f"Bearer {key}"})
 
+    def _wait(attempt: int, reason: str) -> None:
+        print(f"verdict: {base_url}/v1/systemone {reason}; it may still be loading -- "
+              f"retrying ({attempt + 2}/{attempts})", file=sys.stderr)
+        if backoff:
+            time.sleep(backoff * 2 ** attempt)
+
     def ask(state, questions):
         for attempt in range(attempts):
-            r = http.post("/v1/systemone", json={"state": state, "model": model,
-                                                  "questions": questions})
+            try:
+                r = http.post("/v1/systemone", json={"state": state, "model": model,
+                                                      "questions": questions})
+            except (httpx.TimeoutException, httpx.TransportError) as exc:
+                if attempt >= attempts - 1:
+                    raise ValueError(
+                        f"{base_url}/v1/systemone did not answer after {attempts} attempts "
+                        f"({exc.__class__.__name__}: {exc}); it may still be loading, or may "
+                        "have crashed on an earlier request -- check its own logs") from exc
+                _wait(attempt, exc.__class__.__name__)
+                continue
             if r.status_code not in _RETRY:
                 break
-            if attempt < attempts - 1 and backoff:
-                import time
-
-                time.sleep(backoff * 2 ** attempt)
+            if attempt < attempts - 1:
+                _wait(attempt, f"answered {r.status_code}")
         if r.status_code != 200:
             raise ValueError(f"{base_url}/v1/systemone answered {r.status_code}: {r.text[:200]}")
         return r.json()

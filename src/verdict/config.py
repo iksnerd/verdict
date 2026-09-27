@@ -32,8 +32,12 @@ DEFAULTS: dict[str, Any] = {
     "server": {"url": "http://127.0.0.1:8799"},
     # `multilingual` is laya's own mmBERT checkpoint for non-English state. It loads only when a
     # call asks for it (`--lang multi`), never at startup: a second model on the GPU is a choice.
+    # `extra` names further laya checkpoints the same way: loaded on first request that names
+    # them, never at startup, and stay resident once loaded (§ one model at a time still applies
+    # to what you start deliberately, not to what a request asked for).
     "model": {"path": "aac6fef/laya-mlx", "prompt_token_budget": 128,
-              "multilingual": "aac6fef/laya-multilingual-mlx", "bits": 16, "lang": "auto"},
+              "multilingual": "aac6fef/laya-multilingual-mlx", "bits": 16, "lang": "auto",
+              "extra": {}},
 }
 
 #: Environment overrides, as (section, key) -> variable name.
@@ -52,11 +56,11 @@ class Settings:
     behaviour worth it. Using it here would undo the saving §19 just made."""
 
     __slots__ = ("url", "model_path", "prompt_token_budget", "multilingual_path", "source",
-                 "defaulted", "bits", "lang")
+                 "defaulted", "bits", "lang", "extra_checkpoints")
 
     def __init__(self, url, model_path, prompt_token_budget,
                  multilingual_path=DEFAULTS["model"]["multilingual"], source=None, defaulted=(),
-                 bits=16, lang="auto"):
+                 bits=16, lang="auto", extra_checkpoints=None):
         self.url = url
         #: Which checkpoint reads the state: auto (English, warn on other languages), en, multi.
         self.lang = lang
@@ -65,6 +69,9 @@ class Settings:
         self.model_path = model_path
         self.prompt_token_budget = prompt_token_budget
         self.multilingual_path = multilingual_path
+        #: Further named laya checkpoints, loaded on first request that names them (config.py's
+        #: [model.extra]). A request's `model` selects one by name; unknown names are refused.
+        self.extra_checkpoints = dict(extra_checkpoints) if extra_checkpoints else {}
         #: The file it came from, or None when everything is a default.
         self.source = source
         #: Sections the loaded file did not set, so `verdict init` can say what it will add.
@@ -133,6 +140,7 @@ def load(path: Path | None = None) -> Settings:
         defaulted=defaulted,
         bits=_bits(data["model"]["bits"]),
         lang=_lang(data["model"]["lang"]),
+        extra_checkpoints=_extra(data["model"]["extra"]),
     )
 
 
@@ -189,6 +197,13 @@ def _lang(value) -> str:
     return value
 
 
+def _extra(value) -> dict[str, str]:
+    if not isinstance(value, dict):
+        raise ConfigError(f"[model.extra] is {value!r}; it takes a table of name = \"hf-id-or-path\" "
+                          "pairs, one per additional checkpoint a request can name")
+    return {str(k): str(v) for k, v in value.items()}
+
+
 #: Widths with a measurement behind them. 4-bit stayed inside the bench intervals but moved 17
 #: of 200 injection choices (FINDINGS §36), so it is not offered.
 BITS = (16, 8)
@@ -204,6 +219,16 @@ def _bits(value) -> int:
                          "every bench suite and halves memory; 4 moved too many answers "
                          "(FINDINGS §36)")
     return bits
+
+
+def _extra_toml(extra: dict[str, str]) -> str:
+    """`[model.extra]`, only when there is one: an empty table that always reads back empty is
+    still a key doing nothing until a request actually names one."""
+    if not extra:
+        return ('# [model.extra] names further checkpoints a request can select by name; none '
+                'are configured.\n# support = "org/support-mlx"')
+    lines = "\n".join(f'{name} = "{path}"' for name, path in extra.items())
+    return f"[model.extra]\n{lines}"
 
 
 def to_toml(s: Settings) -> str:
@@ -231,6 +256,8 @@ bits = {s.bits}
 # Bulgarian positive review: "negative 0.72" English, "positive 1.00" multilingual). $VERDICT_LANG
 # and --lang override it.
 lang = "{s.lang}"
+
+{_extra_toml(s.extra_checkpoints)}
 
 # There is deliberately no [thresholds] table. The cuts are applied by the switch inside the
 # server process, so a value here would be read and ignored on the server path, and a config key

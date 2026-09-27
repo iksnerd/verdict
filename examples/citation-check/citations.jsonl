@@ -1,0 +1,12 @@
+{"state": {"claim": "The library requires Python 3.10 or newer.", "passage": "Installation requires Python 3.10+; earlier versions are not supported."}, "expected": {"relation": "supports"}}
+{"state": {"claim": "The library requires Python 3.10 or newer.", "passage": "Tested and supported on Python 3.8 through 3.12."}, "expected": {"relation": "contradicts"}}
+{"state": {"claim": "The library requires Python 3.10 or newer.", "passage": "Installation is available via pip or from source."}, "expected": {"relation": "unrelated"}}
+{"state": {"claim": "Refunds are processed within 5 business days.", "passage": "Once approved, refunds appear on your statement within 3 to 5 business days."}, "expected": {"relation": "supports"}}
+{"state": {"claim": "Refunds are processed within 5 business days.", "passage": "Refunds typically take 2 to 3 weeks to appear, depending on your bank."}, "expected": {"relation": "contradicts"}}
+{"state": {"claim": "Refunds are processed within 5 business days.", "passage": "You can request a refund from the billing page under Order History."}, "expected": {"relation": "unrelated"}}
+{"state": {"claim": "The API rate limit is 1000 requests per minute.", "passage": "Each API key is limited to 1,000 requests per minute; exceeding it returns a 429."}, "expected": {"relation": "supports"}}
+{"state": {"claim": "The API rate limit is 1000 requests per minute.", "passage": "Rate limits are capped at 100 requests per minute on the free tier."}, "expected": {"relation": "contradicts"}}
+{"state": {"claim": "The API rate limit is 1000 requests per minute.", "passage": "All API responses are returned as JSON, with error details in the body."}, "expected": {"relation": "unrelated"}}
+{"state": {"claim": "The device is waterproof up to 50 meters.", "passage": "Rated IP68, water resistant to 50 meters for up to 30 minutes."}, "expected": {"relation": "supports"}}
+{"state": {"claim": "The device is waterproof up to 50 meters.", "passage": "The device is splash resistant but should not be submerged."}, "expected": {"relation": "contradicts"}}
+{"state": {"claim": "The device is waterproof up to 50 meters.", "passage": "The battery lasts up to 18 hours on a single charge."}, "expected": {"relation": "unrelated"}}
