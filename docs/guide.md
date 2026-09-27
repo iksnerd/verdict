@@ -26,7 +26,7 @@ where each claim here comes from, [FINDINGS.md](FINDINGS.md). For runnable input
 verdict runs on Apple Silicon with Python 3.11:
 
 ```sh
-uv tool install --python 3.11 'verdict[mlx,laya] @ git+https://github.com/iksnerd/verdict.git@v0.6.1'
+uv tool install --python 3.11 'verdict[mlx,laya] @ git+https://github.com/iksnerd/verdict.git@v0.6.2'
 verdict init      # writes ~/.config/verdict/config.toml
 verdict --version
 ```
@@ -294,8 +294,10 @@ The rules that came out of doing it once:
 | `verdict route PROMPT` | the big-or-small switch example; at chance on real traffic ([routing.md](routing.md)) |
 | `verdict cases` | prints that switch: its branches, default and questions |
 
-Exit status is 2 for a usage error everywhere. `ask --cut` exits 0 for yes and 1 for no.
-`update --check` exits 1 when a newer release is available.
+Exit status is 2 for a usage error everywhere, and 2 never means "no". `ask --cut` exits 0 for
+yes and 1 for no. `route` exits 0 for small and 1 for big, except under `--json`, which exits 0 on
+success. `bench --verify` exits 1 on a regression, and `update --check` exits 1 when a newer
+release is available. Every command's `--help` ends with its own exit status.
 
 An error is one `verdict:` line on stderr. With `--json` or `--jsonl`, stdout also gets
 `{"error": {"code": ..., "message": ...}}` (`decide` always, since it prints JSON), with `code`
@@ -347,9 +349,10 @@ cat examples/support-tickets/bank.json | verdict validate -q - --json
 Validation needs no server or model. It checks the question structure, calls a bank invalid when
 a question has a shape `decide` would refuse (unless `--allow-unmeasured`), and reports possible
 option-truncation warnings; it does not measure answer quality. Presets require the
-installed `laya-mlx` package, but do not load its model. With `--json`, stdout contains
-`{"valid": true, "questions": {...}, "warnings": [...]}` or
-`{"valid": false, "error": "..."}`. Exit status is 0 for valid (warnings included), 2 for invalid.
+installed `laya-mlx` package, but do not load its model. A question with no instructions is a
+warning. With `--json`, stdout contains `{"valid": true, "questions": {...}, "warnings": [...]}`
+or `{"valid": false, "error": {"code": ..., "message": ...}}`, the same error object as every
+other command. Exit status is 0 for valid (warnings included), 2 for invalid.
 
 For predictable agent calls, start `verdict serve` once and use `--server-only` on `ask`, `decide`,
 `calibrate` or `bench`. An unavailable server produces an error with exit status 2 instead of loading a

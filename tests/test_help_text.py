@@ -80,3 +80,38 @@ def test_every_command_a_script_can_branch_on_states_its_exit_status(command, ca
     with pytest.raises(SystemExit):
         cli.main([command, "--help"])
     assert "Exit status" in capsys.readouterr().out, command
+
+
+COMMANDS = ["validate", "ask", "decide", "rank", "docs", "questions", "presets", "calibrate",
+            "bench", "examples", "route", "cases", "serve", "update", "config", "init"]
+
+
+def rendered(command, capsys):
+    with pytest.raises(SystemExit):
+        cli.main([command, "--help"] if command else ["--help"])
+    return capsys.readouterr().out
+
+
+@pytest.mark.parametrize("command", [None, *COMMANDS])
+def test_no_prose_line_runs_past_100_columns(command, capsys):
+    """The raw formatter keeps a description's own line breaks, so one written as a single string
+    printed as one 400-column line on eight commands. Example command lines may run long."""
+    long = [line for line in rendered(command, capsys).splitlines()
+            if len(line) > 100 and not line.lstrip().startswith(("verdict ", "echo ", "git "))]
+    assert not long, long
+
+
+@pytest.mark.parametrize("command", COMMANDS)
+def test_every_command_shows_an_example_and_its_exit_status(command, capsys):
+    out = rendered(command, capsys)
+    assert "Example" in out and "Exit status" in out, command
+
+
+def test_the_top_level_help_states_the_limits(capsys):
+    """An agent reads this first; §41 and §46 are where it should not reach for verdict."""
+    out = rendered(None, capsys)
+    assert "§46" in out and "compare numbers" in out
+
+
+def test_route_help_says_json_exits_zero(capsys):
+    assert "--json" in cli.ROUTE_EPILOG.split("Exit status")[1]

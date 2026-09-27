@@ -14,8 +14,8 @@ from ..errors import QuestionError
 DESCRIPTION = """\
 A System 1, in Kahneman's sense: fast, automatic, intuitive judgments. Give it a state (text,
 or a JSON object with named fields) and typed questions; get back a probability per option in
-about 40 ms of inference, about 150 ms a call end to end against a running server. No generated
-text, nothing to parse, nothing run on your behalf.
+about 30 ms of model time, about a tenth of a second a call against a running server. No
+generated text, nothing to parse, nothing run on your behalf.
 
 Pair it with a System 2, a person or an LLM agent, that deliberates. Let verdict make the same
 quick judgment over hundreds of items, and spend slow thought where it flags something. Like
@@ -27,8 +27,12 @@ Question types, as laya defines them:
   choice  pick one option   -> the option, with a probability for each
   score   ordinal levels    -> expected level, with a probability for each
 
+It reads what the text shows. It cannot reason, bring in world knowledge (§41), or
+compare numbers: the largest of four decks' means is chance, "is this one negative?" is
+perfect (§46). Let code compare, and ask verdict what one item's text says.
+
 Start a server first so each call costs milliseconds instead of seconds; without one, every
-command still works by loading the model itself.
+command still works by loading the model itself, and says so on stderr.
 """
 
 EPILOG = """\
@@ -51,16 +55,18 @@ cut on your own labelled examples (`verdict calibrate`) before gating anything o
 
 Ask about what the text says. `ask` and `decide` refuse (exit 2) the shapes that scored at chance:
 a question about a consequence, difficulty or risk (FINDINGS §25, §29), a yes/no about an absence
-("is this ordinary", §33), and a state missing a field the question names. --allow-unmeasured
-asks anyway. A new yes/no is asked as a choice between no and yes and answered as a yes/no (§38).
+("is this ordinary", §33), more than 20 options (§41), and a question naming a field the state
+lacks (plain text has none). --allow-unmeasured asks anyway. A new yes/no is asked as a choice
+between no and yes and answered as a yes/no (§38). The HTTP API does the same.
 
 Settings: flag > environment ($VERDICT_URL, $VERDICT_MODEL, $VERDICT_MULTILINGUAL, $VERDICT_BITS,
 $VERDICT_LANG) > ./verdict.toml > ~/.config/verdict/config.toml > built-in. `verdict init` writes
 one; `verdict config` shows each resolved value and where it came from.
 
-Errors: one `verdict:` line on stderr and exit 2. With --json or --jsonl, also
-{"error": {"code", "message"}} on stdout; codes: usage, refused, no_server, server_timeout,
-server_error, config, not_found.
+Errors: one `verdict:` line on stderr and exit 2, never a traceback; exit 2 never means "no".
+With --json or --jsonl (and always for decide), also {"error": {"code", "message"}} on stdout.
+Codes: usage, refused (reword, or --allow-unmeasured), no_server, server_timeout, server_error,
+config, not_found. A mistyped command, question, preset or example gets a "did you mean".
 """
 
 ASK_HELP = """\
@@ -76,8 +82,9 @@ On the fine-tune, measured questions (`verdict questions`) are asked as measured
 a plain yes/no.
 
 A question about a consequence, difficulty or risk ("could this cause harm") or a yes/no about an
-absence ("is this ordinary") is refused, exit 2: those scored at chance. Ask what the text says or
-does instead; --allow-unmeasured asks anyway.
+absence ("is this ordinary") is refused, exit 2: those scored at chance. So is a question naming
+a field (`message`) when the text is plain text. Ask what the text says or does instead;
+--allow-unmeasured asks anyway.
 """
 
 ASK_EPILOG = """\
@@ -89,8 +96,12 @@ Examples:
   git diff | verdict ask - "Does this change touch authentication?"
   verdict ask "Der Kunde wurde zweimal belastet" "Is this a billing issue?" --lang multi
 
+--cut takes a probability between 0 and 1, or a `verdict calibrate` file; a numeric cut applies
+only to a yes/no (a calibrate file also applies a choice's temperature).
+
 Exit status: 0, or with --cut 0 for yes and 1 for no; 2 for a usage error or a refused question.
-With --json, successful calls always exit 0. --server-only fails instead of loading locally.
+With --json, successful calls always exit 0, and an error is also {"error": {"code", "message"}}
+on stdout. --server-only fails instead of loading locally.
 """
 
 DECIDE_HELP = """\
@@ -100,8 +111,9 @@ The state is best a JSON object with named fields: laya serializes it as JSON, a
 refer to fields in backticks ("What does the customer want in `message`?").
 
 It refuses (exit 2) a state missing a field a question names, since the model would answer from
-nothing, and the question shapes that scored at chance: a consequence, difficulty or risk, or a
-yes/no about an absence. --allow-unmeasured asks anyway. A new yes/no is asked as a choice
+nothing (a plain-text state has no fields), and the question shapes that scored at chance: a
+consequence, difficulty or risk, or a yes/no about an absence. --allow-unmeasured asks anyway.
+A new yes/no is asked as a choice
 between no and yes and answered as a yes/no, P(yes) (FINDINGS §38); --yesno opts out.
 """
 
@@ -129,9 +141,15 @@ With --jsonl over 10 or more states, each yes/no question's range is printed to 
 range under 0.1 is flagged: an ordering squeezed that tight ranks almost nothing, and the cause
 is usually the inputs (near-identical, or boilerplate), not the model.
 
-Exit status: 0, or 2 for a usage error or a refused question.
-Use `verdict validate -q bank.json --json` to check a bank without inference.
-Add --server-only to require a running server. On a batch error, earlier output lines remain valid.
+With --jsonl each output row carries `index`, the 0-based input line it answers, so rows pair with
+lines across skipped blanks. A line that starts like JSON must parse: a bad one stops the run
+there, and earlier rows stay valid. A plain-text line is sent as text, with a warning. Nothing on
+stdin is an error.
+
+Exit status: 0, or 2 for a usage error or a refused question. An error is also
+{"error": {"code", "message"}} on stdout, with `index` under --jsonl.
+Use `verdict validate -q bank.json --json` to check a bank without inference, and --server-only
+to fail rather than load the model locally.
 """
 
 CALIBRATE_HELP = """\
@@ -153,7 +171,8 @@ Examples:
 
 It asks the model once per example, with a pause between calls, and stops at --limit (400 by
 default): a few hundred labels settle most questions, and a sweep of thousands holds the GPU
-flat out for minutes. Fewer than 10 examples is refused.
+flat out for minutes. Fewer than 10 examples is refused. The fit records the model that answered;
+answers from two models (a server swapped mid-run) are refused, since a cut fits one model.
 
 Exit status: 0, or 2 for a usage error, too few examples, or labels a cut cannot be fitted on
 (one class only, in the whole set or in the training split).
@@ -163,6 +182,12 @@ PRESETS_EPILOG = """\
 Examples:
   verdict presets                        # every bank, the state field it expects, its questions
   verdict presets triage > my-bank.json  # a bank as JSON, to edit and pass to --questions
+  verdict presets --json                 # every bank, for a script
+
+guard and router ask about consequences and difficulty, so `decide` refuses them without
+--allow-unmeasured; the listing says so where it applies. No model is loaded.
+
+Exit status: 0, or 2 for an unknown preset.
 """
 
 ROUTE_EPILOG = """\
@@ -174,7 +199,8 @@ Examples:
 At chance on real agent traffic (FINDINGS §25): kept as the worked example of a switch, not as
 a router to trust. `verdict ask` with a surface question is the better tool.
 
-Exit status: 0 for small, 1 for big, 2 for an error.
+Exit status: 0 for small, 1 for big, 2 for an error. With --json, 0 on success whichever branch:
+the answer is in the JSON.
 """
 
 SERVE_EPILOG = """\
@@ -182,12 +208,189 @@ Examples:
   verdict serve                  # binds server.url, 127.0.0.1:8799 by default
   verdict serve --port 8800
 
-Loads one checkpoint, and the multilingual one only when a call asks for it (--lang multi).
-If model.path names a local checkpoint that is missing, it loads base laya instead and says so. Localhost only, no auth. Stop it when you are done; it
-holds the model in GPU memory.
+Loads one checkpoint, and the multilingual one only when a call asks for it (--lang multi). If
+model.path names a local checkpoint that is missing, it loads base laya instead and says so.
+Localhost only, no auth. POST /v1/decide answers as `verdict decide` does, with the same refusals
+and numbers (?allow_unmeasured=true, ?yesno=true opt out).
+
+Stop the one you started when you are done; it holds the model in GPU memory:
+  kill $(lsof -ti TCP:8799 -sTCP:LISTEN)     # your url's port; never kill by name
 
 It also speaks TypeSafe Jev's protocol (POST /v1/systemone, GET /v1/models), so Jev's SDKs and
 tools run against it with TYPESAFE_BASE_URL=http://127.0.0.1:8799 and any TYPESAFE_API_KEY.
+
+Exit status: it runs until stopped; 2 when the port is taken (checked before any weights load,
+and the error names the process to look up) or for a usage or config error.
+"""
+
+VALIDATE_HELP = """\
+Validate a bank with no model, download or server: its structure, and the question shapes `decide`
+refuses because they scored at chance (a consequence, difficulty or risk; a yes/no about an
+absence; more than 20 options). Possible option truncation and a question with no instructions
+are warnings. This checks structure, not prediction quality.
+"""
+
+VALIDATE_EPILOG = """\
+Examples:
+  verdict validate -q bank.json
+  cat bank.json | verdict validate -q - --json
+
+Exit status: 0 for valid (warnings included), 2 for invalid or refused (--allow-unmeasured accepts
+the refused shapes). With --json, stdout is {"valid": true, "questions", "warnings"} or
+{"valid": false, "error": {"code", "message"}}.
+"""
+
+RANK_HELP = """\
+Rank a `decide --jsonl` run by named answers. Each question is a dimension: a yes/no is P(yes), a
+choice gives NAME.OPTION per option, a score its place on the scale. Each dimension is rescaled to
+its percentile over the file, then ranked by the weighted sum, with what each one contributed. A
+weighted sum, not cosine: cosine matched an item that scored low on everything (FINDINGS §39).
+No model is loaded.
+"""
+
+RANK_EPILOG = """\
+Examples:
+  verdict decide --jsonl -q bank.json < tickets.jsonl > scored.jsonl
+  verdict rank scored.jsonl about_money=1 says_leaving=0.5 -k 5
+  verdict rank scored.jsonl asks_how=-1   # away from how-to questions
+
+Exit status: 0, or 2 for a usage error, an unknown dimension (the error names the ones that
+exist), or a file that is not `decide --jsonl` output.
+"""
+
+DOCS_HELP = """\
+Print a project document to stdout, from the installed tool. The help and error messages cite
+FINDINGS sections (§25, §38): `verdict docs findings 38` prints one. No model is loaded.
+"""
+
+DOCS_EPILOG = """\
+Examples:
+  verdict docs                  # the README
+  verdict docs guide | less
+  verdict docs findings 46      # one section
+
+Exit status: 0, or 2 for an unknown topic or section.
+"""
+
+QUESTIONS_HELP = """\
+The measured-question library: questions that worked on real labels or a bench suite, each with
+the state it was measured on and its result. Use one or several by name with -q. Reuse one that
+fits before writing your own; its number holds for the state it was measured on.
+"""
+
+QUESTIONS_EPILOG = """\
+Examples:
+  verdict questions                             # every question, its state and result
+  verdict questions touches_secret              # one, as a JSON bank to edit
+  verdict questions --json                      # all of them, for a script
+  verdict decide '{"command": "cat .env"}' -q touches_secret,is_instruction
+
+Exit status: 0, or 2 for an unknown name.
+"""
+
+PRESETS_HELP = """\
+laya's built-in question banks (triage, moderation, email, guard, router), each with the state
+field it expects.
+"""
+
+BENCH_HELP = """\
+Score each suite's question on a fixed, balanced sample of a public labelled dataset, pinned by
+revision: AUC for yes/no, accuracy for choice, each with a 95% bootstrap interval. --verify
+compares a scorecard with the previous one, with no model.
+"""
+
+BENCH_EPILOG = """\
+Examples:
+  verdict bench                                    # every suite, print the table
+  verdict bench --suite sst2 --per-class 50        # one suite, a quick look
+  verdict bench --out bench/scorecards/vX.Y.Z.json # the release scorecard
+  verdict bench --verify bench/scorecards/vX.Y.Z.json
+
+Needs the bench extra and, once, the network to download the datasets. In a checkout:
+uv sync --extra mlx --extra laya --extra bench. For a uv tool install, reinstall with
+'verdict[mlx,laya,bench]'. A regression is a value below the previous scorecard's interval.
+
+Exit status: 0; with --verify, 1 when any suite regressed (the release workflow gates on this);
+2 for a usage error.
+"""
+
+EXAMPLES_HELP = """\
+Run the example banks (invented inputs, documented outputs) against a backend and print each
+row's answers, the same inputs examples/README.md's numbers came from. Where a row carries an
+`expected` label (most banks; the README lists them), it also prints how many answers match, so a
+new backend gets a real accuracy and a median ms/call instead of one-off questions.
+"""
+
+EXAMPLES_EPILOG = """\
+Examples:
+  verdict examples                                  # every example, the served checkpoint
+  verdict examples test-output turn-intent          # just these two
+  verdict examples --path room-triage               # where an installed copy's bank lives
+  verdict examples citation-check --systemone http://127.0.0.1:8009 --systemone-model kev-latest
+
+Installed copies carry the examples. The ms/call is the median, so a cold model load on the
+first call does not read as a slow backend.
+
+Exit status: 0, or 2 for an unknown example or a backend error.
+"""
+
+CASES_HELP = """\
+Print the route switch: its branches, the default branch and the questions it asks. No model is
+loaded.
+"""
+
+CASES_EPILOG = """\
+Example:
+  verdict cases
+
+Exit status: 0.
+"""
+
+UPDATE_HELP = """\
+Update verdict. Installed with `uv tool install`, it reinstalls the newest vX.Y.Z release tag,
+with the mlx and laya extras. Run from a git checkout, it fast-forwards the checkout and re-syncs
+with both extras instead.
+"""
+
+UPDATE_EPILOG = """\
+Examples:
+  verdict update           # newest release (or pull + sync in a checkout), and what changed
+  verdict update --check   # report only: exit 0 up to date, 1 behind
+
+Releases come from $VERDICT_REPO (default https://github.com/iksnerd/verdict.git) and are the
+tags the release workflow tested. In a checkout it refuses on uncommitted changes and only
+fast-forwards. A running `verdict serve` keeps the old code until restarted.
+
+Exit status: 0 on success, 2 on failure. --check exits 0 when up to date and 1 when a newer
+release (or, in a checkout, newer commits) is available.
+"""
+
+CONFIG_HELP = """\
+Show every setting as the CLI resolves it, and where each came from: $VAR, a file or the default.
+Flags beat all of these per command. Files layer key by key: ./verdict.toml over
+~/.config/verdict/config.toml over the built-in defaults. An unknown key in a file is an error.
+"""
+
+CONFIG_EPILOG = """\
+Examples:
+  verdict config                    # key, value and source, one per line
+  verdict config --json             # {"settings": [{"key", "value", "source"}]}
+
+Exit status: 0, or 2 for an invalid config file (the error names the file and the key).
+"""
+
+INIT_HELP = """\
+Write a config from what this machine has: the checkpoint, a free port for the server, and the
+settings already in the target file, which are kept. Staged, with each current value offered as
+the default; -y accepts them all.
+"""
+
+INIT_EPILOG = """\
+Examples:
+  verdict init                          # ~/.config/verdict/config.toml, read from every directory
+  verdict init -y --out verdict.toml    # a per-project file that overrides it
+
+Exit status: 0, or 2 for an invalid existing config.
 """
 
 
@@ -276,15 +479,7 @@ def main(argv: list[str] | None = None) -> int:
                                        "to base laya with a warning; a missing --model fails)")
 
     v = command("validate", "check a question bank without loading a model",
-                "Validate a bank: its structure, and the question shapes `decide` refuses because "
-                "they scored at chance (a consequence, difficulty or risk; a yes/no about an "
-                "absence). Possible option truncation is a warning. No inference, downloads or "
-                "server required. This checks structure, not prediction quality.",
-                "Examples:\n  verdict validate -q bank.json\n"
-                "  cat bank.json | verdict validate -q - --json\n\n"
-                "Exit status: 0 for valid (truncation warnings included), 2 for invalid or "
-                "refused (--allow-unmeasured accepts the refused shapes). With --json, "
-                "stdout contains valid plus questions/warnings, or valid=false plus error.")
+                VALIDATE_HELP, VALIDATE_EPILOG)
     v.add_argument("-q", "--questions", required=True, metavar="PRESET|JSON|FILE|-",
                    help="bank source, measured question names, or - for stdin")
     v.add_argument("--json", action="store_true", help="print a machine-readable validation result")
@@ -322,7 +517,8 @@ def main(argv: list[str] | None = None) -> int:
                    help="the bank: a preset, measured question names (comma-separated), inline "
                         "JSON or a file; omit to read it from stdin")
     d.add_argument("--jsonl", action="store_true",
-                   help="one state per stdin line against one bank; prints NDJSON")
+                   help="one state per stdin line against one bank; prints NDJSON, each row "
+                        "with the `index` of its input line")
     d.add_argument("--calibration", metavar="FILE",
                    help="a `verdict calibrate` file: adds a decision to each yes/no and "
                         "calibrated probabilities to each choice")
@@ -337,16 +533,7 @@ def main(argv: list[str] | None = None) -> int:
     d.set_defaults(fn=decisions._decide_cmd)
 
     rk = command("rank", "rank a decide --jsonl run by named, weighted answers",
-                 "Each question is a named dimension: a yes/no is P(yes), a choice gives NAME.OPTION "
-                 "per option, a score its place on the scale. Each dimension is rescaled to its "
-                 "percentile over the file, then ranked by the weighted sum, with what each "
-                 "dimension contributed. A weighted sum, not cosine: cosine matched an item that "
-                 "scored low on everything (FINDINGS §39). No model is loaded.",
-                 "Example:\n  verdict decide --jsonl -q bank.json < tickets.jsonl > scored.jsonl\n"
-                 "  verdict rank scored.jsonl about_money=1 says_leaving=0.5 -k 5\n"
-                 "  verdict rank scored.jsonl asks_how=-1   # away from how-to questions\n\n"
-                 "Exit status: 0, or 2 for a usage error, an unknown dimension, or a file that "
-                 "is not `decide --jsonl` output.")
+                 RANK_HELP, RANK_EPILOG)
     rk.add_argument("scored", help="the output of `verdict decide --jsonl`")
     rk.add_argument("weights", nargs="+", metavar="NAME=WEIGHT",
                     help="a weight per dimension; negative ranks away from it")
@@ -355,24 +542,21 @@ def main(argv: list[str] | None = None) -> int:
                     help="one JSON line per result: state, score, contributions")
     rk.set_defaults(fn=evaluation._rank_cmd)
 
-    dc = command("docs", "read the README, guide, API notes, FINDINGS, pipeline or routing",
-                 "Print a project document to stdout. The help and error messages cite FINDINGS "
-                 "sections (§25, §38): `verdict docs findings 38` prints one. No model is loaded.",
-                 "Examples:\n  verdict docs                  # the README\n"
-                 "  verdict docs guide | less\n  verdict docs findings 38      # one section\n\n"
-                 "Exit status: 0, or 2 for an unknown section.")
+    dc = command("docs", "read the README, guide, API notes, FINDINGS and more",
+                 DOCS_HELP, DOCS_EPILOG)
     dc.add_argument("topic", nargs="?", default="readme", choices=list(docs_cmd.TOPIC_NAMES),
-                    help="readme (default), guide, api or findings")
+                    help="readme (default), guide, api, findings, pipeline or routing")
     dc.add_argument("section", nargs="?", type=int, help="with findings: one section, by number")
     dc.set_defaults(fn=docs_cmd._docs_cmd)
 
-    qs = command("questions", "questions measured to work, usable by name with -q")
+    qs = command("questions", "questions measured to work, usable by name with -q",
+                 QUESTIONS_HELP, QUESTIONS_EPILOG)
     qs.add_argument("name", nargs="?", help="print this question as a JSON bank")
     qs.add_argument("--json", action="store_true",
                     help="every question as JSON: name -> {question, state, measured, source}")
     qs.set_defaults(fn=catalog._questions_cmd)
 
-    p = command("presets", "laya's built-in question banks", epilog=PRESETS_EPILOG)
+    p = command("presets", "laya's built-in question banks", PRESETS_HELP, PRESETS_EPILOG)
     p.add_argument("name", nargs="?", help="print this bank as JSON")
     p.add_argument("--json", action="store_true", help="every preset as JSON: name -> bank")
     p.set_defaults(fn=catalog._presets_cmd)
@@ -386,7 +570,8 @@ def main(argv: list[str] | None = None) -> int:
     c.add_argument("--limit", type=int, default=400, help="at most this many examples, "
                    "sampled with --seed (default: 400; 0 for all)")
     c.add_argument("--heldout", type=float, default=0.3, help="fraction held out (default: 0.3)")
-    c.add_argument("--seed", type=int, default=0)
+    c.add_argument("--seed", type=int, default=0,
+                   help="seed for --limit's sample and the held-out split (default: 0)")
     c.add_argument("--pause", type=_seconds, default=0.05, metavar="SEC",
                    help="between calls (default: 0.05)")
     yesno_flag(c)
@@ -394,22 +579,7 @@ def main(argv: list[str] | None = None) -> int:
     c.set_defaults(fn=evaluation._calibrate_cmd)
 
     b = command("bench", "score answer quality on pinned public datasets; gate a release",
-                "Score each suite's question on a fixed, balanced sample of a public labelled "
-                "dataset, pinned by revision: AUC for yes/no, accuracy for choice, each with a "
-                "95% bootstrap interval. --verify compares a scorecard with the previous one, "
-                "with no model.",
-                """Examples:
-  verdict bench                                    # every suite, print the table
-  verdict bench --suite sst2 --per-class 50        # one suite, a quick look
-  verdict bench --out bench/scorecards/vX.Y.Z.json # the release scorecard
-  verdict bench --verify bench/scorecards/vX.Y.Z.json
-
-Needs the bench extra (uv sync --extra mlx --extra laya --extra bench) and, once, the network to
-download the datasets. A regression is a value below the previous scorecard's interval.
-
-Exit status: 0; with --verify, 1 when any suite regressed (the release workflow gates on this);
-2 for a usage error.
-""")
+                BENCH_HELP, BENCH_EPILOG)
     b.add_argument("--suite", action="append", metavar="NAME", help="only this suite (repeatable)")
     b.add_argument("--per-class", type=int, metavar="N", help="override each suite's sample size")
     b.add_argument("--out", metavar="FILE", help="write the scorecard here")
@@ -427,19 +597,8 @@ Exit status: 0; with --verify, 1 when any suite regressed (the release workflow 
     server_flags(b)
     b.set_defaults(fn=evaluation._bench_cmd)
 
-    ex = command("examples", "run examples/ banks against a backend",
-                "Runs one or more examples/ banks against a backend and prints each row's "
-                "answers plus ms/call, the same real inputs examples/README.md's own numbers "
-                "came from. Where a row carries an `expected` label (most banks; examples/README.md "
-                "lists them), also prints how many answers match it, so a new backend gets a real accuracy and latency number "
-                "instead of one-off questions and an eyeballed guess.",
-                """Examples:
-  verdict examples                                       # every example, the served checkpoint
-  verdict examples citation-check checklist-check        # just these two
-  verdict examples citation-check --systemone http://127.0.0.1:8009 --systemone-model kev-latest
-
-Needs a checkout (or an install that packs examples/) to find the banks.
-""")
+    ex = command("examples", "run the labelled example banks against a backend",
+                 EXAMPLES_HELP, EXAMPLES_EPILOG)
     ex.add_argument("name", nargs="*", metavar="NAME", help="an examples/ directory name; omit for all")
     ex.add_argument("--path", action="store_true",
                     help="print each named example's directory instead of running it, so an "
@@ -472,7 +631,8 @@ Needs a checkout (or an install that packs examples/) to find the banks.
                    help="read prompts from stdin, one per line; print NDJSON")
     r.set_defaults(fn=routing._route_cmd)
 
-    cs = command("cases", "show the route switch: its cases, default and questions")
+    cs = command("cases", "show the route switch: its cases, default and questions",
+                 CASES_HELP, CASES_EPILOG)
     cs.set_defaults(fn=routing._cases_cmd)
 
     s = command("serve", "hold the model in memory so every call is fast",
@@ -491,30 +651,16 @@ Needs a checkout (or an install that packs examples/) to find the banks.
     s.set_defaults(fn=setup._serve_cmd)
 
     u = command("update", "install the newest release (or pull, in a dev checkout)",
-                "Update verdict. Installed with `uv tool install`, it reinstalls the newest vX.Y.Z "
-                "release tag, with the mlx and laya extras. Run from a git checkout, it "
-                "fast-forwards the checkout and re-syncs with both extras instead.",
-                """Examples:
-  verdict update           # newest release (or pull + sync in a checkout), and what changed
-  verdict update --check   # report only: exit 0 up to date, 1 behind
-
-Releases come from $VERDICT_REPO (default https://github.com/iksnerd/verdict.git) and are the
-tags the release workflow tested. In a checkout it refuses on uncommitted changes and only
-fast-forwards. A running `verdict serve` keeps the old code until restarted.
-
-Exit status: 0 on success, 2 on failure. --check exits 0 when up to date and 1 when a newer
-release (or, in a checkout, newer commits) is available.
-""")
+                UPDATE_HELP, UPDATE_EPILOG)
     u.add_argument("--check", action="store_true", help="report how far behind, change nothing")
     u.set_defaults(fn=update._update_cmd)
 
     cf = command("config", "show each resolved setting and where it came from",
-                 "Show every setting as the CLI resolves it (flag > environment > ./verdict.toml "
-                 "> ~/.config/verdict/config.toml > built-in), and which of those it came from.")
+                 CONFIG_HELP, CONFIG_EPILOG)
     cf.add_argument("--json", action="store_true", help="print {settings: [{key, value, source}]}")
     cf.set_defaults(fn=setup._config_cmd)
 
-    i = command("init", "write a config from what this machine has")
+    i = command("init", "write a config from what this machine has", INIT_HELP, INIT_EPILOG)
     i.add_argument("--out", default=str(support._user_config()),
                    help="where to write (default: the user config, read from every directory; "
                         "./verdict.toml overrides it per project)")
