@@ -30,3 +30,6 @@ CLAUDE.local.md
 plugins/verdict/skills/verdict/EVOLUTION.md
 # The maintainer's release skill is private too; locally it is a symlink here.
 .claude/skills/verdict-release
+
+# Drafts, notes, and anything else not meant to ship: never committed.
+docs/personal/

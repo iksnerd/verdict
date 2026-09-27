@@ -3,8 +3,9 @@
 #
 # macOS arm64, because the suite's laya and MLX extras are what CLAUDE.md warns a plain install
 # silently skips (13 tests, including the guard that the vendored router bank still matches
-# laya.router_questions()). macOS minutes bill at 10x on a private repo, which is why this runs on
-# tags and not on every push; the pre-commit hook covers day-to-day changes.
+# laya.router_questions()). macOS is the only runner with those extras, and downloading model
+# weights plus the full suite is real wall-clock time to spend on every push, which is why this
+# runs on tags and not on every push; the pre-commit hook covers day-to-day changes.
 #
 # The release holds code only. The default model, base Laya, downloads itself from Hugging Face.
 name: release
