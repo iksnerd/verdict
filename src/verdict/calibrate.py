@@ -30,6 +30,8 @@ FALSE = {False, 0, "0", "false", "no", "n", "f"}
 
 def as_bool(label: Any) -> bool:
     key = label.lower() if isinstance(label, str) else label
+    if not isinstance(key, (str, bool, int, float)):
+        raise ValueError(f"{label!r} is not a yes/no label")
     if key in TRUE:
         return True
     if key in FALSE:
@@ -39,9 +41,13 @@ def as_bool(label: Any) -> bool:
 
 def split(n: int, heldout: float = 0.3, seed: int = 0) -> tuple[list[int], list[int]]:
     """Indices for train and held-out, shuffled with a fixed seed so a refit is reproducible."""
+    if n < 1:
+        raise ValueError("at least one labelled example is required")
+    if not math.isfinite(heldout) or not 0 <= heldout < 1:
+        raise ValueError("heldout must be at least 0 and less than 1")
     idx = list(range(n))
     random.Random(seed).shuffle(idx)
-    cut = max(1, round(n * heldout)) if n > 1 else 0
+    cut = min(n - 1, max(1, round(n * heldout))) if n > 1 and heldout else 0
     return idx[cut:], idx[:cut]
 
 
@@ -73,22 +79,34 @@ def balanced_accuracy(scores: Sequence[float], labels: Sequence[bool], cut: floa
 
 
 def fit_cut(scores: Sequence[float], labels: Sequence[bool]) -> float:
-    """The threshold maximising balanced accuracy; midpoints between distinct scores."""
+    """Maximise balanced accuracy, including the always-yes and always-no classifiers."""
+    _paired(scores, labels)
+    if any(not math.isfinite(p) or not 0 <= p <= 1 for p in scores):
+        raise ValueError("yes/no probabilities must be finite and between 0 and 1")
     distinct = sorted(set(scores))
-    if len(distinct) == 1:
-        return distinct[0]
-    candidates = [(a + b) / 2 for a, b in zip(distinct, distinct[1:])]
+    candidates = [distinct[0], math.nextafter(distinct[-1], math.inf)]
+    candidates += [(a + b) / 2 for a, b in zip(distinct, distinct[1:])]
     return max(candidates, key=lambda c: (balanced_accuracy(scores, labels, c), -abs(c - 0.5)))
 
 
 def temper(probabilities: dict[str, float], temperature: float) -> dict[str, float]:
     """p_i^(1/T), renormalised: the same argmax, sharper for T < 1 and flatter for T > 1."""
-    powered = {k: max(p, 1e-12) ** (1 / temperature) for k, p in probabilities.items()}
+    if not math.isfinite(temperature) or temperature <= 0:
+        raise ValueError("temperature must be finite and positive")
+    if not probabilities or any(not math.isfinite(p) or not 0 <= p <= 1
+                                for p in probabilities.values()) or not sum(probabilities.values()):
+        raise ValueError("probabilities must be finite, between 0 and 1, with a positive sum")
+    logs = {k: math.log(max(p, 1e-12)) for k, p in probabilities.items()}
+    peak = max(logs.values())
+    powered = {k: math.exp((v - peak) / temperature) for k, v in logs.items()}
     total = sum(powered.values())
     return {k: v / total for k, v in powered.items()}
 
 
 def nll(rows: Sequence[dict[str, float]], labels: Sequence[str], temperature: float = 1.0) -> float:
+    _paired(rows, labels)
+    if any(y not in row for row, y in zip(rows, labels)):
+        raise ValueError("each choice label must name an option in its probability distribution")
     return -sum(math.log(max(temper(p, temperature)[y], 1e-12))
                 for p, y in zip(rows, labels)) / len(rows)
 
@@ -101,6 +119,9 @@ def fit_temperature(rows: Sequence[dict[str, float]], labels: Sequence[str]) -> 
 
 def fit_noul(scores: list[float], labels: list[bool], heldout: float = 0.3,
              seed: int = 0) -> dict[str, Any]:
+    _paired(scores, labels)
+    if any(not math.isfinite(p) or not 0 <= p <= 1 for p in scores):
+        raise ValueError("yes/no probabilities must be finite and between 0 and 1")
     if all(labels) or not any(labels):
         raise ValueError(f"a yes/no cut needs both yes and no labels; all {len(labels)} are "
                          f"{'yes' if labels and labels[0] else 'no'}")
@@ -127,6 +148,8 @@ def fit_noul(scores: list[float], labels: list[bool], heldout: float = 0.3,
 
 def fit_choice(rows: list[dict[str, float]], labels: list[str], heldout: float = 0.3,
                seed: int = 0) -> dict[str, Any]:
+    _paired(rows, labels)
+    nll(rows, labels)  # Validate every label, including those destined for the held-out split.
     train, test = split(len(rows), heldout, seed)
     r_tr, y_tr = [rows[i] for i in train], [labels[i] for i in train]
     r_te, y_te = [rows[i] for i in test], [labels[i] for i in test]
@@ -180,3 +203,8 @@ def apply(answers: dict[str, Any], fits: dict[str, Any]) -> dict[str, Any]:
 
 def _r(x: float | None) -> float | None:
     return None if x is None else round(x, 4)
+
+
+def _paired(rows: Sequence, labels: Sequence) -> None:
+    if not rows or len(rows) != len(labels):
+        raise ValueError("need non-empty examples and one label per example")

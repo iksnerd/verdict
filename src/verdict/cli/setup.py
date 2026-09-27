@@ -94,7 +94,9 @@ def _init_cmd(args: argparse.Namespace) -> int:
     """
     from .. import config
 
-    current = config.load()
+    # The file being rewritten is the one whose settings to keep, wherever --out points.
+    target = Path(args.out).expanduser()
+    current = config.load(target) if target.is_file() else config.load()
     total = 3
     print(f"verdict init: writing {args.out}")
     if current.source:
@@ -136,8 +138,9 @@ def _init_cmd(args: argparse.Namespace) -> int:
     settings = config.Settings(
         url=url.rstrip("/"), model_path=model_path,
         prompt_token_budget=current.prompt_token_budget, multilingual_path=multilingual,
+        bits=current.bits, lang=current.lang, extra_checkpoints=current.extra_checkpoints,
     )
-    out = Path(args.out).expanduser()
+    out = target
     if out.exists() and not args.yes and sys.stdin.isatty():
         if input(f"  {out} exists. Overwrite? [y/N]: ").strip().lower() not in ("y", "yes"):
             print("  left alone.")

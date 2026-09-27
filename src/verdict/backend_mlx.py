@@ -55,6 +55,25 @@ class MlxBackend:
             names.add("multilingual")
         return names
 
+    def capabilities(self, model: str | None = None):
+        from .capabilities import Capabilities
+        from .engine import OPTION_TOKEN_CAP
+        from .library import MAX_OPTIONS
+
+        engine = self.engine_for(model)  # constructs a lazy Engine; does not load weights
+        cfg = getattr(engine._agent, "cfg", {})
+        return Capabilities(
+            family="laya", model=engine.name, max_state_and_question_tokens=cfg.get("max_len"),
+            state_token_budget=self.budget or None, recommended_choice_options=MAX_OPTIONS,
+            option_token_cap=OPTION_TOKEN_CAP, question_execution="per_question",
+            noul_confidence="max_probability", choice_score_confidence="one_minus_normalized_entropy",
+            token_usage="state_counted_per_question",
+            notes=("State budget is a preprocessing cap, not the checkpoint context length.",
+                   "Instructions and options share the context; actual readable state can be shorter.",
+                   "20 options is a measured recommendation, not a protocol maximum.",
+                   "Fit thresholds on this checkpoint and question shape before gating."),
+        )
+
     def engine_for(self, model: str | None) -> Engine:
         """The engine a request names, loading and caching it on first use."""
         if model is None or model == "english":

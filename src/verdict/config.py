@@ -19,6 +19,7 @@ Nothing here imports anything heavy.
 """
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 from typing import Any
@@ -221,13 +222,19 @@ def _bits(value) -> int:
     return bits
 
 
+def _toml_str(value: str) -> str:
+    """A TOML basic string, usable as a value or a quoted key (`support.v2` unquoted is a nested
+    table). JSON's escapes are TOML's, except that TOML also forbids a raw DEL."""
+    return json.dumps(value, ensure_ascii=False).replace("\x7f", "\\u007f")
+
+
 def _extra_toml(extra: dict[str, str]) -> str:
     """`[model.extra]`, only when there is one: an empty table that always reads back empty is
     still a key doing nothing until a request actually names one."""
     if not extra:
         return ('# [model.extra] names further checkpoints a request can select by name; none '
                 'are configured.\n# support = "org/support-mlx"')
-    lines = "\n".join(f'{name} = "{path}"' for name, path in extra.items())
+    lines = "\n".join(f"{_toml_str(name)} = {_toml_str(path)}" for name, path in extra.items())
     return f"[model.extra]\n{lines}"
 
 
@@ -239,15 +246,15 @@ def to_toml(s: Settings) -> str:
 
 [server]
 # `verdict serve` binds here and every command asks here. $VERDICT_URL overrides it.
-url = "{s.url}"
+url = {_toml_str(s.url)}
 
 [model]
-path = "{s.model_path}"
+path = {_toml_str(s.model_path)}
 # Tokens of the prompt the model sees. 128 costs about 36 ms a question against 87 ms at 512,
 # and routing intent is nearly always stated up front (FINDINGS section 11).
 prompt_token_budget = {s.prompt_token_budget}
 # laya's multilingual checkpoint, for state that is not English. Loaded only by `--lang multi`.
-multilingual = "{s.multilingual_path}"
+multilingual = {_toml_str(s.multilingual_path)}
 # 16 loads the checkpoint as shipped; 8 quantizes it at load, about 430 MB of GPU memory instead of
 # 800, with the same answers on every bench suite (FINDINGS §36). $VERDICT_BITS overrides it.
 bits = {s.bits}
@@ -255,7 +262,7 @@ bits = {s.bits}
 # uses the multilingual one for everything, which Cyrillic and other non-English text needs (a
 # Bulgarian positive review: "negative 0.72" English, "positive 1.00" multilingual). $VERDICT_LANG
 # and --lang override it.
-lang = "{s.lang}"
+lang = {_toml_str(s.lang)}
 
 {_extra_toml(s.extra_checkpoints)}
 

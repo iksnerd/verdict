@@ -72,3 +72,19 @@ def test_models_endpoint_lists_every_configured_extra_checkpoint(fake_laya):
     body = TestClient(create_app(backend)).get("/v1/models").json()
     names = {m["name"] for m in body["models"]}
     assert {"support", "legal"} <= names
+
+
+def test_systemone_can_select_an_advertised_extra(fake_laya):
+    backend = MlxBackend("main", extra_checkpoints={"support": "support-model"})
+    app = TestClient(create_app(backend))
+    r = app.post("/v1/systemone", json={"state": "hi", "questions": Q, "model": "support"})
+    assert r.status_code == 200
+    assert r.json()["model"] == "laya-mlx:support-model"
+    assert set(fake_laya) == {"support-model"}
+
+
+def test_systemone_refuses_misspelled_model(fake_laya):
+    app = TestClient(create_app(MlxBackend("main")))
+    r = app.post("/v1/systemone", json={"state": "hi", "questions": Q, "model": "suport"})
+    assert r.status_code == 400
+    assert not fake_laya

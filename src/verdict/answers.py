@@ -50,6 +50,15 @@ def top(answer: Any) -> str:
     return max(p, key=p.__getitem__)
 
 
+def max_probability(answer: Any) -> float:
+    """Probability of the most likely outcome, including max(p, 1-p) for a Noul.
+
+    An explicitly derived statistic with the same definition across providers; it is not the
+    provider's confidence field or a promise of empirical accuracy. Calibrate before gating.
+    """
+    return max(probs(answer).values())
+
+
 def point(answer: Any) -> float | dict[str, float]:
     """The shape the teachers label in: a bare probability for yes/no, a distribution otherwise.
 

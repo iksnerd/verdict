@@ -60,7 +60,10 @@ def _bench_cmd(args: argparse.Namespace) -> int:
         if key is None:
             return support._fail(f"--systemone {args.systemone} needs TYPESAFE_API_KEY; the datasets are "
                          "public, but each item is sent to that service and billed")
-        ask = bench.systemone_asker(args.systemone, args.systemone_model, key)
+        try:
+            ask = bench.systemone_asker(args.systemone, args.systemone_model, key)
+        except ValueError as exc:
+            return support._fail(f"--systemone {args.systemone}: {exc}")
         model_name = f"systemone:{args.systemone_model}@{host}"
         budget = None
         bits = None  # not ours to know
@@ -70,45 +73,49 @@ def _bench_cmd(args: argparse.Namespace) -> int:
         model_name = Path(str(asker.main_path)).name
         budget = asker.settings.prompt_token_budget
         bits = asker.settings.bits
-    calls = 0
-    askers = {}
+    try:
+        calls = 0
+        askers = {}
 
-    def paced(state, questions, lang=None):
-        nonlocal calls
-        if calls and args.pause:
-            time.sleep(args.pause)
-        calls += 1
-        if lang and not args.systemone:
-            # A suite in another language names its checkpoint; the rest use the served one.
-            if lang not in askers:
-                askers[lang] = inference._Asker(argparse.Namespace(**{**vars(args), "lang": lang}))
-            return askers[lang](state, questions)
-        return ask(state, questions)
+        def paced(state, questions, lang=None):
+            nonlocal calls
+            if calls and args.pause:
+                time.sleep(args.pause)
+            calls += 1
+            if lang and not args.systemone:
+                # A suite in another language names its checkpoint; the rest use the served one.
+                if lang not in askers:
+                    askers[lang] = inference._Asker(argparse.Namespace(**{**vars(args), "lang": lang}))
+                return askers[lang](state, questions)
+            return ask(state, questions)
 
-    results = {}
-    for s in suites:
-        try:
-            items = bench.sample(s, bench.fetch(s))
-        except ValueError as exc:
-            return support._fail(str(exc))
-        print(f"{s.name}: asking {len(items)} items...", file=sys.stderr)
-        try:
-            r = results[s.name] = bench.score(
-                s, items, lambda st, q, _lang=s.lang: paced(st, q, _lang))
-        except ValueError as exc:
-            return support._fail(f"{s.name}: {exc}")
-        extra = (f"  target over 0.5: {r['target_over_half']:.2f}  cut {r['fit']['cut']:.4f}"
-                 if r["metric"] == "auc" else f"  chance {r['chance']:.2f}"
-                 + (f"  auc {r['auc']:.3f}" if "auc" in r else ""))
-        print(f"{s.name:<12} {r['metric']} {r['value']:.3f} "
-              f"[{r['ci'][0]:.3f}, {r['ci'][1]:.3f}]  n={r['n']}{extra}")
-    doc = {"version": version("verdict"), "model": model_name, "budget": budget, "bits": bits,
-           "date": time.strftime("%Y-%m-%d"), "suites": results}
-    if args.out:
-        Path(args.out).parent.mkdir(parents=True, exist_ok=True)
-        Path(args.out).write_text(json.dumps(doc, indent=2) + "\n")
-        print(f"wrote {args.out}", file=sys.stderr)
-    return 0
+        results = {}
+        for s in suites:
+            try:
+                items = bench.sample(s, bench.fetch(s))
+            except ValueError as exc:
+                return support._fail(str(exc))
+            print(f"{s.name}: asking {len(items)} items...", file=sys.stderr)
+            try:
+                r = results[s.name] = bench.score(
+                    s, items, lambda st, q, _lang=s.lang: paced(st, q, _lang))
+            except ValueError as exc:
+                return support._fail(f"{s.name}: {exc}")
+            extra = (f"  target over 0.5: {r['target_over_half']:.2f}  cut {r['fit']['cut']:.4f}"
+                     if r["metric"] == "auc" else f"  chance {r['chance']:.2f}"
+                     + (f"  auc {r['auc']:.3f}" if "auc" in r else ""))
+            print(f"{s.name:<12} {r['metric']} {r['value']:.3f} "
+                  f"[{r['ci'][0]:.3f}, {r['ci'][1]:.3f}]  n={r['n']}{extra}")
+        doc = {"version": version("verdict"), "model": model_name, "budget": budget, "bits": bits,
+               "date": time.strftime("%Y-%m-%d"), "suites": results}
+        if args.out:
+            Path(args.out).parent.mkdir(parents=True, exist_ok=True)
+            Path(args.out).write_text(json.dumps(doc, indent=2) + "\n")
+            print(f"wrote {args.out}", file=sys.stderr)
+        return 0
+    finally:
+        if args.systemone:
+            ask.close()
 
 
 def _rank_cmd(args: argparse.Namespace) -> int:
@@ -136,12 +143,18 @@ def _rank_cmd(args: argparse.Namespace) -> int:
 def _calibrate_cmd(args: argparse.Namespace) -> int:
     """Ask a bank of every labelled state, fit a cut or temperature per question, report held-out."""
     from .. import calibrate, inputs
+    from ..schema import laya_questions
 
     try:
-        questions = inputs.load_questions(args.questions)
+        questions = laya_questions(inputs.load_questions(args.questions))
     except ValueError as exc:
         return support._fail(str(exc))
-    rows = [json.loads(line) for line in Path(args.examples).read_text().splitlines() if line.strip()]
+    try:
+        rows = [json.loads(line) for line in Path(args.examples).read_text().splitlines() if line.strip()]
+    except (ValueError, OSError) as exc:
+        return support._fail(f"{args.examples}: {exc}")
+    if args.limit is not None and args.limit < 0:
+        return support._fail("--limit must be nonnegative")
     if args.limit and len(rows) > args.limit:
         import random
 
@@ -157,22 +170,54 @@ def _calibrate_cmd(args: argparse.Namespace) -> int:
         raise ValueError("each line needs \"labels\": {question: value}, or \"label\" when the "
                          "bank has a single question")
 
+    # Validate labels before inference: an absent question must not waste a bulk run and then
+    # divide by zero while fitting. Missing individual labels remain supported.
+    try:
+        row_labels = []
+        for i, row in enumerate(rows):
+            if not isinstance(row, dict) or "state" not in row:
+                raise ValueError(f"example {i + 1} needs a state")
+            labels = labels_of(row)
+            if not isinstance(labels, dict):
+                raise ValueError(f"example {i + 1}: labels must be an object")
+            row_labels.append(labels)
+        for qid, q in questions.items():
+            if q["type"] == "score":
+                continue
+            labels = [r[qid] for r in row_labels if r.get(qid) is not None]
+            if len(labels) < 2:
+                raise ValueError(f"{qid}: need at least two labelled examples, got {len(labels)}")
+            train, _ = calibrate.split(len(labels), args.heldout, args.seed)
+            if q["type"] == "noul":
+                ys = [calibrate.as_bool(y) for y in labels]
+                if len({ys[i] for i in train}) < 2:
+                    raise ValueError(f"{qid}: training split needs both yes and no labels")
+            else:
+                options = set(q["criteria"])
+                if any(str(y) not in options for y in labels):
+                    raise ValueError(f"{qid}: choice labels must name one of {sorted(options)}")
+    except ValueError as exc:
+        return support._fail(str(exc))
+
     ask = inference._Asker(args)
     # Calibrating is how an unmeasured question gets measured (§29 found harm at chance this way),
     # so the shapes `ask` and `decide` refuse are only warned about here.
     ask.allow_unmeasured = True
     answers = []
+    models = set()
     print(f"asking {len(questions)} question(s) of {len(rows)} states "
           f"({args.pause:.2f} s between calls)...", file=sys.stderr)
     for i, row in enumerate(rows):
         if i and args.pause:
             time.sleep(args.pause)
-        answers.append(ask(row["state"], questions)["answers"])
+        result = ask(row["state"], questions)
+        models.add(result["model"])
+        answers.append(result["answers"])
 
     fits = {}
     try:
         for qid, q in questions.items():
-            pairs = [(a[qid], labels_of(r).get(qid)) for a, r in zip(answers, rows)]
+            pairs = [(a[qid], labels.get(qid)) for a, labels in zip(answers, row_labels)]
             pairs = [(a, y) for a, y in pairs if y is not None]
             if q["type"] == "noul":
                 fits[qid] = calibrate.fit_noul([a["noul"] for a, _ in pairs],
@@ -201,7 +246,12 @@ def _calibrate_cmd(args: argparse.Namespace) -> int:
             if fit["confusions"]:
                 print("  most confused: " + ", ".join(
                     f"{c['true']}->{c['predicted']} x{c['n']}" for c in fit["confusions"][:3]))
-    doc = {"model": answers and ask.main_path, "examples": args.examples, "questions": fits}
+    # The model that answered, not the one configured: a running server may serve another, and a
+    # cut reused against a different model is a guess.
+    if len(models) > 1:
+        return support._fail(f"answers came from more than one model ({', '.join(sorted(models))}); "
+                             "a cut fitted across them fits none of them")
+    doc = {"model": next(iter(models), None), "examples": args.examples, "questions": fits}
     if args.out:
         Path(args.out).write_text(json.dumps(doc, indent=2) + "\n")
         print(f"wrote {args.out}; apply it with --calibration {args.out} (decide) "

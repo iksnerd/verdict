@@ -58,6 +58,8 @@ consequences or difficulty, which score at chance. verdict refuses those questio
 - **Other languages:** `--lang multi` switches to Laya's multilingual checkpoint.
 - **An HTTP API** on localhost ([docs/api.md](docs/api.md)), including TypeSafe Jev's
   `/v1/systemone` protocol, so Jev's SDKs work against it.
+- **Backend capabilities:** `GET /v1/capabilities` reports Laya/Jev limits and confidence
+  semantics separately from the shared protocol ([SDK guide](docs/api.md#discovering-backend-differences)).
 - **Swap the backend:** `[model.extra]` names further local laya checkpoints; `SystemOneBackend`
   swaps to any other `/v1/systemone` server instead (a real, differently-trained model, not another
   laya checkpoint). `verdict examples --systemone URL` checks it against the same real inputs

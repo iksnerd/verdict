@@ -29,6 +29,31 @@ SCORE = {"type": "score", "score": 1.3, "confidence": 0.2, "legend": {"0": "low"
          "probabilities": {"0": 0.2, "1": 0.3, "2": 0.5}}
 
 
+def test_init_preserves_model_settings(monkeypatch, tmp_path):
+    from verdict import config
+    from verdict.cli import setup
+
+    path = tmp_path / "config.toml"
+    before = config.Settings("http://127.0.0.1:8799", "org/model", 128, bits=8,
+                             lang="multi", extra_checkpoints={"support": "org/support"})
+    path.write_text(config.to_toml(before))
+    monkeypatch.setattr(config, "CONFIG_PATHS", (path,))
+    monkeypatch.setattr(setup, "_port_free", lambda *a: True)
+    monkeypatch.chdir(tmp_path)
+    assert cli.main(["init", "--yes", "--out", str(path)]) == 0
+    after = config.load(path)
+    assert (after.bits, after.lang, after.extra_checkpoints) == (8, "multi", {"support": "org/support"})
+
+
+def test_calibrate_missing_choice_labels_fails_before_inference(monkeypatch, tmp_path, capsys):
+    monkeypatch.setattr(client, "decide", lambda *a, **kw: pytest.fail("must validate before asking"))
+    path = tmp_path / "labelled.jsonl"
+    path.write_text("\n".join(json.dumps({"state": "x", "labels": {"a": "yes"}}) for _ in range(10)))
+    bank = {k: {"type": "choice", "criteria": {"yes": "yes", "no": "no"}} for k in ("a", "b")}
+    assert cli.main(["calibrate", str(path), "-q", json.dumps(bank)]) == 2
+    assert "b" in capsys.readouterr().err
+
+
 def test_levels_make_a_score_and_print_expectation_and_top_level(monkeypatch, capsys):
     sent = fake_server(monkeypatch, lambda s, k, q: SCORE)
     assert cli.main(["ask", "x", "how urgent?", "-l", "low", "-l", "mid", "-l", "high"]) == 0
@@ -179,3 +204,54 @@ def test_calibrate_prints_a_rounded_cut_and_saves_the_exact_one(monkeypatch, tmp
     printed = re.search(r"cut (\S+)", capsys.readouterr().out).group(1)
     assert len(printed.split(".")[1]) <= 4
     assert abs(float(printed) - saved) < 1e-4
+
+
+def test_init_out_reads_its_own_target_not_the_search_path(monkeypatch, tmp_path):
+    from verdict import config
+    from verdict.cli import setup
+
+    target = tmp_path / "custom.toml"
+    target.write_text(config.to_toml(config.Settings(
+        "http://127.0.0.1:8799", "org/model", 128, bits=8, lang="multi",
+        extra_checkpoints={"support": "org/support"})))
+    monkeypatch.setattr(config, "CONFIG_PATHS", (tmp_path / "absent.toml",))
+    monkeypatch.setattr(setup, "_port_free", lambda *a: True)
+    monkeypatch.chdir(tmp_path)
+    assert cli.main(["init", "--yes", "--out", str(target)]) == 0
+    after = config.load(target)
+    assert (after.bits, after.lang, after.extra_checkpoints) == (8, "multi", {"support": "org/support"})
+
+
+def test_calibrate_records_the_model_that_answered(monkeypatch, tmp_path):
+    fake_server(monkeypatch, lambda s, k, q: {"type": "noul", "noul": 0.9 if s["y"] else 0.1,
+                                              "confidence": 0.5})
+    data = tmp_path / "l.jsonl"
+    data.write_text("\n".join(json.dumps({"state": {"y": i % 2 == 0, "i": i}, "label": i % 2 == 0})
+                              for i in range(40)))
+    out = tmp_path / "fit.json"
+    assert cli.main(["calibrate", str(data), "--questions",
+                     '{"q": {"type": "noul", "instructions": "?"}}', "--out", str(out)]) == 0
+    assert json.loads(out.read_text())["model"] == "fake"
+
+
+def test_bench_systemone_with_a_bad_url_is_a_usage_error(monkeypatch, capsys):
+    monkeypatch.setenv("TYPESAFE_API_KEY", "k")
+    assert cli.main(["bench", "--systemone", "not-a-url"]) == 2
+    assert "not-a-url" in capsys.readouterr().err
+
+
+def test_calibrate_refuses_answers_from_two_models(monkeypatch, tmp_path, capsys):
+    calls = iter(range(10**6))
+
+    def fake_decide(state, questions, url=None, model=None):
+        return {"model": f"m{next(calls) % 2}", "answers": typed(
+            questions, lambda k: {"type": "noul", "noul": 0.9 if state["y"] else 0.1, "confidence": 0.5})}
+
+    monkeypatch.setattr(client, "decide", fake_decide)
+    monkeypatch.setattr(cli.time, "sleep", lambda s: None)
+    data = tmp_path / "l.jsonl"
+    data.write_text("\n".join(json.dumps({"state": {"y": i % 2 == 0, "i": i}, "label": i % 2 == 0})
+                              for i in range(40)))
+    assert cli.main(["calibrate", str(data), "--questions",
+                     '{"q": {"type": "noul", "instructions": "?"}}']) == 2
+    assert "more than one model" in capsys.readouterr().err

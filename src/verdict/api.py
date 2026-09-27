@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
+
 from fastapi import FastAPI, HTTPException
 
 from pydantic import BaseModel, field_validator
 
 from .backend import Backend, UniformBackend, UnknownModel
+from .capabilities import Capabilities
+from .errors import QuestionError
 from .router import BIG_SMALL
 from .schema import (
     DecideRequest,
@@ -59,16 +63,24 @@ class BatchRouteResponse(BaseModel):
     results: list[BatchRouteItem]
 
 
-#: Jev model names that select one of ours. Anything else, `jev-latest` included, is the served
-#: checkpoint: a client written for Jev names Jev's models, and refusing them would break it.
-_OUR_MODELS = {"english", "multilingual"}
+#: Explicit compatibility aliases for local backends only. A proxy forwards every model name.
+#: Unknown local names must reach engine_for(), where a typo is refused rather than substituted.
+_LOCAL_ALIASES = {"jev-latest", "jev-preview", "jev-1.13", "jev-1.13.0"}
 
 
-def to_decide_request(body: dict | SystemOneRequest) -> DecideRequest:
+def to_decide_request(body: dict | SystemOneRequest, backend: Backend | None = None) -> DecideRequest:
     """A Jev `/v1/systemone` request as ours."""
     req = body if isinstance(body, SystemOneRequest) else SystemOneRequest.model_validate(body)
     return DecideRequest(state=req.state, questions=req.questions,
-                         model=req.model if req.model in _OUR_MODELS else None)
+                         model=_model_name(req.model, backend))
+
+
+def _model_name(name: str | None, backend: Backend | None) -> str | None:
+    if getattr(backend, "preserve_model_names", False):
+        return name
+    else:
+        known = getattr(backend, "known_models", lambda: set())()
+        return None if name in _LOCAL_ALIASES and name not in known else name
 
 
 def _release_date(backend: Backend) -> str:
@@ -81,6 +93,21 @@ def _release_date(backend: Backend) -> str:
     return datetime.date.fromtimestamp(stamp).isoformat()
 
 
+@contextmanager
+def _backend_errors():
+    """One mapping of backend failures to HTTP, for every endpoint that asks the backend."""
+    try:
+        yield
+    except UnknownModel as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except QuestionError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except ValueError as exc:
+        # A SystemOneBackend's upstream (Kev, Von, another verdict) didn't answer: we are a
+        # proxy here, so its failure is a bad gateway, not our own 500 with a traceback.
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
 def create_app(backend: Backend | None = None) -> FastAPI:
     """A decision API: every endpoint answers, none of them runs anything."""
     backend = backend or UniformBackend()
@@ -90,28 +117,19 @@ def create_app(backend: Backend | None = None) -> FastAPI:
     def healthz():
         return {"status": "ok", "backend": backend.name}
 
-    @app.post("/v1/decide", response_model=DecideResponse, response_model_exclude={"usage"})
+    @app.post("/v1/decide", response_model=DecideResponse, response_model_exclude={"usage"},
+              response_model_exclude_none=True)
     def decide(request: DecideRequest) -> DecideResponse:
-        try:
+        with _backend_errors():
             return backend.decide(request)
-        except UnknownModel as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
-        except ValueError as exc:
-            # A SystemOneBackend's upstream (Kev, Von, another verdict) didn't answer: we are a
-            # proxy here, so its failure is a bad gateway, not our own 500 with a traceback.
-            raise HTTPException(status_code=502, detail=str(exc)) from exc
 
-    @app.post("/v1/systemone", response_model=SystemOneResponse)
+    @app.post("/v1/systemone", response_model=SystemOneResponse, response_model_exclude_none=True)
     def systemone(request: SystemOneRequest) -> SystemOneResponse:
         """TypeSafe's Jev protocol, so its SDKs and tools can point here with
         `TYPESAFE_BASE_URL`. Same answers as `/v1/decide`, plus `usage`. The bearer key the SDK
         insists on is ignored: the server binds to localhost."""
-        try:
-            out = backend.decide(to_decide_request(request))
-        except UnknownModel as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
-        except ValueError as exc:
-            raise HTTPException(status_code=502, detail=str(exc)) from exc
+        with _backend_errors():
+            out = backend.decide(to_decide_request(request, backend))
         return SystemOneResponse(model=out.model, answers=out.answers,
                                  usage=out.usage or Usage(input_tokens=0))
 
@@ -126,7 +144,7 @@ def create_app(backend: Backend | None = None) -> FastAPI:
         cards = [
             ModelCard(name="jev-latest", release_date=date,
                       description=f"Alias for the served checkpoint, {backend.name}. "
-                                  "Any model name not listed here also selects it."),
+                                  "Compatibility alias; does not load hosted Jev."),
             ModelCard(name="english", release_date=date,
                       description=f"The served checkpoint, {backend.name}."),
         ]
@@ -140,6 +158,17 @@ def create_app(backend: Backend | None = None) -> FastAPI:
                                    description=f"{backend.extra_checkpoints[name]}; "
                                                "loaded on first use. [model.extra] in verdict.toml."))
         return ModelList(models=cards)
+
+    @app.get("/v1/capabilities", response_model=Capabilities)
+    def capabilities(model: str | None = None) -> Capabilities:
+        """Verdict extension; model cards stay compatible with TypeSafe's SDKs."""
+        try:
+            if hasattr(backend, "capabilities"):
+                return backend.capabilities(_model_name(model, backend))
+            return Capabilities(family="uniform" if backend.name == "uniform" else "unknown",
+                                model=backend.name)
+        except UnknownModel as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     def _answers_for(prompt: str):
         """Clip, then ask the backend. Clipping here keeps the HTTP path the one the thresholds
@@ -163,7 +192,8 @@ def create_app(backend: Backend | None = None) -> FastAPI:
         # clips because it has a tokenizer loaded; before this the server did not, so the two
         # front doors could disagree on a long prompt. A backend with no engine (uniform) has
         # no tokenizer and needs none.
-        branch = BIG_SMALL.decide(_answers_for(request.prompt))
+        with _backend_errors():
+            branch = BIG_SMALL.decide(_answers_for(request.prompt))
         return RouteResponse(
             model=backend.name, branch=branch.name, reason=branch.reason,
             scores=branch.scores,
@@ -184,7 +214,8 @@ def create_app(backend: Backend | None = None) -> FastAPI:
         """
         results = []
         for i, prompt in enumerate(request.prompts):
-            branch = BIG_SMALL.decide(_answers_for(prompt))
+            with _backend_errors():
+                branch = BIG_SMALL.decide(_answers_for(prompt))
             results.append(BatchRouteItem(
                 index=i, branch=branch.name, reason=branch.reason,
                 scores=branch.scores,

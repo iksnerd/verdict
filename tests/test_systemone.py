@@ -83,7 +83,7 @@ def test_a_bearer_key_is_accepted_and_ignored():
 
 
 @pytest.mark.parametrize("name,expected", [
-    ("jev-latest", None), ("jev-1.13", None), ("anything", None),
+    ("jev-latest", None), ("jev-preview", None), ("jev-1.13", None), ("anything", "anything"),
     ("english", "english"), ("multilingual", "multilingual"),
 ])
 def test_model_names_map_to_our_checkpoints(name, expected):

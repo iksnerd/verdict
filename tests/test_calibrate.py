@@ -111,3 +111,22 @@ def test_a_split_that_leaves_training_one_class_is_refused():
     assert not any(labels[i] for i in train)  # the case under test: the one positive is held out
     with pytest.raises(ValueError, match="training"):
         cal.fit_noul([0.1 * i for i in range(10)], labels)
+
+
+def test_inverted_scores_can_choose_a_constant_classifier():
+    scores, labels = [0.1, 0.9], [True, False]
+    cut = cal.fit_cut(scores, labels)
+    assert cal.balanced_accuracy(scores, labels, cut) == 0.5
+
+
+@pytest.mark.parametrize("rows,labels", [([], []), ([{"a": .5, "b": .5}], []),
+                                        ([{"a": .5, "b": .5}], ["missing"])])
+def test_choice_fit_refuses_invalid_training_data(rows, labels):
+    with pytest.raises(ValueError):
+        cal.fit_choice(rows, labels)
+
+
+@pytest.mark.parametrize("heldout", [-.1, 1, 2, float("nan")])
+def test_invalid_split_fraction_is_refused(heldout):
+    with pytest.raises(ValueError, match="heldout"):
+        cal.fit_choice([{"a": .7, "b": .3}] * 10, ["a"] * 10, heldout=heldout)

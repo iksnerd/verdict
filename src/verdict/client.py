@@ -143,6 +143,31 @@ def decide(
                  frozenset({"answers"}))
 
 
+def capabilities(url: str | None = None, model: str | None = None,
+                 timeout: float = CONNECT_TIMEOUT) -> dict[str, Any]:
+    """Read Verdict's optional capability extension. None-valued limits mean unknown.
+
+    Older Verdict versions and direct TypeSafe endpoints may not expose it; NoServer here
+    means capability discovery is unavailable, not that inference should change backends.
+    """
+    from urllib.parse import urlencode
+
+    base = (url or server_url()).rstrip("/")
+    path = "/v1/capabilities" + ("?" + urlencode({"model": model}) if model is not None else "")
+    try:
+        with urllib.request.urlopen(base + path, timeout=timeout) as response:
+            payload = json.loads(response.read())
+    except urllib.error.HTTPError as exc:
+        if exc.code in _NOT_VERDICT:
+            raise NoServer(f"{base} does not expose capability discovery") from exc
+        raise ServerError(exc.code, _detail(exc)) from exc
+    except (urllib.error.URLError, OSError, json.JSONDecodeError) as exc:
+        raise NoServer(f"capability discovery unavailable at {base}") from exc
+    if not isinstance(payload, dict) or not {"family", "model"} <= payload.keys():
+        raise NoServer(f"{base} returned invalid capability metadata")
+    return payload
+
+
 def route(prompt: str, url: str | None = None, timeout: float = CONNECT_TIMEOUT) -> dict[str, Any]:
     """`POST /v1/route`. Raises `NoServer` when the caller should fall back to in-process.
 

@@ -136,6 +136,23 @@ def test_the_client_pulls_in_nothing_expensive():
     assert imported.isdisjoint({"transformers", "laya_mlx", "torch", "mlx", "httpx"}), imported
 
 
+def test_capabilities_encodes_model_and_keeps_unknown_values(monkeypatch):
+    calls = []
+    def respond(url, timeout):
+        calls.append(url)
+        return FakeResponse(b'{"family":"systemone","model":"a/b","max_choice_options":null}')
+    monkeypatch.setattr(client.urllib.request, "urlopen", respond)
+    result = client.capabilities("http://example:1234", model="a/b")
+    assert calls == ["http://example:1234/v1/capabilities?model=a%2Fb"]
+    assert result["max_choice_options"] is None
+
+
+def test_capabilities_missing_endpoint_is_explicit(monkeypatch):
+    refuse(monkeypatch, urllib.error.HTTPError("http://example", 404, "missing", {}, BytesIO()))
+    with pytest.raises(client.NoServer, match="capability"):
+        client.capabilities()
+
+
 def test_route_batch_returns_results_in_index_order(monkeypatch):
     """The server preserves order, but the client sorts on `index` anyway: a caller pairing
     prompts to branches by position must not be at the mercy of that staying true."""

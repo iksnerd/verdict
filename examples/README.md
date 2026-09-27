@@ -286,3 +286,10 @@ And the schema-bump description's one hedge ("not sure if anyone still uses it")
 `rollback_documented` toward `uncertain` even though the description never mentions a rollback at
 all (it should read `absent`) — the tone of one sentence bleeding into a question that is supposed
 to read only its own slice of the text.
+
+
+When comparing Laya and Jev, pin the upstream model with `--systemone-model jev-1.13.0`.
+`--systemone` sends the original banks and states without Laya's CLI rewriting or clipping, so
+record those preprocessing differences alongside accuracy and latency. Confidence thresholds
+are backend-specific; Jev Noul responses need not contain confidence. See the
+[SDK capability and migration guide](../docs/api.md#discovering-backend-differences).

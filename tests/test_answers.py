@@ -2,6 +2,15 @@
 behaviour all of them have to share, including against the real pydantic models."""
 from __future__ import annotations
 
+
+def test_max_probability_does_not_depend_on_provider_confidence():
+    from verdict.answers import max_probability
+    from verdict.schema import NoulAnswer
+
+    assert max_probability(NoulAnswer(noul=.9)) == .9
+    assert max_probability({"type": "choice", "probabilities": {"a": .7, "b": .3},
+                            "confidence": .1}) == .7
+
 import pytest
 
 from verdict.answers import (

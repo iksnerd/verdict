@@ -102,32 +102,36 @@ def _examples_cmd(args: argparse.Namespace) -> int:
     except ValueError as exc:
         return support._fail(str(exc))
 
-    calls = 0
-    for name in names:
-        bank = json.loads((root / name / "bank.json").read_text())
-        print(f"=== {name} ===")
-        correct = scored = 0
-        latencies_ms: list[float] = []
-        for i, row in enumerate(_rows(root / name)):
-            if calls and args.pause:
-                time.sleep(args.pause)
-            calls += 1
-            state = row.get("state", row)
-            started = time.perf_counter()
-            try:
-                result = ask(state, bank)
-            except ValueError as exc:
-                return support._fail(f"{name} row {i}: {exc}")
-            latencies_ms.append((time.perf_counter() - started) * 1000)
-            print(_format(result["answers"]), "|", json.dumps(state)[:90])
-            for qid, expected in (row.get("expected") or {}).items():
-                answer = result["answers"].get(qid)
-                if answer is None:
-                    continue
-                scored += 1
-                correct += _correct(answer, expected)
-        if scored:
-            print(f"{name}: {correct}/{scored} match the recorded expectation")
-        print(f"{name}: {sum(latencies_ms) / len(latencies_ms):.0f} ms/call over "
-              f"{len(latencies_ms)} calls ({min(latencies_ms):.0f} to {max(latencies_ms):.0f} ms)")
-    return 0
+    try:
+        calls = 0
+        for name in names:
+            bank = json.loads((root / name / "bank.json").read_text())
+            print(f"=== {name} ===")
+            correct = scored = 0
+            latencies_ms: list[float] = []
+            for i, row in enumerate(_rows(root / name)):
+                if calls and args.pause:
+                    time.sleep(args.pause)
+                calls += 1
+                state = row.get("state", row)
+                started = time.perf_counter()
+                try:
+                    result = ask(state, bank)
+                except ValueError as exc:
+                    return support._fail(f"{name} row {i}: {exc}")
+                latencies_ms.append((time.perf_counter() - started) * 1000)
+                print(_format(result["answers"]), "|", json.dumps(state)[:90])
+                for qid, expected in (row.get("expected") or {}).items():
+                    answer = result["answers"].get(qid)
+                    if answer is None:
+                        continue
+                    scored += 1
+                    correct += _correct(answer, expected)
+            if scored:
+                print(f"{name}: {correct}/{scored} match the recorded expectation")
+            print(f"{name}: {sum(latencies_ms) / len(latencies_ms):.0f} ms/call over "
+                  f"{len(latencies_ms)} calls ({min(latencies_ms):.0f} to {max(latencies_ms):.0f} ms)")
+        return 0
+    finally:
+        if args.systemone:
+            ask.close()

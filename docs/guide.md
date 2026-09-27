@@ -346,3 +346,20 @@ result per input line. Diagnostics go to stderr; parse stdout as JSON. JSONL out
 input order and starts before EOF. If a later call fails, earlier lines remain valid; check the
 process exit status before treating a batch as complete. `ask --json` exits 0 on success;
 plain `ask --cut` exits 0 for yes and 1 for no. Errors exit 2.
+
+
+### Calibration and backend identity
+
+Calibration validates each question's labels before inference. A missing label on an individual
+row is allowed; each fitted question needs at least two labels, choices must name valid options,
+and a yes/no training split must contain both classes. `--heldout` is in `[0, 1)`; zero disables
+the held-out split. Cut fitting includes constant classifiers so an inverted signal cannot force
+a worse-than-baseline threshold. A constant cut is a reason to improve the question, not evidence
+that it distinguishes the classes. Check the reported held-out metrics before using a fit.
+
+`verdict init` preserves language, quantization, and extra checkpoint settings when rewriting a
+configuration. Backend changes still require measurement: never transfer a calibration file or
+confidence threshold from local Laya to hosted Jev without refitting. The
+[SDK capability guide](api.md#discovering-backend-differences) explains model selection, context
+budgets, and missing upstream confidence/usage fields. Python users can inspect
+`backend.capabilities()`; HTTP users can call `/v1/capabilities` without loading weights.

@@ -148,3 +148,18 @@ def test_a_routes_table_is_reported_not_silently_ignored(monkeypatch, tmp_path, 
 def test_nothing_dispatches():
     assert not hasattr(config.Settings, "small_cmd")
     assert "routes" not in config.DEFAULTS
+
+
+def test_awkward_names_and_paths_round_trip_through_the_written_file(tmp_path):
+    """A dotted name is a nested table in TOML unless quoted, and a quote or backslash in a
+    path ends the string early unless escaped."""
+    original = config.Settings(
+        url="http://127.0.0.1:9100", model_path='C:\\models\\a "b"-mlx', prompt_token_budget=96,
+        multilingual_path="models/m-mlx",
+        extra_checkpoints={"support.v2": "org/support-v2", "a b": "x\\y\"z"},
+    )
+    path = tmp_path / "verdict.toml"
+    path.write_text(config.to_toml(original))
+    back = config.load(path)
+    assert back.extra_checkpoints == original.extra_checkpoints
+    assert back.model_path == original.model_path

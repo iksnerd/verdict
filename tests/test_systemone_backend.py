@@ -37,20 +37,18 @@ def request():
 def test_choice_and_score_pass_through_confidence_unchanged():
     backend = SystemOneBackend("https://kev.example", "kev-latest", "k", transport=kev_transport({
         "dept": {"type": "choice", "choice": "billing", "probabilities": {"billing": 0.9, "tech": 0.1}, "confidence": 0.8},
-        "urgency": {"type": "score", "score": 1.4, "legend": {"0": "low", "1": "mid", "2": "high"},
+        "urgency": {"type": "score", "score": 1.2, "legend": {"0": "low", "1": "mid", "2": "high"},
                    "probabilities": {"0": 0.1, "1": 0.6, "2": 0.3}, "confidence": 0.5},
         "spam": {"type": "noul", "noul": 0.2, "confidence": 0.6},
     }))
     r = backend.decide(request())
     assert r.answers["dept"].choice == "billing" and r.answers["dept"].confidence == 0.8
-    assert r.answers["urgency"].score == 1.4 and r.answers["urgency"].confidence == 0.5
+    assert r.answers["urgency"].score == 1.2 and r.answers["urgency"].confidence == 0.5
     assert r.answers["spam"].confidence == 0.6
 
 
-def test_noul_confidence_is_synthesized_when_the_server_omits_it():
-    """Kev's own noul answer, like Jev's, carries no confidence (FINDINGS on our own schema).
-    `abs(noul - 0.5) * 2` is Kev's own Choice confidence formula, (p_max - 1/K)/(1 - 1/K),
-    read at K=2: a documented derivation, not an invented number."""
+def test_noul_confidence_stays_absent_when_the_server_omits_it():
+    """A statistic borrowed from another provider is not a reported confidence score."""
     backend = SystemOneBackend("https://kev.example", "kev-latest", "k", transport=kev_transport({
         "dept": {"type": "choice", "choice": "billing", "probabilities": {"billing": 1.0, "tech": 0.0}, "confidence": 1.0},
         "urgency": {"type": "score", "score": 0.0, "legend": {"0": "low", "1": "mid", "2": "high"},
@@ -58,7 +56,7 @@ def test_noul_confidence_is_synthesized_when_the_server_omits_it():
         "spam": {"type": "noul", "noul": 0.9},
     }))
     r = backend.decide(request())
-    assert r.answers["spam"].confidence == 0.8
+    assert r.answers["spam"].confidence is None
 
 
 def test_the_reported_model_is_the_upstream_checkpoint_not_our_own_name():
@@ -142,7 +140,8 @@ def test_a_persistently_unreachable_upstream_is_a_502_not_a_500(monkeypatch):
     assert "loading" in r.json()["detail"]
 
 
-def test_models_degrades_to_empty_when_the_upstream_is_unreachable():
+def test_models_degrades_to_empty_when_the_upstream_is_unreachable(monkeypatch):
+    monkeypatch.setattr("time.sleep", lambda s: None)
     def handler(req: httpx.Request) -> httpx.Response:
         raise httpx.ConnectError("connection refused")
 
@@ -151,3 +150,14 @@ def test_models_degrades_to_empty_when_the_upstream_is_unreachable():
     assert backend.models() == []
     body = TestClient(create_app(backend)).get("/v1/models").json()
     assert body["models"] == []
+
+
+def test_route_endpoints_turn_an_upstream_failure_into_a_502(monkeypatch):
+    monkeypatch.setattr("time.sleep", lambda s: None)
+    backend = SystemOneBackend("https://kev.example", "kev-latest", "k",
+                               transport=httpx.MockTransport(lambda req: httpx.Response(503)))
+    app = TestClient(create_app(backend), raise_server_exceptions=False)
+    for path, body in (("/v1/route", {"prompt": "x"}), ("/v1/route/batch", {"prompts": ["x"]})):
+        r = app.post(path, json=body)
+        assert r.status_code == 502, (path, r.status_code, r.text)
+        assert "detail" in r.json()

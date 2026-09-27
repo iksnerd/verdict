@@ -60,10 +60,8 @@ def test_choice_and_score_reject_unknown_fields_like_noul_does(bad):
 
 
 def test_usage_input_tokens_is_optional_like_jevs_own_contract():
-    """`input_tokens` had no default at all, stricter than Jev's own `Usage` (either count may be
-    missing when unreported) for no reason tied to how it's actually used. `output_tokens` stays
-    required at `0`: every backend here always computes a real one, so there's nothing to widen
-    for a case that never happens (docs/api.md)."""
+    """Local callers retain a zero default; proxies can explicitly preserve unknown counts."""
     u = Usage.model_validate({})
     assert u.input_tokens is None
     assert u.output_tokens == 0
+    assert Usage(output_tokens=None).output_tokens is None

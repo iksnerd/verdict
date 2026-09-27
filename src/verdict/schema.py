@@ -150,18 +150,18 @@ class ScoreAnswer(BaseModel):
 class NoulAnswer(BaseModel):
     type: Literal["noul"] = "noul"
     noul: float
-    confidence: float
+    #: Laya reports max(p, 1-p); Jev does not report this field. Never synthesize it on proxying.
+    confidence: Optional[float] = None
 
 
 Answer = Annotated[Union[ChoiceAnswer, ScoreAnswer, NoulAnswer], Field(discriminator="type")]
 
 
 class Usage(BaseModel):
-    #: Jev's own `Usage` allows either count to be missing when unreported; every backend here
-    #: always computes a real one (backend.py, backend_mlx.py, api.py), so `output_tokens` stays
-    #: a concrete `0` rather than widening to match a case that never happens (docs/api.md).
+    #: Unknown upstream counts stay None. Local backends explicitly report zero output tokens;
+    #: the constructor default remains zero for existing local callers.
     input_tokens: Optional[int] = None
-    output_tokens: int = 0
+    output_tokens: Optional[int] = 0
 
 
 class DecideResponse(BaseModel):
