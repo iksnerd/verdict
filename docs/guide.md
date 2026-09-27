@@ -26,7 +26,7 @@ where each claim here comes from, [FINDINGS.md](FINDINGS.md). For runnable input
 verdict runs on Apple Silicon with Python 3.11:
 
 ```sh
-uv tool install --python 3.11 'verdict[mlx,laya] @ git+https://github.com/iksnerd/verdict.git@v0.4.1'
+uv tool install --python 3.11 'verdict[mlx,laya] @ git+https://github.com/iksnerd/verdict.git@v0.5.0'
 verdict init      # writes ~/.config/verdict/config.toml
 verdict --version
 ```
@@ -281,20 +281,32 @@ The rules that came out of doing it once:
 | `verdict decide STATE -q BANK` | a bank of questions about one state, as JSON; `--jsonl` for many states |
 | `verdict calibrate LABELLED -q BANK` | fits a cut or temperature on labelled examples, reported held out |
 | `verdict rank SCORED NAME=WEIGHT ...` | ranks a `decide --jsonl` run by a weighted sum of its rescaled answers, with each dimension's share; no model |
-| `verdict docs [readme\|guide\|api\|findings] [N]` | prints a project document from the installed tool; `findings 38` prints one section |
-| `verdict questions [NAME]` | questions measured to work, each with its result; use by name with `-q` |
-| `verdict presets [NAME]` | Laya's built-in banks |
+| `verdict docs [readme\|guide\|api\|findings\|pipeline\|routing] [N]` | prints a project document from the installed tool; `findings 38` prints one section |
+| `verdict questions [NAME] [--json]` | questions measured to work, each with its result; use by name with `-q` |
+| `verdict presets [NAME] [--json]` | Laya's built-in banks |
 | `verdict validate -q BANK [--json]` | checks a bank with no server or model: structure, wording, truncation ([scripts and agents](#scripts-and-agents)) |
 | `verdict bench [--verify CARD]` | answer quality on pinned public datasets; the release gate; `--systemone URL` scores a Jev-compatible endpoint |
-| `verdict examples [NAME...]` | runs `examples/` banks against a backend, printing ms/call and, where a row carries an `expected` label, a match count against it; `--systemone URL` checks a different backend (Kev, another verdict) against the same real inputs |
+| `verdict examples [NAME...]` | runs `examples/` banks against a backend, printing ms/call and, where a row carries an `expected` label, a match count against it; `--systemone URL` checks a different backend (Kev, another verdict) against the same real inputs; `--path NAME` prints an installed example's directory |
 | `verdict serve` | holds the model on localhost:8799; also speaks TypeSafe's Jev protocol ([api.md](api.md)) |
 | `verdict update [--check]` | installs the newest release (or pulls, in a dev checkout) |
 | `verdict init` | writes the config from what the machine has |
+| `verdict config [--json]` | each resolved setting and where it came from: a flag, `$VAR`, a file or the default |
 | `verdict route PROMPT` | the big-or-small switch example; at chance on real traffic ([routing.md](routing.md)) |
 | `verdict cases` | prints that switch: its branches, default and questions |
 
 Exit status is 2 for a usage error everywhere. `ask --cut` exits 0 for yes and 1 for no.
 `update --check` exits 1 when a newer release is available.
+
+An error is one `verdict:` line on stderr. With `--json` or `--jsonl`, stdout also gets
+`{"error": {"code": ..., "message": ...}}`, with `code` one of `usage`, `refused`, `no_server`,
+`server_timeout`, `server_error`, `config` or `not_found`. `decide --jsonl` gives every output
+row an `index`, the 0-based line of the input it answers, so rows pair with lines across skipped
+blanks. A line that starts like JSON and does not parse stops the run at that line (earlier rows
+stay valid); a plain-text line is sent as text, with a warning.
+
+With no server answering, a command loads the model itself and says so once on stderr. A server
+that accepts the connection and does not answer in time is an error (`server_timeout`), not a
+reason to load a second copy of the model beside it.
 
 ## Configuration reference
 
@@ -305,7 +317,7 @@ built-in default. These five override a `[section].key` in that file:
 |---|---|---|
 | `VERDICT_URL` | `[server].url`, the server every command asks | `http://127.0.0.1:8799` |
 | `VERDICT_MODEL` | `[model].path`, the checkpoint to load | base Laya |
-| `VERDICT_MULTILINGUAL` | `[model].multilingual`, the checkpoint `"model": "multilingual"` answers from | unset |
+| `VERDICT_MULTILINGUAL` | `[model].multilingual`, the checkpoint `"model": "multilingual"` answers from | `aac6fef/laya-multilingual-mlx` |
 | `VERDICT_BITS` | `[model].bits`, quantization at load (16 or 8, §36) | 16 |
 | `VERDICT_LANG` | `[model].lang`, `auto`, `en` or `multi` | `auto` |
 

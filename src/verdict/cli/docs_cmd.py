@@ -10,7 +10,7 @@ import sys
 from . import support
 
 #: `verdict docs` topics; kept equal to `docs.TOPICS` by tests/test_docs_cmd.py.
-TOPIC_NAMES = ("readme", "guide", "api", "findings")
+TOPIC_NAMES = ("readme", "guide", "api", "findings", "pipeline", "routing")
 
 
 def _docs_cmd(args: argparse.Namespace) -> int:
@@ -24,6 +24,6 @@ def _docs_cmd(args: argparse.Namespace) -> int:
                 return support._fail("a section number reads FINDINGS: verdict docs findings N")
             text = docs.section(text, args.section)
     except ValueError as exc:
-        return support._fail(str(exc))
+        return support._fail(exc)
     sys.stdout.write(text)
     return 0

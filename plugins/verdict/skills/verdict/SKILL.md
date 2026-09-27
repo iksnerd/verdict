@@ -128,6 +128,9 @@ verdict decide STATE -q is_instruction,touches_secret         # measured: verdic
 verdict rank scored.jsonl about_money=1 says_leaving=0.5     # search by named answers, no model
 verdict docs findings 38                                     # read a section the help or an error cites
 verdict update --check                                       # exit 1 when a newer release exists
+verdict config                                               # each setting and where it came from
+verdict questions --json                                     # the measured library, parseable
+verdict examples --path room-triage                          # an installed example's directory
 verdict calibrate labelled.jsonl -q bank.json --out fit.json
 verdict decide ... --calibration fit.json                    # adds "decision"
 ```
@@ -149,7 +152,12 @@ TypeSafe's cookbooks work locally with `TYPESAFE_BASE_URL=http://127.0.0.1:8799`
   consequence or an absence, or names a field the state lacks. Reword it or fix the state.
 - A warning says the state isn't English: add `--lang multi` before reading any number.
 - A `verdict:` line and exit 2: a usage or settings error, stated in that line. Fix what it
-  names; exit 2 never means "no".
+  names; exit 2 never means "no". With `--json`/`--jsonl`, stdout also gets
+  `{"error": {"code", "message"}}`: branch on `code` (`refused` means reword the question,
+  `no_server` start one, `server_timeout` wait and retry; never load around it).
+- "loading the model in this process" on stderr: no server answered, so this call paid for a
+  local load. Fine once; in a loop, start `verdict serve` or pass `--server-only`.
+- `decide --jsonl` rows carry `index`, the input line they answer: pair by it, not by position.
 
 ## Worked example
 

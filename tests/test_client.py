@@ -102,13 +102,14 @@ def test_a_uniform_backend_counts_as_no_server(monkeypatch):
         client.route("anything")
 
 
-def test_the_timeout_is_short_enough_to_be_worth_asking(monkeypatch):
-    """Discovering 'no server' must cost less than the fallback it protects against."""
+def test_route_waits_long_enough_for_a_live_server(monkeypatch):
+    """Discovering 'no server' is cheap without a short timeout: nothing listening is refused
+    at once on loopback. A short timeout only ever fired on a live server's slow first answer,
+    and the CLI then loaded a second model beside it."""
     captured: dict = {}
     serve(monkeypatch, PAYLOAD, captured)
     client.route("x")
-    assert captured["timeout"] == client.CONNECT_TIMEOUT
-    assert client.CONNECT_TIMEOUT < 1.0
+    assert captured["timeout"] >= client.BATCH_TIMEOUT_BASE
 
 
 def test_the_url_comes_from_the_environment_then_the_default(monkeypatch):

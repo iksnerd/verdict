@@ -33,7 +33,7 @@ def _validate_cmd(args: argparse.Namespace) -> int:
         if args.json:
             print(json.dumps({"valid": False, "error": str(exc)}))
             return 2
-        return support._fail(str(exc))
+        return support._fail(exc)
     if args.json:
         print(json.dumps({"valid": True, "questions": questions, "warnings": warnings}, indent=2))
     else:
@@ -48,11 +48,18 @@ def _questions_cmd(args: argparse.Namespace) -> int:
     from .. import library
 
     entries = library.load()
+    if args.json and not args.name:
+        print(json.dumps({e.name: {"question": e.question, "state": e.state,
+                                   "measured": e.measured, "source": e.source}
+                          for e in entries}, indent=2))
+        return 0
     if args.name:
         entry = next((e for e in entries if e.name == args.name), None)
         if entry is None:
-            return support._fail(f"no library question {args.name!r}; there are: "
-                         f"{', '.join(e.name for e in entries)}")
+            names = [e.name for e in entries]
+            return support._fail(f"no library question {args.name!r}"
+                                 f"{support._suggest(args.name, names)} There are: "
+                                 f"{', '.join(names)}")
         print(json.dumps({entry.name: entry.question}, indent=2))
         return 0
     for e in entries:
@@ -70,6 +77,9 @@ def _presets_cmd(args: argparse.Namespace) -> int:
     from .. import inputs
 
     try:
+        if args.json and not args.name:
+            print(json.dumps({name: inputs.preset(name) for name in inputs.PRESETS}, indent=2))
+            return 0
         if args.name:
             print(json.dumps(inputs.preset(args.name), indent=2))
             return 0
@@ -83,6 +93,6 @@ def _presets_cmd(args: argparse.Namespace) -> int:
                 print(f"  {qid:20s} {q['type']:6s} {q['instructions']}")
             print()
     except ValueError as exc:
-        return support._fail(str(exc))
+        return support._fail(exc)
     print("Print one as JSON to edit it:  verdict presets guard > my-bank.json")
     return 0

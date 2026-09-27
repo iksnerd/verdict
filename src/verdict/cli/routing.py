@@ -23,6 +23,11 @@ from ..switch import Branch
 DEFAULT_MODEL = os.environ.get("VERDICT_MODEL", "models/verdict-v1-mlx")
 
 
+def _say_local(exc: Exception) -> None:
+    print(f"verdict: {exc}; loading the model in this process (a few seconds and about 800 MB "
+          "of GPU memory; `verdict serve` keeps one loaded)", file=sys.stderr)
+
+
 def decide(
     prompt: str,
     model: str = DEFAULT_MODEL,
@@ -35,7 +40,8 @@ def decide(
 
     Asks a running server first. In-process costs about 2.1 s for a 26 ms decision, nearly all
     of it importing transformers and loading the checkpoint; a warm server has already paid that.
-    Falls back silently, so this works with no server running, just slowly.
+    Falls back to loading the model here, and says so on stderr: it works with no server
+    running, just slowly. A server that answers too slowly is an error, not a fallback.
     """
     if use_server:
         try:
@@ -44,8 +50,8 @@ def decide(
             ms = (time.perf_counter() - t) * 1000
             branch = Branch(payload["branch"], payload["reason"], payload.get("scores", {}))
             return branch, ms, f"server {url or client.server_url()}"
-        except client.NoServer:
-            pass
+        except client.NoServer as exc:
+            _say_local(exc)
 
     eng = inference.load(model)
     state = eng.clip(prompt, budget)
@@ -76,8 +82,8 @@ def decide_many(
             ms = (time.perf_counter() - t) * 1000
             branches = [Branch(r["branch"], r["reason"], r.get("scores", {})) for r in results]
             return branches, ms, f"server {url or client.server_url()}"
-        except client.NoServer:
-            pass
+        except client.NoServer as exc:
+            _say_local(exc)
 
     eng = inference.load(model)
     # Loading is lazy, so without this the first prompt pays the checkpoint load inside the timed

@@ -25,13 +25,22 @@ _FIELD = re.compile(r"`([A-Za-z_][\w.-]*)`")
 
 
 def parse_state(text: str) -> Any:
-    """A JSON object or array becomes a structured state; anything else stays text."""
+    """A JSON object or array becomes a structured state; anything else stays text.
+
+    Text that looks like JSON and fails to parse is an error, not text: answering a truncated
+    object as a sentence exits 0 with a confident number about the wrong thing. `[WIP] fix it`
+    is still text, since it does not also end in `]`.
+    """
     text = text.strip()
-    if text[:1] in "{[":
+    if not text:
+        raise ValueError("the state is empty; give text, a JSON object, @file or - for stdin")
+    looks_like_json = text[0] == "{" or (text[0] == "[" and text[-1] == "]")
+    if looks_like_json:
         try:
             return json.loads(text)
-        except ValueError:
-            pass
+        except ValueError as exc:
+            raise ValueError(f"the state starts like JSON but is not valid JSON ({exc}); "
+                             "pass it as a JSON string to send it as text") from exc
     return text
 
 
@@ -58,12 +67,17 @@ def load_questions(spec: str) -> dict[str, Any]:
             return {n: entries[n].question for n in names}
         unknown = [n for n in names if n not in entries]
         if len(names) > 1 or re.fullmatch(r"[a-z][a-z0-9_]*", spec):
-            raise ValueError(f"--questions: no preset or library question {', '.join(unknown)}; "
-                             f"see `verdict questions` and `verdict presets`")
+            from .cli.support import _suggest
+
+            hint = _suggest(unknown[0], [*entries, *PRESETS]) if len(unknown) == 1 else ""
+            raise ValueError(f"--questions: no preset or library question {', '.join(unknown)}"
+                             f"{hint} See `verdict questions` and `verdict presets`")
     if spec.lstrip().startswith("{"):
         return json.loads(spec)
     path = Path(spec[1:] if spec.startswith("@") else spec)
     if not path.is_file():
+        if spec.startswith("@") or path.suffix == ".json" or "/" in spec:
+            raise ValueError(f"--questions {spec}: no such file")
         raise ValueError(f"--questions {spec!r} is not a preset ({', '.join(PRESETS)}), "
                          "inline JSON or a file")
     return json.loads(path.read_text())
@@ -85,7 +99,10 @@ def _laya_file(name: str):
 
 def preset(name: str) -> dict[str, Any]:
     if name not in PRESETS:
-        raise ValueError(f"no preset {name!r}; there are: {', '.join(PRESETS)}")
+        from .cli.support import _suggest
+
+        raise ValueError(f"no preset {name!r}{_suggest(name, PRESETS)} There are: "
+                         f"{', '.join(PRESETS)}")
     return getattr(_laya_file("presets"), f"{name}_questions")()
 
 

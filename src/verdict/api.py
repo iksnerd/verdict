@@ -111,7 +111,13 @@ def _backend_errors():
 def create_app(backend: Backend | None = None) -> FastAPI:
     """A decision API: every endpoint answers, none of them runs anything."""
     backend = backend or UniformBackend()
-    app = FastAPI(title="verdict", version="0.0.1")
+    from importlib.metadata import PackageNotFoundError, version
+
+    try:
+        package_version = version("verdict")
+    except PackageNotFoundError:
+        package_version = "0.0.0"
+    app = FastAPI(title="verdict", version=package_version)
 
     @app.get("/healthz")
     def healthz():

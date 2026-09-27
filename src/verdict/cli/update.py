@@ -58,7 +58,7 @@ def _update_tool(args: argparse.Namespace) -> int:
     try:
         tags = _release_tags(REPO_URL)
     except RuntimeError as exc:
-        return support._fail(str(exc))
+        return support._fail(exc)
     if not tags:
         return support._fail(f"no vX.Y.Z release tags found at {REPO_URL}")
     newest = ".".join(map(str, tags[-1]))
@@ -130,7 +130,7 @@ def _update_cmd(args: argparse.Namespace) -> int:
         after = step(["git", "rev-parse", "--short", "HEAD"])
         log = step(["git", "log", "--oneline", f"{before}..{after}"])
     except RuntimeError as exc:
-        return support._fail(str(exc))
+        return support._fail(exc)
 
     import tomllib
 

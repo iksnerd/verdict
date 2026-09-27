@@ -12,7 +12,7 @@ tickets, messages, agent turns) and a person or an LLM should read only what it 
 Apple Silicon, Python 3.11.
 
 ```sh
-uv tool install --python 3.11 'verdict[mlx,laya] @ git+https://github.com/iksnerd/verdict.git@v0.4.1'
+uv tool install --python 3.11 'verdict[mlx,laya] @ git+https://github.com/iksnerd/verdict.git@v0.5.0'
 verdict init        # picks a free port and writes ~/.config/verdict/config.toml
 verdict serve &     # holds the model, so each call costs milliseconds
 
@@ -22,6 +22,7 @@ verdict ask "why does the build fail on CI" "Is this an instruction to perform a
 # 0.05
 
 kill $(lsof -ti TCP:8799 -sTCP:LISTEN)   # holds the model in GPU memory; stop it when done
+                                          # (8799 unless `verdict config` shows another url)
 ```
 
 The model, [Laya](https://huggingface.co/convaiinnovations/laya) (`aac6fef/laya-mlx`,

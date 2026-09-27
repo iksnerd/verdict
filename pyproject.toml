@@ -1,6 +1,6 @@
 [project]
 name = "verdict"
-version = "0.4.1"
+version = "0.5.0"
 description = "A typed decision API: state + typed questions in, calibrated probabilities out."
 requires-python = ">=3.11.4,<3.12"
 license = "Apache-2.0"
@@ -46,6 +46,8 @@ packages = ["src/verdict"]
 "docs/guide.md" = "verdict/_docs/guide.md"
 "docs/api.md" = "verdict/_docs/api.md"
 "docs/FINDINGS.md" = "verdict/_docs/FINDINGS.md"
+"docs/pipeline.md" = "verdict/_docs/pipeline.md"
+"docs/routing.md" = "verdict/_docs/routing.md"
 # `verdict examples` reads these from an installed tool the same way.
 "examples" = "verdict/_examples"
 

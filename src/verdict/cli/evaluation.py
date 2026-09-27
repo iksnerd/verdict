@@ -49,7 +49,7 @@ def _bench_cmd(args: argparse.Namespace) -> int:
             for s in suites:
                 s.per_class = args.per_class
     except ValueError as exc:
-        return support._fail(str(exc))
+        return support._fail(exc)
 
     if args.systemone:
         from urllib.parse import urlparse
@@ -94,7 +94,7 @@ def _bench_cmd(args: argparse.Namespace) -> int:
             try:
                 items = bench.sample(s, bench.fetch(s))
             except ValueError as exc:
-                return support._fail(str(exc))
+                return support._fail(exc)
             print(f"{s.name}: asking {len(items)} items...", file=sys.stderr)
             try:
                 r = results[s.name] = bench.score(
@@ -127,7 +127,7 @@ def _rank_cmd(args: argparse.Namespace) -> int:
     try:
         results = rank.rank(rank.load(args.scored), rank.parse_weights(args.weights))
     except ValueError as exc:
-        return support._fail(str(exc))
+        return support._fail(exc)
     for r in results[:args.k] if args.k else results:
         if args.json:
             print(json.dumps(r))
@@ -148,7 +148,7 @@ def _calibrate_cmd(args: argparse.Namespace) -> int:
     try:
         questions = laya_questions(inputs.load_questions(args.questions))
     except ValueError as exc:
-        return support._fail(str(exc))
+        return support._fail(exc)
     try:
         rows = [json.loads(line) for line in Path(args.examples).read_text().splitlines() if line.strip()]
     except (ValueError, OSError) as exc:
@@ -197,7 +197,7 @@ def _calibrate_cmd(args: argparse.Namespace) -> int:
                 if any(str(y) not in options for y in labels):
                     raise ValueError(f"{qid}: choice labels must name one of {sorted(options)}")
     except ValueError as exc:
-        return support._fail(str(exc))
+        return support._fail(exc)
 
     ask = inference._Asker(args)
     # Calibrating is how an unmeasured question gets measured (§29 found harm at chance this way),
@@ -229,7 +229,7 @@ def _calibrate_cmd(args: argparse.Namespace) -> int:
             else:
                 ask.warn(f"{qid} is a score question; there is no single cut to fit, skipped")
     except ValueError as exc:
-        return support._fail(str(exc))
+        return support._fail(exc)
 
     for qid, fit in fits.items():
         held = fit["heldout"]

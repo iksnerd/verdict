@@ -115,13 +115,16 @@ Do not re-derive these. Each is measured, in `docs/FINDINGS.md`.
   [--json]` (checks a bank with no model), `verdict questions` (the measured library), `verdict presets`,
   `verdict calibrate`, `verdict bench [--verify CARD]`, `verdict examples [NAME...] [--systemone URL]`
   (scores `examples/` banks with a backend, real or `--systemone`, for comparing one against another),
-  `verdict rank`, `verdict docs`. The plugin's `verdict` skill says
+  `verdict rank`, `verdict docs`, `verdict config` (each setting and its source). Errors under
+  `--json`/`--jsonl` also print `{"error": {"code", "message"}}` on stdout, and
+  `decide --jsonl` rows carry `index`. The plugin's `verdict` skill says
   when an agent should reach for it.
 - The everyday `verdict` on PATH is a `uv tool` install of a release tag, not this checkout:
   `uv tool install --python 3.11 'verdict[mlx,laya] @ git+https://github.com/iksnerd/verdict.git@vX.Y.Z'`.
   `verdict update` moves it to the newest tag. Its weights live in `~/.local/share/verdict/models/`,
   and `models/verdict-v1-mlx` here is a symlink to them, so the pipeline and `uv run verdict` in
-  this repo still find them. `~/.config/verdict/config.toml` points at the absolute path. Changes
+  this repo still find them. The global CLI runs base Laya, what users get; only this checkout's
+  `verdict.toml` points at the fine-tune, so scorecards keep measuring it. Changes
   here reach the global CLI only through a release (a `v*` tag).
 - The CLI's output is an interface: scripts outside this repo run `verdict decide --jsonl` and
   parse `answers.<qid>.noul` from each stdout line. A change to that output must keep the shape.

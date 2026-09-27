@@ -145,6 +145,34 @@ def load(path: Path | None = None) -> Settings:
     )
 
 
+def explain(path: Path | None = None) -> list[dict[str, Any]]:
+    """Every setting as `load` resolves it, with where it came from: `$VAR`, the file's path, or
+    "default". Flags are per command, so they are not in this list."""
+    settings = load(path)
+    found = settings.source
+    loaded: dict[str, Any] = {}
+    if found is not None and Path(found).is_file():
+        import tomllib
+
+        loaded = tomllib.loads(Path(found).read_text())
+    values = {("server", "url"): settings.url, ("model", "path"): settings.model_path,
+              ("model", "prompt_token_budget"): settings.prompt_token_budget,
+              ("model", "multilingual"): settings.multilingual_path,
+              ("model", "bits"): settings.bits, ("model", "lang"): settings.lang,
+              ("model", "extra"): settings.extra_checkpoints}
+    rows = []
+    for (section, key), value in values.items():
+        var = ENV_OVERRIDES.get((section, key))
+        if var and os.environ.get(var):
+            source = f"${var}"
+        elif key in loaded.get(section, {}):
+            source = str(found)
+        else:
+            source = "default"
+        rows.append({"key": f"{section}.{key}", "value": value, "source": source})
+    return rows
+
+
 class ConfigError(ValueError):
     """A setting the CLI reports and stops on, rather than a bug to trace."""
 

@@ -27,9 +27,9 @@ from typing import Any
 #: `verdict serve` dies on a bind error while `verdict route` silently talks to a stranger.
 DEFAULT_URL = "http://127.0.0.1:8799"
 
-#: Short on purpose. This is a liveness question on loopback, and the fallback (loading the model
-#: in-process) costs hundreds of milliseconds, so waiting a long time to discover "no server" makes
-#: the miss case worse than having never asked.
+#: For liveness-only reads (capabilities). A decision call waits longer: nothing listening is
+#: refused instantly on loopback, so only a live but slow server ever reaches the timeout, and
+#: at 0.35 s a server's first answer timed out and the CLI loaded a second model beside it.
 CONNECT_TIMEOUT = 0.35
 
 
@@ -49,6 +49,22 @@ class ServerError(Exception):
         super().__init__(f"the server answered {status}: {detail}")
         self.status = status
         self.detail = detail
+
+
+class ServerTimeout(Exception):
+    """A server accepted the connection and did not answer in time. Not a reason to fall back:
+    something is listening, so loading a second copy of the model locally would put two on the
+    GPU while the first is still working."""
+
+    def __init__(self, base: str, timeout: float):
+        super().__init__(f"the server at {base} did not answer within {timeout:g} s; it may be "
+                         "busy or still loading. Retry, or pass --url for another server")
+        self.base = base
+        self.timeout = timeout
+
+
+def _timed_out(exc: BaseException) -> bool:
+    return isinstance(exc, TimeoutError) or isinstance(getattr(exc, "reason", None), TimeoutError)
 
 
 #: Statuses meaning "no such endpoint here": another service holds the port, so fall back.
@@ -81,7 +97,11 @@ def _post(
             raise NoServer(f"{base} has no {path} ({exc.code})") from exc
         raise ServerError(exc.code, _detail(exc)) from exc
     except (urllib.error.URLError, OSError, json.JSONDecodeError) as exc:
-        raise NoServer(f"no verdict server at {base} ({exc})") from exc
+        if _timed_out(exc):
+            raise ServerTimeout(base, timeout) from exc
+        reason = getattr(exc, "reason", exc)
+        reason = getattr(reason, "strerror", None) or reason
+        raise NoServer(f"no verdict server at {base} ({reason})") from exc
 
     if not isinstance(payload, dict) or "model" not in payload or not (expect & payload.keys()):
         # Something answered, but it is not a verdict server. Ports get reused: a collision on
@@ -168,7 +188,8 @@ def capabilities(url: str | None = None, model: str | None = None,
     return payload
 
 
-def route(prompt: str, url: str | None = None, timeout: float = CONNECT_TIMEOUT) -> dict[str, Any]:
+def route(prompt: str, url: str | None = None,
+          timeout: float = BATCH_TIMEOUT_BASE) -> dict[str, Any]:
     """`POST /v1/route`. Raises `NoServer` when the caller should fall back to in-process.
 
     A server running the `uniform` backend is treated as no server at all. It answers every

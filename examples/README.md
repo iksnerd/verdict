@@ -4,11 +4,19 @@ Fourteen runnable examples. Every input is invented, and no real data is in this
 `tests/test_examples.py` checks that each bank still validates and that its inputs have the fields
 the questions name.
 
-Run any of them with a server up (`verdict serve`, then stop it when you're done):
+Run any of them with a server up (`verdict serve`, then stop it when you're done). The paths
+below are relative to a checkout; an installed `verdict` carries its own copy, and
+`verdict examples --path NAME` prints where:
 
 ```sh
+verdict examples NAME                                   # every row, with its match count
 verdict decide --jsonl -q examples/<name>/bank.json < examples/<name>/<inputs>.jsonl
+dir=$(verdict examples --path room-triage)              # the same, from an installed copy
+verdict decide --jsonl -q "$dir/bank.json" < "$dir/updates.jsonl"
 ```
+
+A number beside a yes/no is P(yes). A number beside a choice is the chosen option's probability
+(`verdict examples` prints it as `p=`), not laya's `confidence` field.
 
 Check a bank without loading a model using `verdict validate -q examples/<name>/bank.json`;
 add `--json` for an agent-readable validation result. Add `--server-only` to `decide` to fail
@@ -152,22 +160,22 @@ the point: a Choice question over a bounded set is what verdict is built for, un
 of a large catalog directly (`docs/api.md` — laya degrades past about 20 options).
 
 ```
-0.96  lgtm                         -> white_check_mark
+0.98  lgtm                         -> white_check_mark
 1.00  it's raining again           -> cloud_with_rain
 1.00  happy birthday!!             -> birthday
 1.00  i'm dead tired               -> tired_face
-0.99  ship it                      -> rocket
-0.95  not sure what this does      -> question
-0.68  heads up, this might break   -> warning
-0.38  hallowe'en plans?            -> jack_o_lantern    (barely: sunny was close behind at 0.33)
-0.74  just noticed this            -> sunny             <- a miss (eyes was the intended match, at 0.16)
-0.72  that's amazing, nice work    -> thumbsup           (fire also fits; not a clean miss)
+1.00  ship it                      -> rocket
+0.98  not sure what this does      -> question
+0.78  heads up, this might break   -> warning
+0.37  hallowe'en plans?            -> jack_o_lantern    (barely: sunny was close behind at 0.33)
+0.78  just noticed this            -> sunny             <- a miss (eyes was the intended match, at 0.16)
+0.69  that's amazing, nice work    -> thumbsup           (fire also fits; not a clean miss)
 ```
 
 Nine of ten land on a defensible answer. `just noticed this` is the clean miss: `sunny` is an odd
 read of "noticed", and `eyes` never got close. `hallowe'en plans?` is the low-confidence one worth
-flagging rather than trusting: it landed on the right answer, but `sunny` was one point behind,
-which is what a 0.38 confidence is for.
+flagging rather than trusting: it landed on the right answer, but `sunny` was four points
+behind, which is what a 0.37 probability is for.
 
 ## passage-filter/
 
@@ -236,26 +244,25 @@ it, and one that's unrelated. `bank.json` asks a three-way choice: how does `pas
 `claim`.
 
 ```
-supports 0.53      Python 3.10+    "requires Python 3.10+; earlier versions are not supported"
-contradicts 0.37   Python 3.10+    "supported on Python 3.8 through 3.12"
-unrelated 0.41     Python 3.10+    "available via pip or from source"
-supports 0.07      refund 5 days   "appear within 3 to 5 business days"
-contradicts 0.15   refund 5 days   "typically take 2 to 3 weeks"
-unrelated 0.03     refund 5 days   "request a refund from the billing page"
-supports 0.16      rate limit      "limited to 1,000 requests per minute"
-unrelated 0.41     rate limit      "capped at 100 requests per minute"                <- a miss
-unrelated 0.31     rate limit      "responses are returned as JSON"
-supports 0.23      waterproof 50m  "IP68, water resistant to 50 meters"
-contradicts 0.01   waterproof 50m  "splash resistant, should not be submerged"
-unrelated 0.32     waterproof 50m  "battery lasts up to 18 hours"
+supports 0.85      Python 3.10+    "requires Python 3.10+; earlier versions are not supported"
+contradicts 0.77   Python 3.10+    "supported on Python 3.8 through 3.12"
+unrelated 0.79     Python 3.10+    "available via pip or from source"
+supports 0.53      refund 5 days   "appear within 3 to 5 business days"
+contradicts 0.61   refund 5 days   "typically take 2 to 3 weeks"
+unrelated 0.44     refund 5 days   "request a refund from the billing page"
+supports 0.62      rate limit      "limited to 1,000 requests per minute"
+unrelated 0.76     rate limit      "capped at 100 requests per minute"                <- a miss
+unrelated 0.72     rate limit      "responses are returned as JSON"
+supports 0.68      waterproof 50m  "IP68, water resistant to 50 meters"
+contradicts 0.37   waterproof 50m  "splash resistant, should not be submerged"
+unrelated 0.55     waterproof 50m  "battery lasts up to 18 hours"
 ```
 
 `verdict examples citation-check` reproduces this (`11/12 match the recorded expectation`) against
-`citations.jsonl`'s own `expected` field. Eleven of twelve land on the right label, but every
-confidence here is well below the yes/no examples elsewhere in this folder: a three-way relation
-is a harder read than "does this say X", and confidence swings between runs on the closer calls
-(the waterproof row's `contradicts` call landed at 0.01 here — a near-exact three-way tie, so
-don't be surprised if a re-run flips it). The one clean miss is the instructive kind: "100
+`citations.jsonl`'s own `expected` field. Eleven of twelve land on the right label, but the
+probabilities here sit well below the yes/no examples elsewhere in this folder: a three-way
+relation is a harder read than "does this say X", and the closer calls can flip between runs
+(the waterproof row's `contradicts` won with 0.37 of three options, close to a tie). The one clean miss is the instructive kind: "100
 requests per minute" against a claimed 1,000 reads as merely off-topic instead of as a second,
 incompatible number.
 
@@ -268,12 +275,12 @@ from full coverage down to none.
 
 ```
 tests            breaking         rollback         description
-met (0.49)       met (0.37)       met (0.01)       dry-run flag: tests added, not breaking, revert with no migrations
-absent (0.13)    met (0.05)       absent (0.13)    cleanup: renames variables, no other detail                    <- breaking
-met (0.21)       met (0.09)       absent (0.14)    pagination-cursor fix, with a regression test                  <- breaking
-met (0.06)       met (0.29)       absent (0.23)    retry rework, changes the error type callers catch             <- tests
-absent (0.08)    met (0.20)       absent (0.00)    redis migration, CACHE_BACKEND=memory documented as a fallback <- breaking, rollback
-met (0.29)       uncertain (0.07) uncertain (0.16) schema bump: fixture tests added, hedges on downstream use     <- rollback
+met (0.83)       met (0.78)       met (0.40)       dry-run flag: tests added, not breaking, revert with no migrations
+absent (0.58)    met (0.48)       absent (0.59)    cleanup: renames variables, no other detail                    <- breaking
+met (0.67)       met (0.54)       absent (0.60)    pagination-cursor fix, with a regression test                  <- breaking
+met (0.51)       met (0.72)       absent (0.66)    retry rework, changes the error type callers catch             <- tests
+absent (0.44)    met (0.66)       absent (0.35)    redis migration, CACHE_BACKEND=memory documented as a fallback <- breaking, rollback
+met (0.72)       uncertain (0.51) uncertain (0.51) schema bump: fixture tests added, hedges on downstream use     <- rollback
 ```
 
 `verdict examples checklist-check` reproduces this (`12/18 match the recorded expectation`) against
@@ -346,23 +353,23 @@ Sorting code-review comments so the blocking ones are answered first. `bank.json
 `blocking`, `nit`, `question` or `praise`, each with a one-line description.
 
 ```
-nit (0.35)       This builds the SQL query with string formatting from user input ...   <- a miss (blocking)
-nit (0.70)       nit: I'd call this `user_count` rather than `n` ...
-question (0.22)  Why do we retry three times here ...
-praise (0.63)    Really clean refactor ...
-blocking (0.31)  This deletes the migration that production already ran ...
-nit (0.74)       Minor: trailing whitespace on line 42.
-question (0.35)  What happens if the cache is empty on first boot? ...
-praise (0.48)    LGTM, thanks for adding the tests.
-nit (0.30)       The endpoint now returns 200 on auth failure instead of 401 ...        <- a miss (blocking)
-nit (0.35)       Optional: these two imports could be combined onto one line.
-question (0.44)  Is this flag still used anywhere, or can it go?
-praise (0.78)    Nice catch on the off-by-one, great work.
+nit (0.72)       This builds the SQL query with string formatting from user input ...   <- a miss (blocking)
+nit (0.91)       nit: I'd call this `user_count` rather than `n` ...
+question (0.55)  Why do we retry three times here ...
+praise (0.86)    Really clean refactor ...
+blocking (0.68)  This deletes the migration that production already ran ...
+nit (0.92)       Minor: trailing whitespace on line 42.
+question (0.71)  What happens if the cache is empty on first boot? ...
+praise (0.80)    LGTM, thanks for adding the tests.
+nit (0.66)       The endpoint now returns 200 on auth failure instead of 401 ...        <- a miss (blocking)
+nit (0.69)       Optional: these two imports could be combined onto one line.
+question (0.77)  Is this flag still used anywhere, or can it go?
+praise (0.93)    Nice catch on the off-by-one, great work.
 ```
 
 `verdict examples review-comments` reproduces this (`10/12 match the recorded expectation`), but
 the two misses are the two that matter most: an injection hole and a broken status code, both read
-as `nit`, and every probability is low. Questions, praise and labelled nits are easy because the
+as `nit` at 0.72 and 0.66, as confidently as the real nits. Questions, praise and labelled nits are easy because the
 wording says so; whether a change is *required* depends on knowing what the code does, which is
 not on the page. Fine for ordering a review queue; never for deciding that nothing blocks a merge.
 

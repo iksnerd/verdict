@@ -14,7 +14,8 @@ from ..errors import QuestionError
 DESCRIPTION = """\
 A System 1, in Kahneman's sense: fast, automatic, intuitive judgments. Give it a state (text,
 or a JSON object with named fields) and typed questions; get back a probability per option in
-about 40 ms. No generated text, nothing to parse, nothing run on your behalf.
+about 40 ms of inference, about 150 ms a call end to end against a running server. No generated
+text, nothing to parse, nothing run on your behalf.
 
 Pair it with a System 2, a person or an LLM agent, that deliberates. Let verdict make the same
 quick judgment over hundreds of items, and spend slow thought where it flags something. Like
@@ -53,8 +54,13 @@ a question about a consequence, difficulty or risk (FINDINGS §25, §29), a yes/
 ("is this ordinary", §33), and a state missing a field the question names. --allow-unmeasured
 asks anyway. A new yes/no is asked as a choice between no and yes and answered as a yes/no (§38).
 
-Settings: flag > environment ($VERDICT_URL, $VERDICT_MODEL, $VERDICT_MULTILINGUAL) >
-./verdict.toml > ~/.config/verdict/config.toml > built-in. `verdict init` writes one.
+Settings: flag > environment ($VERDICT_URL, $VERDICT_MODEL, $VERDICT_MULTILINGUAL, $VERDICT_BITS,
+$VERDICT_LANG) > ./verdict.toml > ~/.config/verdict/config.toml > built-in. `verdict init` writes
+one; `verdict config` shows each resolved value and where it came from.
+
+Errors: one `verdict:` line on stderr and exit 2. With --json or --jsonl, also
+{"error": {"code", "message"}} on stdout; codes: usage, refused, no_server, server_timeout,
+server_error, config, not_found.
 """
 
 ASK_HELP = """\
@@ -198,17 +204,44 @@ def _formatter(argv: list[str]):
     return argparse.RawDescriptionHelpFormatter
 
 
+class _Parser(argparse.ArgumentParser):
+    """argparse, plus "did you mean" on a mistyped command or choice."""
+
+    def error(self, message):
+        import re
+
+        m = re.search(r"invalid choice: '([^']*)' \(choose from (.*)\)", message)
+        if m:
+            choices = [c.strip().strip("'") for c in m.group(2).split(",")]
+            message += support._suggest(m.group(1), choices)
+        super().error(message)
+
+
+def _quiet_dependencies() -> None:
+    """Keep other packages' chatter off stderr, where an agent reads verdict's own warnings.
+    laya-mlx warns on every load that the checkpoint's temperatures are clamped (verdict's docs
+    already say confidences are uncalibrated), and the Hub nags about tokens while downloading."""
+    import warnings
+
+    os.environ.setdefault("HF_HUB_VERBOSITY", "error")
+    os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
+    warnings.filterwarnings("ignore", message="laya-mlx: this checkpoint ships temperatures",
+                            category=RuntimeWarning)
+
+
 def main(argv: list[str] | None = None) -> int:
     argv = sys.argv[1:] if argv is None else argv
+    _quiet_dependencies()
     fmt = _formatter(argv)
-    ap = argparse.ArgumentParser(prog="verdict", description=DESCRIPTION, epilog=EPILOG,
+    # allow_abbrev=False: `decide --json` (a guess) used to expand to --jsonl and wait on stdin.
+    ap = _Parser(prog="verdict", allow_abbrev=False, description=DESCRIPTION, epilog=EPILOG,
                                  formatter_class=fmt)
     ap.add_argument("-V", "--version", action="version", version=support._version())
     sub = ap.add_subparsers(dest="cmd", required=True, metavar="COMMAND", title="Commands")
 
     def command(name, summary, description=None, epilog=None):
         return sub.add_parser(name, help=summary, description=description or summary,
-                              epilog=epilog, formatter_class=fmt)
+                              epilog=epilog, formatter_class=fmt, allow_abbrev=False)
 
     def yesno_flag(p):
         p.add_argument("--yesno", action="store_true",
@@ -328,10 +361,13 @@ def main(argv: list[str] | None = None) -> int:
 
     qs = command("questions", "questions measured to work, usable by name with -q")
     qs.add_argument("name", nargs="?", help="print this question as a JSON bank")
+    qs.add_argument("--json", action="store_true",
+                    help="every question as JSON: name -> {question, state, measured, source}")
     qs.set_defaults(fn=catalog._questions_cmd)
 
     p = command("presets", "laya's built-in question banks", epilog=PRESETS_EPILOG)
     p.add_argument("name", nargs="?", help="print this bank as JSON")
+    p.add_argument("--json", action="store_true", help="every preset as JSON: name -> bank")
     p.set_defaults(fn=catalog._presets_cmd)
 
     c = command("calibrate", "fit a cut or temperature on your own labelled examples",
@@ -398,6 +434,9 @@ Exit status: 0; with --verify, 1 when any suite regressed (the release workflow 
 Needs a checkout (or an install that packs examples/) to find the banks.
 """)
     ex.add_argument("name", nargs="*", metavar="NAME", help="an examples/ directory name; omit for all")
+    ex.add_argument("--path", action="store_true",
+                    help="print each named example's directory instead of running it, so an "
+                         "installed copy's bank can be passed to -q")
     ex.add_argument("--pause", type=float, default=0.05, metavar="SEC",
                     help="between calls (default: 0.05)")
     ex.add_argument("--systemone", metavar="URL",
@@ -462,6 +501,12 @@ release (or, in a checkout, newer commits) is available.
     u.add_argument("--check", action="store_true", help="report how far behind, change nothing")
     u.set_defaults(fn=update._update_cmd)
 
+    cf = command("config", "show each resolved setting and where it came from",
+                 "Show every setting as the CLI resolves it (flag > environment > ./verdict.toml "
+                 "> ~/.config/verdict/config.toml > built-in), and which of those it came from.")
+    cf.add_argument("--json", action="store_true", help="print {settings: [{key, value, source}]}")
+    cf.set_defaults(fn=setup._config_cmd)
+
     i = command("init", "write a config from what this machine has")
     i.add_argument("--out", default=str(support._user_config()),
                    help="where to write (default: the user config, read from every directory; "
@@ -470,11 +515,12 @@ release (or, in a checkout, newer commits) is available.
     i.set_defaults(fn=setup._init_cmd)
 
     args = ap.parse_args(argv)
+    support.JSON_ERRORS = bool(getattr(args, "json", False) or getattr(args, "jsonl", False))
     try:
         return args.fn(args)
     except (FileNotFoundError, QuestionError, client.ServerError, client.NoServer,
-            ConfigError) as e:
-        return support._fail(str(e))
+            client.ServerTimeout, ConfigError) as e:
+        return support._fail(e)
     except BrokenPipeError:
         # The reader quit early (`verdict docs | head`): normal use, not an error. Point stdout at
         # /dev/null so the interpreter's own flush at exit does not raise again (Python docs,

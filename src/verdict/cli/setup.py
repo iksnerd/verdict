@@ -85,6 +85,23 @@ def _ask(prompt: str, default: str, assume_yes: bool) -> str:
     return got or default
 
 
+def _config_cmd(args: argparse.Namespace) -> int:
+    """The resolved settings, each with its source."""
+    import json
+
+    from .. import config
+
+    rows = config.explain()
+    if args.json:
+        print(json.dumps({"settings": rows}, indent=2))
+        return 0
+    width = max(len(r["key"]) for r in rows)
+    for r in rows:
+        value = json.dumps(r["value"]) if isinstance(r["value"], (dict, str)) else r["value"]
+        print(f"{r['key']:{width}s}  {value}  ({r['source']})")
+    return 0
+
+
 def _init_cmd(args: argparse.Namespace) -> int:
     """Write a config from what this machine actually has.
 

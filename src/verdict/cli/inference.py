@@ -49,6 +49,8 @@ def _answer(state, questions: dict, url: str, model_path: str, model: str | None
         laya = laya_questions(questions)
         key = (model_path, bits)
         if key not in _ENGINES:
+            print(f"verdict: {exc}; loading the model in this process (a few seconds and about "
+                  "800 MB of GPU memory; `verdict serve` keeps one loaded)", file=sys.stderr)
             # A cached Hub checkpoint still draws a "Fetching 6 files" bar on stderr.
             os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
             _ENGINES[key] = load(model_path, bits=bits) if bits != 16 else load(model_path)
@@ -82,6 +84,8 @@ class _Asker:
         self.main_path = ((args.model or self.settings.model_path) if self.server_only
                           else _resolved_model(args.model, self.settings))
         self._warned: set[str] = set()
+        #: `--model` only chooses what loads locally; a server answers with its own checkpoint.
+        self.model_flag = getattr(args, "model", None)
 
     def warn(self, line: str) -> None:
         if line not in self._warned:
@@ -95,10 +99,15 @@ class _Asker:
         from .. import library
 
         questions = laya_questions(questions)
-        problems = inputs.missing_fields(state, questions) + library.lint(questions)
+        missing = inputs.missing_fields(state, questions)
+        problems = library.lint(questions)
+        if missing and not self.allow_unmeasured:
+            raise QuestionError("; ".join(missing) + ". Refused, because the model would answer "
+                                "from nothing; fix the state or the question, or "
+                                "--allow-unmeasured to ask anyway")
         if problems and not self.allow_unmeasured:
             raise QuestionError(_refusal(problems))
-        for line in problems:
+        for line in missing + problems:
             self.warn(line)
         clipped = (inputs.maybe_clipped(state, self.settings.prompt_token_budget)
                    if self.warn_clipped else None)
@@ -111,6 +120,12 @@ class _Asker:
             questions, rewritten = library.as_choice(
                 questions, keep_measured=library.measured_on(answering))
         result = self._ask(state, questions)
+        served = str(result.get("model", ""))
+        if (self.model_flag and result.get("source", "").startswith("server")
+                and not served.endswith(str(self.model_flag).rstrip("/"))):
+            self.warn(f"--model {self.model_flag} was not used: the server at {self.url} answered "
+                      f"with {served}. --model picks what loads when no server answers; stop the "
+                      "server, or pass --url for one serving that model")
         result["answers"] = library.as_yesno(result["answers"], rewritten)
         return result
 

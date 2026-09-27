@@ -46,7 +46,9 @@ def _format(answers: dict) -> str:
         if t == "noul":
             parts.append(f"{qid}={a['noul']:.2f}")
         elif t == "choice":
-            parts.append(f"{qid}={a['choice']}({a['confidence']:.2f})")
+            # The chosen option's probability, labelled: laya's `confidence` for a choice is
+            # 1 - H(p)/log(k), which read beside the option looks like one and is not.
+            parts.append(f"{qid}={a['choice']}(p={a['probabilities'][a['choice']]:.2f})")
         elif t == "score":
             parts.append(f"{qid}={a['score']:.2f}")
         else:
@@ -89,18 +91,24 @@ def _examples_cmd(args: argparse.Namespace) -> int:
     try:
         root = _examples_root()
     except FileNotFoundError as exc:
-        return support._fail(str(exc))
+        return support._fail(exc)
 
     available = _names(root)
     names = args.name or available
     unknown = [n for n in names if n not in available]
     if unknown:
-        return support._fail(f"no example {', '.join(unknown)}; there are: {', '.join(available)}")
+        hint = support._suggest(unknown[0], available) if len(unknown) == 1 else ""
+        return support._fail(f"no example {', '.join(unknown)}{hint} There are: "
+                             f"{', '.join(available)}")
+    if args.path:
+        for name in args.name or []:
+            print(root / name)
+        return 0 if args.name else support._fail("--path needs an example NAME")
 
     try:
         ask = _systemone_ask(args) if args.systemone else inference._Asker(args)
     except ValueError as exc:
-        return support._fail(str(exc))
+        return support._fail(exc)
 
     try:
         calls = 0

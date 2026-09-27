@@ -25,21 +25,34 @@ def _decide_cmd(args: argparse.Namespace) -> int:
 
     if args.jsonl and not args.questions:
         return support._fail("--jsonl reads states from stdin, so --questions is required")
+    if args.jsonl and args.state is not None:
+        return support._fail("--jsonl reads states from stdin, one per line; drop the state "
+                             "argument, or drop --jsonl to ask about this one state")
+    if args.jsonl and getattr(sys.stdin, "isatty", lambda: False)():
+        return support._fail("--jsonl reads states from stdin, and stdin is a terminal; pipe or "
+                             "redirect a file: verdict decide --jsonl -q BANK < states.jsonl")
     try:
-        questions = (inputs.load_questions(args.questions) if args.questions
-                     else json.load(sys.stdin))
+        if args.questions:
+            questions = inputs.load_questions(args.questions)
+        else:
+            bank = sys.stdin.read()
+            if not bank.strip():
+                raise ValueError("no --questions, and no bank on stdin; pass -q PRESET|NAMES|"
+                                 "JSON|FILE (see `verdict questions`)")
+            questions = json.loads(bank)
         questions = laya_questions(questions)
         fits = _read_fits(args.calibration)
+        if args.jsonl:
+            # A generator, not a list: a live pipe never reaches EOF, and each line is answered
+            # as it arrives. Each state keeps its input line number, blank lines included.
+            states = _jsonl_states(sys.stdin, warn=lambda line: print(f"verdict: {line}",
+                                                                      file=sys.stderr))
+        elif args.state is not None:
+            states = [(None, inputs.read_state(args.state))]
+        else:
+            return support._fail("give a state, or --questions and --jsonl with states on stdin")
     except ValueError as exc:
-        return support._fail(str(exc))
-    if args.jsonl:
-        # A generator, not a list: a live pipe never reaches EOF, and each line is answered as it
-        # arrives.
-        states = (inputs.parse_state(line) for line in sys.stdin if line.strip())
-    elif args.state:
-        states = [inputs.read_state(args.state)]
-    else:
-        return support._fail("give a state, or --questions and --jsonl with states on stdin")
+        return support._fail(exc)
 
     ask = inference._Asker(args)
     # A long criterion is cut mid-sentence with no error. The character check is free; --check
@@ -51,24 +64,47 @@ def _decide_cmd(args: argparse.Namespace) -> int:
 
     # Per yes/no question: count, low, high. Running, not a list: a live pipe never ends.
     seen: dict[str, tuple[int, float, float]] = {}
-    for i, state in enumerate(states):
-        if i and args.pause:
-            time.sleep(args.pause)
-        result = ask(state, questions)
-        if fits:
-            result["answers"] = calibrate.apply(result["answers"], fits)
-        for qid, a in result["answers"].items():
-            if a.get("type") == "noul":
-                n, lo, hi = seen.get(qid, (0, a["noul"], a["noul"]))
-                seen[qid] = (n + 1, min(lo, a["noul"]), max(hi, a["noul"]))
-        if args.jsonl:
-            print(json.dumps({"state": state, **result}), flush=True)
-        else:
-            print(json.dumps(result, indent=2))
+    try:
+        for i, (index, state) in enumerate(states):
+            if i and args.pause:
+                time.sleep(args.pause)
+            result = ask(state, questions)
+            if fits:
+                result["answers"] = calibrate.apply(result["answers"], fits)
+            for qid, a in result["answers"].items():
+                if a.get("type") == "noul":
+                    n, lo, hi = seen.get(qid, (0, a["noul"], a["noul"]))
+                    seen[qid] = (n + 1, min(lo, a["noul"]), max(hi, a["noul"]))
+            if args.jsonl:
+                print(json.dumps({"index": index, "state": state, **result}), flush=True)
+            else:
+                print(json.dumps(result, indent=2))
+    except ValueError as exc:
+        return support._fail(exc)
     if args.jsonl:
         for line in _spread_report(seen):
             print(f"verdict: {line}", file=sys.stderr)
     return 0
+
+
+def _jsonl_states(lines, warn):
+    """(index, state) per non-blank line; `index` is the 0-based input line, so output rows
+    pair with input lines even across skipped blanks. A line that starts like JSON must parse
+    (ValueError names the line); plain text is sent as text, with one warning."""
+    from .. import inputs
+
+    warned = False
+    for index, line in enumerate(lines):
+        if not line.strip():
+            continue
+        try:
+            state = inputs.parse_state(line)
+        except ValueError as exc:
+            raise ValueError(f"line {index + 1}: {exc}") from exc
+        if isinstance(state, str) and not warned:
+            warned = True
+            warn(f"line {index + 1} is not JSON; sending it, and any later such line, as text")
+        yield index, state
 
 
 #: Below this range across a batch, a yes/no question ranks almost nothing. A status triage's
@@ -110,15 +146,20 @@ def _ask_cmd(args: argparse.Namespace) -> int:
             try:
                 cut = float(args.cut)
             except ValueError:
+                if not Path(args.cut).is_file():
+                    raise ValueError(f"--cut {args.cut} is neither a number between 0 and 1 nor a "
+                                     "file from `verdict calibrate`") from None
                 fits = _read_fits(args.cut)
                 fit = fits.get("q") or (next(iter(fits.values())) if len(fits) == 1 else None)
                 if fit is None:
                     raise ValueError(f"{args.cut} holds more than one fit and none named 'q'")
                 cut = fit.get("cut")
+            if cut is not None and not 0 <= cut <= 1:
+                raise ValueError(f"--cut {args.cut}: a cut is a probability, between 0 and 1")
+        state = inputs.read_state(args.text)
     except (ValueError, OSError) as exc:
-        return support._fail(str(exc))
+        return support._fail(exc)
 
-    state = inputs.read_state(args.text)
     result = inference._Asker(args)(state, {"q": question})
     if fit:
         result["answers"] = calibrate.apply(result["answers"], {"q": fit})
