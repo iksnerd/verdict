@@ -42,6 +42,16 @@ Plus `model`, the checkpoint that answered.
 - A `noul` question may describe its sides with `criteria: {"true": ..., "false": ...}`. On this
   project's data that hurt (§22), so leave them out unless you've measured otherwise.
 
+It answers as `verdict decide` does, so the same question gets the same number from either:
+
+- A question naming a field the state lacks (a plain-text state has none), or shaped like the
+  questions that measured at chance (a consequence, difficulty or absence; more than 20 options),
+  is refused with a 422 and the reason. `?allow_unmeasured=true` asks anyway.
+- A new yes/no is asked as a choice between `no` and `yes` and answered as a `noul`, P(yes), which
+  ranked as well or better on every set measured (§38, §40). `?yesno=true` sends it as a plain
+  yes/no. A library question keeps the shape it was measured in on the checkpoint it was measured on.
+- A proxy backend (`SystemOneBackend`) forwards the request as given: these findings are about Laya.
+
 ## `POST /v1/systemone` and `GET /v1/models`: Jev's protocol
 
 The same answers on [TypeSafe's Jev](https://docs.typesafe.ai/api) wire protocol, so tools written
@@ -70,6 +80,9 @@ r = TypeSafeClient().system_one(
   `multilingual`, and configured extras select local checkpoints. Unknown names return 400.
   An explicitly configured extra takes precedence over a compatibility alias.
   A SystemOne proxy forwards the requested model unchanged, including version-pinned Jev IDs.
+- Yes/no questions are rewritten as on `/v1/decide`, so the two endpoints return the same answers.
+  Nothing is refused here: Jev's protocol has no way to pass the opt-out, and its SDKs expect an
+  answer, so check a bank with `verdict validate` first.
 - The response adds `usage`. `input_tokens` counts what the model read, which is the state once per
   question (laya re-reads it for each, §11), so it is not Jev's billing figure. `output_tokens` is 0.
 - Local `instructions` may be text, JSON, or left out (Laya receives an empty string). The Jev

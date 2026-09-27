@@ -142,11 +142,43 @@ def as_choice(questions: dict[str, Any], keep_measured: bool = True
     return out, rewritten
 
 
+def prepare(state: Any, questions: dict[str, Any], *, model: str, allow_unmeasured: bool = False,
+            yesno: bool = False) -> tuple[dict[str, Any], set[str], list[str]]:
+    """What every front door does before asking: refuse a question about a field the state lacks
+    and the shapes that measured at chance, then ask each new yes/no as a no/yes choice.
+
+    Returns the questions to send, the ids rewritten (for `as_yesno`), and the problems let
+    through by `allow_unmeasured`, as warnings. The CLI and `POST /v1/decide` both call this,
+    so the same question gets the same treatment and the same number from either.
+    """
+    from .errors import QuestionError
+
+    missing = inputs.missing_fields(state, questions)
+    problems = lint(questions)
+    if missing and not allow_unmeasured:
+        raise QuestionError("; ".join(missing) + ". Refused, because the model would answer from "
+                            "nothing; fix the state or the question, or --allow-unmeasured to "
+                            "ask anyway")
+    if problems and not allow_unmeasured:
+        raise QuestionError(refusal(problems))
+    rewritten: set[str] = set()
+    if not yesno:
+        questions, rewritten = as_choice(questions, keep_measured=measured_on(model))
+    return questions, rewritten, missing + problems
+
+
+def refusal(problems: list[str]) -> str:
+    return ("; ".join(problems) + ". Refused, because answers to this shape measured at chance; "
+            "--allow-unmeasured asks anyway")
+
+
 def as_yesno(answers: dict[str, Any], rewritten: set[str]) -> dict[str, Any]:
     """Choice answers to rewritten questions, back in the yes/no shape callers read."""
     out = dict(answers)
     for qid in rewritten:
         a = answers[qid]
+        if a.get("type") != "choice":
+            continue  # a backend that answered the yes/no as asked before; nothing to convert
         p = a["probabilities"]["yes"]
         # laya's yes/no confidence is max(p, 1 - p); a choice's is 1 - normalized entropy, a
         # different scale, so it is recomputed rather than passed through.

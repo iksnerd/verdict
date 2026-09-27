@@ -23,15 +23,26 @@ def _validate_cmd(args: argparse.Namespace) -> int:
     from ..schema import laya_questions
 
     try:
-        questions = laya_questions(json.load(sys.stdin) if args.questions == "-"
-                                   else inputs.load_questions(args.questions))
+        if args.questions == "-":
+            bank = sys.stdin.read()
+            if not bank.strip():
+                raise ValueError("no bank on stdin; pipe a JSON bank, or pass -q PRESET|NAMES|FILE")
+            questions = laya_questions(json.loads(bank))
+        else:
+            questions = laya_questions(inputs.load_questions(args.questions))
         problems = library.lint(questions)
         if problems and not args.allow_unmeasured:
             raise QuestionError(inference._refusal(problems))
-        warnings = problems + maybe_truncated(questions)
+        warnings = problems + maybe_truncated(questions) + [
+            f"{qid} has no instructions, so the model reads only its options (or nothing, for a "
+            "yes/no); say what to decide" for qid, q in questions.items()
+            if not str(q.get("instructions", "")).strip()]
     except (ValueError, OSError) as exc:
         if args.json:
-            print(json.dumps({"valid": False, "error": str(exc)}))
+            # The shared envelope, plus `valid` for callers that read it.
+            code = support._CODES.get(type(exc).__name__, "usage")
+            print(json.dumps({"valid": False, "error": {"code": code, "message": str(exc)}}))
+            print(f"verdict: {exc}", file=sys.stderr)
             return 2
         return support._fail(exc)
     if args.json:

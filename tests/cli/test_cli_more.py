@@ -15,7 +15,7 @@ from conftest import typed
 def fake_server(monkeypatch, answer_for):
     sent = []
 
-    def fake_decide(state, questions, url=None, model=None):
+    def fake_decide(state, questions, url=None, model=None, **flags):
         sent.append((state, questions, model))
         return {"model": "fake", "answers": typed(
             questions, lambda k: answer_for(state, k, questions[k]))}
@@ -243,7 +243,7 @@ def test_bench_systemone_with_a_bad_url_is_a_usage_error(monkeypatch, capsys):
 def test_calibrate_refuses_answers_from_two_models(monkeypatch, tmp_path, capsys):
     calls = iter(range(10**6))
 
-    def fake_decide(state, questions, url=None, model=None):
+    def fake_decide(state, questions, url=None, model=None, **flags):
         return {"model": f"m{next(calls) % 2}", "answers": typed(
             questions, lambda k: {"type": "noul", "noul": 0.9 if state["y"] else 0.1, "confidence": 0.5})}
 

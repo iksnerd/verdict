@@ -61,4 +61,5 @@ def test_server_only_success_keeps_answer_shape(monkeypatch, capsys):
 
 def test_validate_json_error_names_the_question_and_the_problem(capsys):
     assert cli.main(["validate", "-q", '{"q":{"type":"score","criteria":["one"]}}', "--json"]) == 2
-    assert json.loads(capsys.readouterr().out)["error"] == "invalid questions: q: score needs at least 2 levels"
+    error = json.loads(capsys.readouterr().out)["error"]
+    assert error["message"] == "invalid questions: q: score needs at least 2 levels"

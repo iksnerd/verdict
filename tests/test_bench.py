@@ -165,7 +165,7 @@ def toy_bench(monkeypatch, tmp_path):
     monkeypatch.setattr(bench, "SUITES_FILE", suites)
     monkeypatch.setattr(bench, "fetch", lambda s: ROWS)
     monkeypatch.setattr(client, "decide",
-                        lambda state, questions, url=None, model=None: fake_noul(state, questions))
+                        lambda state, questions, url=None, model=None, **flags: fake_noul(state, questions))
     return tmp_path
 
 
@@ -357,7 +357,7 @@ def test_bench_asks_a_multi_suite_with_the_multilingual_checkpoint(toy_bench, mo
     bench.SUITES_FILE.write_text(json.dumps(data))
     models = []
 
-    def fake(state, questions, url=None, model=None):
+    def fake(state, questions, url=None, model=None, **flags):
         models.append(model)
         return fake_noul(state, questions)
     monkeypatch.setattr(client, "decide", fake)

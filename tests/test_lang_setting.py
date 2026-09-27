@@ -50,7 +50,7 @@ def test_init_writes_the_lang_line(no_file):
 def asked_model(monkeypatch, argv):
     seen = {}
 
-    def fake_decide(state, questions, url=None, model=None):
+    def fake_decide(state, questions, url=None, model=None, **flags):
         seen["model"] = model
         return {"model": "fake", "answers": typed(
             questions, lambda k: {"type": "noul", "noul": 0.5, "confidence": 0.5})}

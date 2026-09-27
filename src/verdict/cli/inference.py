@@ -33,12 +33,13 @@ def _resolved_model(flag: str | None, settings) -> str:
 
 
 def _answer(state, questions: dict, url: str, model_path: str, model: str | None = None,
-            budget: int | None = None, server_only: bool = False, bits: int = 16) -> dict:
+            budget: int | None = None, server_only: bool = False, bits: int = 16,
+            flags: dict | None = None) -> dict:
     """Ask the server, or load the model here if none answers. `model` is laya's checkpoint name
     (`multilingual`), passed through to the server, or `model_path` is loaded in-process."""
     t = time.perf_counter()
     try:
-        payload = client.decide(state, questions, url, model=model)
+        payload = client.decide(state, questions, url, model=model, **(flags or {}))
         source = f"server {url}"
     except client.NoServer as exc:
         if server_only:
@@ -99,26 +100,17 @@ class _Asker:
         from .. import library
 
         questions = laya_questions(questions)
-        missing = inputs.missing_fields(state, questions)
-        problems = library.lint(questions)
-        if missing and not self.allow_unmeasured:
-            raise QuestionError("; ".join(missing) + ". Refused, because the model would answer "
-                                "from nothing; fix the state or the question, or "
-                                "--allow-unmeasured to ask anyway")
-        if problems and not self.allow_unmeasured:
-            raise QuestionError(_refusal(problems))
-        for line in missing + problems:
+        answering = (self.settings.multilingual_path if self.lang == "multi"
+                     else self.main_path)
+        questions, rewritten, problems = library.prepare(
+            state, questions, model=answering, allow_unmeasured=self.allow_unmeasured,
+            yesno=self.yesno)
+        for line in problems:
             self.warn(line)
         clipped = (inputs.maybe_clipped(state, self.settings.prompt_token_budget)
                    if self.warn_clipped else None)
         if clipped:
             self.warn(clipped)
-        rewritten: set[str] = set()
-        if not self.yesno:
-            answering = (self.settings.multilingual_path if self.lang == "multi"
-                         else self.main_path)
-            questions, rewritten = library.as_choice(
-                questions, keep_measured=library.measured_on(answering))
         result = self._ask(state, questions)
         served = str(result.get("model", ""))
         if (self.model_flag and result.get("source", "").startswith("server")
@@ -135,7 +127,7 @@ class _Asker:
         if self.lang == "multi":
             return _answer(state, questions, self.url, self.settings.multilingual_path,
                            "multilingual", self.settings.prompt_token_budget,
-                           server_only=self.server_only)
+                           server_only=self.server_only, flags=self._flags())
         if self.lang == "auto":
             info = inputs.language(state)
             if info and not info["is_english"]:
@@ -144,9 +136,16 @@ class _Asker:
                           "reliably; add --lang multi to use laya's multilingual one")
         return _answer(state, questions, self.url, self.main_path,
                        budget=self.settings.prompt_token_budget, server_only=self.server_only,
-                       bits=self.settings.bits)
+                       bits=self.settings.bits, flags=self._flags())
+
+    def _flags(self) -> dict:
+        """The opt-outs the server needs to answer as this CLI call asked: only those set, so a
+        call without them looks as it always has."""
+        return {k: True for k, on in (("allow_unmeasured", self.allow_unmeasured),
+                                      ("yesno", self.yesno)) if on}
 
 
 def _refusal(problems: list[str]) -> str:
-    return ("; ".join(problems) + ". Refused, because answers to this shape measured at chance; "
-            "--allow-unmeasured asks anyway")
+    from .. import library
+
+    return library.refusal(problems)

@@ -19,7 +19,7 @@ ROOT = Path(__file__).resolve().parents[2]
 def fake_server(monkeypatch):
     calls = []
 
-    def fake_decide(state, questions, url=None, model=None):
+    def fake_decide(state, questions, url=None, model=None, **flags):
         calls.append((state, questions))
         return {"model": "fake", "answers": typed(
             questions, lambda k: {"type": "noul", "noul": 0.5, "confidence": 0.5})}
@@ -123,7 +123,7 @@ def test_scores_against_expected_labels_when_present(monkeypatch, tmp_path, caps
         {"state": {"text": "b"}, "expected": {"q": False}},
     ])
     monkeypatch.setattr(examples_cmd, "_examples_root", lambda: root)
-    monkeypatch.setattr(client, "decide", lambda state, questions, url=None, model=None: {
+    monkeypatch.setattr(client, "decide", lambda state, questions, url=None, model=None, **flags: {
         "model": "fake", "answers": typed(
             questions, lambda k: {"type": "noul", "noul": 0.9, "confidence": 0.5})})
     assert cli.main(["examples", "toy"]) == 0
@@ -133,7 +133,7 @@ def test_scores_against_expected_labels_when_present(monkeypatch, tmp_path, caps
 def test_no_score_line_when_nothing_carries_an_expectation(monkeypatch, tmp_path, capsys):
     root = _toy_example(tmp_path, [{"state": {"text": "a"}}])
     monkeypatch.setattr(examples_cmd, "_examples_root", lambda: root)
-    monkeypatch.setattr(client, "decide", lambda state, questions, url=None, model=None: {
+    monkeypatch.setattr(client, "decide", lambda state, questions, url=None, model=None, **flags: {
         "model": "fake", "answers": typed(
             questions, lambda k: {"type": "noul", "noul": 0.9, "confidence": 0.5})})
     assert cli.main(["examples", "toy"]) == 0
@@ -152,7 +152,7 @@ def test_pause_between_calls_is_not_counted_as_latency(monkeypatch, tmp_path, ca
     what a call itself costs; counting it would make every backend look equally slow."""
     root = _toy_example(tmp_path, [{"state": {"text": "a"}}, {"state": {"text": "b"}}])
     monkeypatch.setattr(examples_cmd, "_examples_root", lambda: root)
-    monkeypatch.setattr(client, "decide", lambda state, questions, url=None, model=None: {
+    monkeypatch.setattr(client, "decide", lambda state, questions, url=None, model=None, **flags: {
         "model": "fake", "answers": typed(
             questions, lambda k: {"type": "noul", "noul": 0.5, "confidence": 0.5})})
     assert cli.main(["examples", "toy", "--pause", "0.2"]) == 0

@@ -97,7 +97,7 @@ def _examples_cmd(args: argparse.Namespace) -> int:
     names = args.name or available
     unknown = [n for n in names if n not in available]
     if unknown:
-        hint = support._suggest(unknown[0], available) if len(unknown) == 1 else ""
+        hint = support._suggest(unknown[0], available) if len(unknown) == 1 else "."
         return support._fail(f"no example {', '.join(unknown)}{hint} There are: "
                              f"{', '.join(available)}")
     if args.path:

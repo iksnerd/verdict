@@ -147,7 +147,7 @@ def route_batch(
 
 def decide(
     state: Any, questions: dict[str, Any], url: str | None = None, timeout: float | None = None,
-    model: str | None = None,
+    model: str | None = None, allow_unmeasured: bool = False, yesno: bool = False,
 ) -> dict[str, Any]:
     """`POST /v1/decide`: arbitrary typed questions, not the big-vs-small switch.
 
@@ -159,7 +159,11 @@ def decide(
     body: dict[str, Any] = {"state": state, "questions": questions}
     if model is not None:
         body["model"] = model
-    return _post((url or server_url()).rstrip("/"), "/v1/decide", body, timeout,
+    # The server refuses and rewrites as the CLI does (library.prepare), so the CLI's opt-outs
+    # travel with the call. An older server ignores unknown query parameters.
+    flags = [f for f, on in (("allow_unmeasured", allow_unmeasured), ("yesno", yesno)) if on]
+    path = "/v1/decide" + ("?" + "&".join(f"{f}=true" for f in flags) if flags else "")
+    return _post((url or server_url()).rstrip("/"), path, body, timeout,
                  frozenset({"answers"}))
 
 

@@ -15,9 +15,11 @@ from .schema import (
     DecideResponse,
     ModelCard,
     ModelList,
+    NoulAnswer,
     SystemOneRequest,
     SystemOneResponse,
     Usage,
+    laya_questions,
 )
 
 
@@ -125,9 +127,37 @@ def create_app(backend: Backend | None = None) -> FastAPI:
 
     @app.post("/v1/decide", response_model=DecideResponse, response_model_exclude={"usage"},
               response_model_exclude_none=True)
-    def decide(request: DecideRequest) -> DecideResponse:
+    def decide(request: DecideRequest, allow_unmeasured: bool = False,
+               yesno: bool = False) -> DecideResponse:
+        """Answers as `verdict decide` does: a question about a field the state lacks, or shaped
+        like ones that measured at chance, is a 422 unless `allow_unmeasured=true`, and a new
+        yes/no is asked as a no/yes choice unless `yesno=true` (FINDINGS §38)."""
         with _backend_errors():
+            return _prepared(request, allow_unmeasured=allow_unmeasured, yesno=yesno)
+
+    def _prepared(request: DecideRequest, *, allow_unmeasured: bool, yesno: bool
+                  ) -> DecideResponse:
+        """`library.prepare` around `backend.decide`, the one path both endpoints share. A proxy
+        backend forwards the request untouched: those findings are about laya, not its upstream."""
+        if getattr(backend, "preserve_model_names", False):
             return backend.decide(request)
+        from . import library
+
+        questions, rewritten, _ = library.prepare(
+            request.state, laya_questions(request.questions),
+            model=request.model or getattr(backend, "model_id", backend.name),
+            allow_unmeasured=allow_unmeasured, yesno=yesno)
+        out = backend.decide(DecideRequest(state=request.state, questions=questions,
+                                           model=request.model))
+        if not rewritten:
+            return out
+        dumped = library.as_yesno({qid: a.model_dump() for qid, a in out.answers.items()},
+                                  rewritten)
+        answers = {qid: (NoulAnswer(noul=dumped[qid]["noul"],
+                                    confidence=dumped[qid].get("confidence"))
+                         if qid in rewritten else a)
+                   for qid, a in out.answers.items()}
+        return DecideResponse(model=out.model, answers=answers, usage=out.usage)
 
     @app.post("/v1/systemone", response_model=SystemOneResponse, response_model_exclude_none=True)
     def systemone(request: SystemOneRequest) -> SystemOneResponse:
@@ -135,7 +165,10 @@ def create_app(backend: Backend | None = None) -> FastAPI:
         `TYPESAFE_BASE_URL`. Same answers as `/v1/decide`, plus `usage`. The bearer key the SDK
         insists on is ignored: the server binds to localhost."""
         with _backend_errors():
-            out = backend.decide(to_decide_request(request, backend))
+            # The same rewrite as /v1/decide, so the two agree; no refusals, since Jev's protocol
+            # has no way to ask for the opt-out and its SDKs expect an answer.
+            out = _prepared(to_decide_request(request, backend), allow_unmeasured=True,
+                            yesno=False)
         return SystemOneResponse(model=out.model, answers=out.answers,
                                  usage=out.usage or Usage(input_tokens=0))
 

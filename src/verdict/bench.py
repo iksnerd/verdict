@@ -91,8 +91,10 @@ def fetch(s: Suite) -> list[dict]:
     try:
         from datasets import load_dataset
     except ImportError as exc:
-        raise ValueError("bench needs the datasets library: uv sync --extra mlx --extra laya "
-                         "--extra bench") from exc
+        raise ValueError("bench needs the datasets library, in the bench extra. In a checkout: "
+                         "uv sync --extra mlx --extra laya --extra bench. For a uv tool install: "
+                         "uv tool install --python 3.11 'verdict[mlx,laya,bench] @ "
+                         "git+https://github.com/iksnerd/verdict.git@vX.Y.Z'") from exc
     return list(load_dataset(s.dataset, s.config, split=s.split, revision=s.revision))
 
 

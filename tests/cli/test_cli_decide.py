@@ -17,7 +17,7 @@ BANK = {"urgent": {"type": "noul", "instructions": "Is `body` urgent?"}}
 def fake_server(monkeypatch):
     calls = []
 
-    def fake_decide(state, questions, url=None, model=None):
+    def fake_decide(state, questions, url=None, model=None, **flags):
         calls.append((state, questions))
         return {"model": "fake", "answers": typed(
             questions, lambda k: {"type": "noul", "noul": 0.5, "confidence": 0.5})}
@@ -34,7 +34,8 @@ def test_a_json_object_argument_is_sent_as_a_structured_state(monkeypatch):
 
 def test_plain_text_stays_a_string(monkeypatch):
     calls = fake_server(monkeypatch)
-    cli.main(["decide", "charged twice", "--questions", json.dumps(BANK)])
+    # --allow-unmeasured: a text state has no `body`, which is refused otherwise.
+    cli.main(["decide", "charged twice", "--questions", json.dumps(BANK), "--allow-unmeasured"])
     assert calls[0][0] == "charged twice"
 
 
@@ -76,17 +77,17 @@ def test_warns_when_a_question_names_a_field_the_state_lacks(monkeypatch, capsys
     assert "`body`" in err and "urgent" in err
 
 
-def test_no_field_warning_for_a_string_state_or_a_present_field(monkeypatch, capsys):
+def test_no_field_warning_for_a_present_field(monkeypatch, capsys):
     fake_server(monkeypatch)
     cli.main(["decide", '{"body": "x"}', "--questions", json.dumps(BANK)])
-    cli.main(["decide", "plain", "--questions", json.dumps(BANK)])
     assert "`body`" not in capsys.readouterr().err
 
 
 def test_jsonl_asks_one_bank_of_every_line_and_prints_ndjson(monkeypatch, capsys):
     calls = fake_server(monkeypatch)
     monkeypatch.setattr("sys.stdin", io.StringIO('{"body": "a"}\nplain text\n\n{"body": "b"}\n'))
-    assert cli.main(["decide", "--jsonl", "--questions", json.dumps(BANK)]) == 0
+    assert cli.main(["decide", "--jsonl", "--questions", json.dumps(BANK),
+                     "--allow-unmeasured"]) == 0
     assert [c[0] for c in calls] == [{"body": "a"}, "plain text", {"body": "b"}]
     lines = capsys.readouterr().out.strip().splitlines()
     assert len(lines) == 3
@@ -98,7 +99,7 @@ def spread_server(monkeypatch, scores):
     """`scores[qid]` is a list, one value per call, for a noul question."""
     calls = {"i": 0}
 
-    def fake_decide(state, questions, url=None, model=None):
+    def fake_decide(state, questions, url=None, model=None, **flags):
         i = calls["i"]
         calls["i"] += 1
         return {"model": "fake", "answers": typed(
@@ -184,7 +185,7 @@ def test_a_server_error_is_reported_not_retried_in_process(monkeypatch, capsys):
     monkeypatch.setattr(client, "decide", reject)
     monkeypatch.setattr(inference, "_ENGINES", {})
     monkeypatch.setattr(inference, "load", must_not_load)
-    assert cli.main(["decide", "x", "--questions", json.dumps(BANK)]) == 2
+    assert cli.main(["decide", '{"body": "x"}', "--questions", json.dumps(BANK)]) == 2
     err = capsys.readouterr().err
     assert "500" in err and "boom" in err
 

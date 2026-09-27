@@ -105,24 +105,54 @@ def _merge(base: dict, over: dict) -> dict:
     return out
 
 
+#: What a config file may set; anything else is a typo that would otherwise be ignored in silence.
+KNOWN = {"server": {"url"},
+         "model": {"path", "prompt_token_budget", "multilingual", "bits", "lang", "extra"}}
+
+
+def _read(found: Path) -> dict[str, Any]:
+    import tomllib  # 6.4 ms, and only when there is a file to read
+
+    try:
+        loaded = tomllib.loads(found.read_text())
+    except tomllib.TOMLDecodeError as exc:
+        raise ConfigError(f"{found} is not valid TOML: {exc}") from exc
+    if "routes" in loaded:
+        import sys
+
+        print(f"verdict: {found} has a [routes] table, which is no longer read: verdict "
+              "answers and never dispatches. Delete the table to silence this.",
+              file=sys.stderr)
+        del loaded["routes"]
+    for section, value in loaded.items():
+        if section not in KNOWN:
+            raise ConfigError(f"{found}: unknown section [{section}]; there are "
+                              f"{', '.join(f'[{k}]' for k in KNOWN)}")
+        if not isinstance(value, dict):
+            raise ConfigError(f"{found}: {section} must be a [{section}] table")
+        unknown = sorted(set(value) - KNOWN[section])
+        if unknown:
+            raise ConfigError(f"{found}: unknown key {', '.join(unknown)} in [{section}]; it takes "
+                              f"{', '.join(sorted(KNOWN[section]))}")
+    return loaded
+
+
+def config_files(path: Path | None = None) -> list[Path]:
+    """The files that apply, least specific first: `path` alone when given, else every existing
+    file on the search path, so ./verdict.toml layers over the user config key by key."""
+    if path is not None:
+        return [path] if path.is_file() else []
+    return [p for p in reversed(CONFIG_PATHS) if p.is_file()]
+
+
 def load(path: Path | None = None) -> Settings:
-    """Resolve settings. `path` forces a file; otherwise the search order above applies."""
-    found = path if path is not None else find_config()
+    """Resolve settings. `path` forces one file; otherwise every file on the search path applies,
+    the more specific overriding the less, key by key."""
+    files = config_files(path)
+    found = files[-1] if files else (path if path is not None else None)
     loaded: dict[str, Any] = {}
-    if found is not None and found.is_file():
-        import tomllib  # 6.4 ms, and only when there is a file to read
-
-        try:
-            loaded = tomllib.loads(found.read_text())
-        except tomllib.TOMLDecodeError as exc:
-            raise ConfigError(f"{found} is not valid TOML: {exc}") from exc
-        if "routes" in loaded:
-            import sys
-
-            print(f"verdict: {found} has a [routes] table, which is no longer read: verdict "
-                  "answers and never dispatches. Delete the table to silence this.",
-                  file=sys.stderr)
-            del loaded["routes"]
+    for f in files:
+        loaded = _merge(loaded, _read(f))
 
     data = _merge(DEFAULTS, loaded)
     defaulted = tuple(k for k in DEFAULTS if k not in loaded)
@@ -149,12 +179,8 @@ def explain(path: Path | None = None) -> list[dict[str, Any]]:
     """Every setting as `load` resolves it, with where it came from: `$VAR`, the file's path, or
     "default". Flags are per command, so they are not in this list."""
     settings = load(path)
-    found = settings.source
-    loaded: dict[str, Any] = {}
-    if found is not None and Path(found).is_file():
-        import tomllib
-
-        loaded = tomllib.loads(Path(found).read_text())
+    #: Most specific first, so the first file that sets a key is the one that won.
+    files = [(f, _read(f)) for f in reversed(config_files(path))]
     values = {("server", "url"): settings.url, ("model", "path"): settings.model_path,
               ("model", "prompt_token_budget"): settings.prompt_token_budget,
               ("model", "multilingual"): settings.multilingual_path,
@@ -165,10 +191,9 @@ def explain(path: Path | None = None) -> list[dict[str, Any]]:
         var = ENV_OVERRIDES.get((section, key))
         if var and os.environ.get(var):
             source = f"${var}"
-        elif key in loaded.get(section, {}):
-            source = str(found)
         else:
-            source = "default"
+            source = next((str(f) for f, data in files if key in data.get(section, {})),
+                          "default")
         rows.append({"key": f"{section}.{key}", "value": value, "source": source})
     return rows
 

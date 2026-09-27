@@ -26,7 +26,7 @@ where each claim here comes from, [FINDINGS.md](FINDINGS.md). For runnable input
 verdict runs on Apple Silicon with Python 3.11:
 
 ```sh
-uv tool install --python 3.11 'verdict[mlx,laya] @ git+https://github.com/iksnerd/verdict.git@v0.5.0'
+uv tool install --python 3.11 'verdict[mlx,laya] @ git+https://github.com/iksnerd/verdict.git@v0.6.0'
 verdict init      # writes ~/.config/verdict/config.toml
 verdict --version
 ```
@@ -53,7 +53,7 @@ verdict serve &
 
 ```sh
 $ verdict ask "commit the fix and push it" "Is this an instruction to perform an action?"
-0.79
+0.94
 ```
 
 **Choice** picks one of several options, with `-o NAME` or `-o NAME=description`:
@@ -298,8 +298,11 @@ Exit status is 2 for a usage error everywhere. `ask --cut` exits 0 for yes and 1
 `update --check` exits 1 when a newer release is available.
 
 An error is one `verdict:` line on stderr. With `--json` or `--jsonl`, stdout also gets
-`{"error": {"code": ..., "message": ...}}`, with `code` one of `usage`, `refused`, `no_server`,
-`server_timeout`, `server_error`, `config` or `not_found`. `decide --jsonl` gives every output
+`{"error": {"code": ..., "message": ...}}` (`decide` always, since it prints JSON), with `code`
+one of `usage`, `refused` (the bank or question can't be asked as written: reword it, or
+`--allow-unmeasured`), `no_server`, `server_timeout`, `server_error`, `config` or `not_found`.
+In `--jsonl` the error also carries the failing line's `index`. `validate --json` returns the
+same `error` object beside `"valid": false`. `decide --jsonl` gives every output
 row an `index`, the 0-based line of the input it answers, so rows pair with lines across skipped
 blanks. A line that starts like JSON and does not parse stops the run at that line (earlier rows
 stay valid); a plain-text line is sent as text, with a warning.
@@ -310,8 +313,10 @@ reason to load a second copy of the model beside it.
 
 ## Configuration reference
 
-Settings resolve flag > environment > `verdict.toml` (or `~/.config/verdict/config.toml`) >
-built-in default. These five override a `[section].key` in that file:
+Settings resolve flag > environment > `./verdict.toml` > `~/.config/verdict/config.toml` >
+built-in default, key by key: a local file that sets only `bits` keeps the user file's `url`.
+`verdict config` shows each value and the file or variable it came from. An unknown section or
+key in either file is an error, not ignored. These five override a `[section].key` in a file:
 
 | variable | overrides | default |
 |---|---|---|

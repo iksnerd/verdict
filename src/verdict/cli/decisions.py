@@ -62,13 +62,17 @@ def _decide_cmd(args: argparse.Namespace) -> int:
     for line in warnings:
         ask.warn(line)
 
+    from .. import client
+
     # Per yes/no question: count, low, high. Running, not a list: a live pipe never ends.
     seen: dict[str, tuple[int, float, float]] = {}
+    index, answered = None, 0
     try:
         for i, (index, state) in enumerate(states):
             if i and args.pause:
                 time.sleep(args.pause)
             result = ask(state, questions)
+            answered += 1
             if fits:
                 result["answers"] = calibrate.apply(result["answers"], fits)
             for qid, a in result["answers"].items():
@@ -79,8 +83,12 @@ def _decide_cmd(args: argparse.Namespace) -> int:
                 print(json.dumps({"index": index, "state": state, **result}), flush=True)
             else:
                 print(json.dumps(result, indent=2))
-    except ValueError as exc:
-        return support._fail(exc)
+    except (ValueError, client.NoServer, client.ServerError, client.ServerTimeout) as exc:
+        # In --jsonl, name the line that failed so a caller can resume after it.
+        failed = getattr(exc, "index", index) if args.jsonl else None
+        return support._fail(exc, **({"index": failed} if failed is not None else {}))
+    if args.jsonl and not answered:
+        return support._fail("no states on stdin; pipe one JSON state (or text) per line")
     if args.jsonl:
         for line in _spread_report(seen):
             print(f"verdict: {line}", file=sys.stderr)
@@ -100,7 +108,9 @@ def _jsonl_states(lines, warn):
         try:
             state = inputs.parse_state(line)
         except ValueError as exc:
-            raise ValueError(f"line {index + 1}: {exc}") from exc
+            err = ValueError(f"line {index + 1}: {exc}")
+            err.index = index
+            raise err from exc
         if isinstance(state, str) and not warned:
             warned = True
             warn(f"line {index + 1} is not JSON; sending it, and any later such line, as text")
@@ -142,6 +152,14 @@ def _ask_cmd(args: argparse.Namespace) -> int:
         question = inputs.inline_question(args.question, args.options, args.levels,
                                           args.true, args.false)
         cut, fit = None, None
+        if args.cut is not None and (args.options or args.levels):
+            try:
+                float(args.cut)
+            except ValueError:
+                pass  # a calibrate file: for a choice it applies the fitted temperature
+            else:
+                raise ValueError("a numeric --cut applies to a yes/no; a choice or score has no "
+                                 "single cut (a `verdict calibrate` file still applies)")
         if args.cut is not None:
             try:
                 cut = float(args.cut)
@@ -183,5 +201,9 @@ def _ask_cmd(args: argparse.Namespace) -> int:
         print(f"{score:.2f}")
         return 0
     yes = score >= cut
-    print(f"{'yes' if yes else 'no'} {score:.2f}")
+    shown = f"{score:.2f}"
+    if (float(shown) >= cut) != yes:
+        # Rounded, the score would read as the other side of the cut ("no 0.50" at 0.5).
+        shown = f"{score:.4f}"
+    print(f"{'yes' if yes else 'no'} {shown}")
     return 0 if yes else 1

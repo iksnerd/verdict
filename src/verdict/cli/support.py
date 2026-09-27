@@ -23,7 +23,7 @@ _CODES = {"QuestionError": "refused", "NoServer": "no_server", "ServerTimeout": 
           "ServerError": "server_error", "ConfigError": "config", "FileNotFoundError": "not_found"}
 
 
-def _fail(error: str | BaseException, code: str | None = None) -> int:
+def _fail(error: str | BaseException, code: str | None = None, **extra) -> int:
     """One `verdict:` line on stderr, exit 2; also a JSON error on stdout in JSON mode. Pass the
     exception itself where there is one, so its code is kept."""
     message = str(error)
@@ -33,16 +33,16 @@ def _fail(error: str | BaseException, code: str | None = None) -> int:
     if JSON_ERRORS:
         import json
 
-        print(json.dumps({"error": {"code": code, "message": message}}), flush=True)
+        print(json.dumps({"error": {"code": code, "message": message, **extra}}), flush=True)
     return 2
 
 
-def _suggest(name: str, choices) -> str:
-    """"; did you mean X?" for a near miss, else nothing."""
+def _suggest(name: str, choices, end: str = ".") -> str:
+    """"; did you mean X?" for a near miss, else `end`, so a sentence closes either way."""
     import difflib
 
     close = difflib.get_close_matches(name, list(choices), n=1, cutoff=0.6)
-    return f"; did you mean {close[0]}?" if close else ""
+    return f"; did you mean {close[0]}?" if close else end
 
 
 def _user_config():

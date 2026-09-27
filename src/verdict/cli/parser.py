@@ -34,7 +34,7 @@ command still works by loading the model itself.
 EPILOG = """\
 Examples:
   verdict serve &                                                   # load the model once
-  verdict ask "commit the fix and push it" "Is this an instruction?"
+  verdict ask "commit the fix and push it" "Is this an instruction to perform an action?"
   verdict ask "$MSG" "What does the user want?" -o refund -o info -o other
   verdict ask "$TICKET" "How urgent?" -l "not urgent" -l soon -l critical
   verdict questions                                                 # measured questions, by name
@@ -204,6 +204,13 @@ def _formatter(argv: list[str]):
     return argparse.RawDescriptionHelpFormatter
 
 
+def _seconds(text: str) -> float:
+    value = float(text)
+    if value < 0:
+        raise argparse.ArgumentTypeError(f"{text} is negative; a pause is 0 or more seconds")
+    return value
+
+
 class _Parser(argparse.ArgumentParser):
     """argparse, plus "did you mean" on a mistyped command or choice."""
 
@@ -213,7 +220,7 @@ class _Parser(argparse.ArgumentParser):
         m = re.search(r"invalid choice: '([^']*)' \(choose from (.*)\)", message)
         if m:
             choices = [c.strip().strip("'") for c in m.group(2).split(",")]
-            message += support._suggest(m.group(1), choices)
+            message += support._suggest(m.group(1), choices, end="")
         super().error(message)
 
 
@@ -319,7 +326,7 @@ def main(argv: list[str] | None = None) -> int:
     d.add_argument("--calibration", metavar="FILE",
                    help="a `verdict calibrate` file: adds a decision to each yes/no and "
                         "calibrated probabilities to each choice")
-    d.add_argument("--pause", type=float, default=0.05, metavar="SEC",
+    d.add_argument("--pause", type=_seconds, default=0.05, metavar="SEC",
                    help="between --jsonl calls, so a long run leaves the machine usable "
                         "(default: 0.05)")
     d.add_argument("--check", action="store_true",
@@ -348,7 +355,7 @@ def main(argv: list[str] | None = None) -> int:
                     help="one JSON line per result: state, score, contributions")
     rk.set_defaults(fn=evaluation._rank_cmd)
 
-    dc = command("docs", "read the README, guide, API notes or FINDINGS",
+    dc = command("docs", "read the README, guide, API notes, FINDINGS, pipeline or routing",
                  "Print a project document to stdout. The help and error messages cite FINDINGS "
                  "sections (§25, §38): `verdict docs findings 38` prints one. No model is loaded.",
                  "Examples:\n  verdict docs                  # the README\n"
@@ -380,7 +387,7 @@ def main(argv: list[str] | None = None) -> int:
                    "sampled with --seed (default: 400; 0 for all)")
     c.add_argument("--heldout", type=float, default=0.3, help="fraction held out (default: 0.3)")
     c.add_argument("--seed", type=int, default=0)
-    c.add_argument("--pause", type=float, default=0.05, metavar="SEC",
+    c.add_argument("--pause", type=_seconds, default=0.05, metavar="SEC",
                    help="between calls (default: 0.05)")
     yesno_flag(c)
     server_flags(c)
@@ -409,7 +416,7 @@ Exit status: 0; with --verify, 1 when any suite regressed (the release workflow 
     b.add_argument("--verify", metavar="SCORECARD",
                    help="compare this scorecard with the newest older one beside it; no model")
     b.add_argument("--against", metavar="SCORECARD", help="with --verify, compare with this one")
-    b.add_argument("--pause", type=float, default=0.05, metavar="SEC",
+    b.add_argument("--pause", type=_seconds, default=0.05, metavar="SEC",
                    help="between calls (default: 0.05)")
     b.add_argument("--systemone", metavar="URL",
                    help="score a TypeSafe-compatible /v1/systemone endpoint instead of verdict: "
@@ -437,7 +444,7 @@ Needs a checkout (or an install that packs examples/) to find the banks.
     ex.add_argument("--path", action="store_true",
                     help="print each named example's directory instead of running it, so an "
                          "installed copy's bank can be passed to -q")
-    ex.add_argument("--pause", type=float, default=0.05, metavar="SEC",
+    ex.add_argument("--pause", type=_seconds, default=0.05, metavar="SEC",
                     help="between calls (default: 0.05)")
     ex.add_argument("--systemone", metavar="URL",
                     help="score with a TypeSafe-compatible /v1/systemone endpoint instead of "
@@ -515,7 +522,9 @@ release (or, in a checkout, newer commits) is available.
     i.set_defaults(fn=setup._init_cmd)
 
     args = ap.parse_args(argv)
-    support.JSON_ERRORS = bool(getattr(args, "json", False) or getattr(args, "jsonl", False))
+    # decide prints JSON whatever its flags, so its failures are JSON too.
+    support.JSON_ERRORS = bool(getattr(args, "json", False) or getattr(args, "jsonl", False)
+                               or args.cmd == "decide")
     try:
         return args.fn(args)
     except (FileNotFoundError, QuestionError, client.ServerError, client.NoServer,

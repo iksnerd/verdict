@@ -1,8 +1,8 @@
 ---
 name: verdict
 description: >-
-  Score many texts at once with the local `verdict` CLI (a Laya encoder, ~20 ms a
-  call, no generated text): tag hundreds of transcript turns, log lines, commands,
+  Score many texts at once with the local `verdict` CLI (a Laya encoder, ~30 ms of
+  inference and ~0.1 s a call against a running server, no generated text): tag hundreds of transcript turns, log lines, commands,
   issues or files with a yes/no, choice or ordinal answer without reading them all
   into context, rank or filter a JSONL, or run Laya's presets (triage,
   moderation, email). Use when a task needs the same judgment made over roughly 30+ items,

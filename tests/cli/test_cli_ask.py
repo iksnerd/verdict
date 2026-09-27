@@ -10,7 +10,7 @@ from conftest import typed
 def fake_server(monkeypatch, answer):
     sent = {}
 
-    def fake_decide(state, questions, url=None, model=None):
+    def fake_decide(state, questions, url=None, model=None, **flags):
         sent["state"], sent["questions"] = state, questions
         return {"model": "fake", "answers": typed(questions, lambda k: answer)}
 

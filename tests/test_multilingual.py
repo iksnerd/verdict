@@ -72,7 +72,7 @@ def test_unknown_model_name_is_rejected():
 def fake_server(monkeypatch):
     sent = []
 
-    def fake_decide(state, questions, url=None, model=None):
+    def fake_decide(state, questions, url=None, model=None, **flags):
         sent.append(model)
         return {"model": "fake", "answers": typed(
             questions, lambda k: {"type": "noul", "noul": 0.5, "confidence": 0.5})}

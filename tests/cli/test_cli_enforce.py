@@ -72,7 +72,7 @@ def test_every_measured_library_question_passes(server):
 def test_validate_calls_a_flagged_bank_invalid(capsys):
     assert cli.main(["validate", "-q", json.dumps(OFF_PAGE), "--json"]) == 2
     out = json.loads(capsys.readouterr().out)
-    assert out["valid"] is False and "FINDINGS" in out["error"]
+    assert out["valid"] is False and "FINDINGS" in out["error"]["message"]
 
 
 def test_validate_with_allow_unmeasured_is_valid_with_warnings(capsys):

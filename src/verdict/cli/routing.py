@@ -151,6 +151,9 @@ def _route_cmd(args: argparse.Namespace) -> int:
         print(f"branch     {branch.name.upper()}  ({ms:.0f} ms via {source})")
         print(f"reason     {branch.reason}")
         print(f"scores     " + "  ".join(f"{k}={v:.2f}" for k, v in branch.scores.items()))
+    if args.json:
+        # As `ask --json`: the answer is in the JSON, so a success exits 0 whichever branch.
+        return 0
     return 0 if branch.name == SMALL else 1
 
 

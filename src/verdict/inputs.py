@@ -49,7 +49,10 @@ def read_state(arg: str) -> Any:
     if arg == "-":
         return parse_state(sys.stdin.read())
     if arg.startswith("@"):
-        return parse_state(Path(arg[1:]).read_text())
+        try:
+            return parse_state(Path(arg[1:]).read_text())
+        except FileNotFoundError:
+            raise ValueError(f"{arg}: no such file") from None
     return parse_state(arg)
 
 
@@ -58,7 +61,7 @@ def load_questions(spec: str) -> dict[str, Any]:
     tried in that order."""
     if spec in PRESETS:
         return preset(spec)
-    if not spec.lstrip().startswith("{") and not Path(spec.lstrip("@")).is_file():
+    if not spec.lstrip().startswith(("{", "[")) and not Path(spec.lstrip("@")).is_file():
         from . import library
 
         names = [n.strip() for n in spec.split(",") if n.strip()]
@@ -69,11 +72,15 @@ def load_questions(spec: str) -> dict[str, Any]:
         if len(names) > 1 or re.fullmatch(r"[a-z][a-z0-9_]*", spec):
             from .cli.support import _suggest
 
-            hint = _suggest(unknown[0], [*entries, *PRESETS]) if len(unknown) == 1 else ""
+            hint = _suggest(unknown[0], [*entries, *PRESETS]) if len(unknown) == 1 else "."
             raise ValueError(f"--questions: no preset or library question {', '.join(unknown)}"
                              f"{hint} See `verdict questions` and `verdict presets`")
-    if spec.lstrip().startswith("{"):
-        return json.loads(spec)
+    if spec.lstrip().startswith(("{", "[")):
+        bank = json.loads(spec)
+        if not isinstance(bank, dict):
+            raise ValueError("--questions: a question bank is a JSON object of name -> question, "
+                             'like {"q": {"type": "noul", "instructions": "..."}}')
+        return bank
     path = Path(spec[1:] if spec.startswith("@") else spec)
     if not path.is_file():
         if spec.startswith("@") or path.suffix == ".json" or "/" in spec:
@@ -147,6 +154,13 @@ def maybe_clipped(state: Any, budget: int | None) -> str | None:
 def missing_fields(state: Any, questions: dict[str, Any]) -> list[str]:
     """Questions that name a `field` the dict state lacks. The model still answers, from nothing,
     and nothing else would say so: a `triage` bank asked of `{"body": ...}` is the usual case."""
+    if isinstance(state, str):
+        # A text state has no fields at all, so a question about `message` is answered from
+        # nothing just as surely as a dict without that key.
+        return [f"question {name!r} asks about {', '.join(f'`{f}`' for f in fields)}, but the "
+                f"state is plain text; pass {{\"{fields[0]}\": ...}} instead"
+                for name, q in questions.items()
+                if (fields := _FIELD.findall(instruction_text(q)))]
     if not isinstance(state, dict):
         return []
     out = []
@@ -194,6 +208,8 @@ def inline_question(question: str, options: list[str] | None = None,
     Options take `NAME` or `NAME=description`. Describing the sides of a yes/no is allowed because
     laya allows it, though on this project's data it hurt (FINDINGS §22).
     """
+    if not question.strip():
+        raise ValueError("the question is empty; ask something about the text")
     if options and levels:
         raise ValueError("give options (-o) or levels (-l), not both")
     if (options or levels) and (true or false):

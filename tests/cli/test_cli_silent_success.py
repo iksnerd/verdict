@@ -33,7 +33,7 @@ def no_inference(monkeypatch):
 def served(monkeypatch):
     sent = []
 
-    def fake_decide(state, questions, url=None, model=None):
+    def fake_decide(state, questions, url=None, model=None, **flags):
         sent.append(state)
         return {"model": "served", "answers": typed(
             questions, lambda k: {"type": "noul", "noul": 0.6, "confidence": 0.6})}

@@ -55,7 +55,9 @@ def test_questions_are_passed_through_in_laya_shape():
     state, questions = agent.seen
     assert state == {"message": "shipped it"}
     assert questions["kind"] == {"type": "choice", "instructions": "?", "criteria": {"action": "", "note": ""}}
-    assert questions["decided"] == {"type": "noul", "instructions": "?"}
+    # POST /v1/decide asks a new yes/no as a no/yes choice, as the CLI does (FINDINGS §38).
+    assert questions["decided"] == {"type": "choice", "instructions": "?",
+                                    "criteria": {"no": "", "yes": ""}}
 
 
 def test_answers_are_mapped_back():

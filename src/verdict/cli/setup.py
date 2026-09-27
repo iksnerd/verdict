@@ -126,7 +126,8 @@ def _init_cmd(args: argparse.Namespace) -> int:
     if found:
         print(f"  found: {', '.join(found)}")
     else:
-        print("  none found under ./models. The uniform backend still works; see docs/pipeline.md")
+        print(f"  none found under ./models, which is fine: base Laya ({config.FALLBACK_MODEL}) "
+              "is used, downloaded on first use")
     default_path = current.model_path
     if not Path(default_path).is_absolute() and Path(default_path).is_dir():
         default_path = str(Path(default_path).resolve())
@@ -168,7 +169,7 @@ def _init_cmd(args: argparse.Namespace) -> int:
     print()
     print("Next:")
     print(f"  verdict serve              # binds {url}; stop it when you are done")
-    print('  verdict ask "commit the fix and push it" "Is this an instruction?"')
+    print('  verdict ask "commit the fix and push it" "Is this an instruction to perform an action?"')
     if not ok_model:
         print(f"\n  NOTE: {model_path} is missing, so verdict will use base laya "
               f"({config.FALLBACK_MODEL}) instead.")
