@@ -14,13 +14,13 @@ import time
 
 from . import inference, support
 from .. import client
-from ..engine import PROMPT_TOKEN_BUDGET
+from ..engine import DEFAULT_MODEL as ENGINE_DEFAULT_MODEL, PROMPT_TOKEN_BUDGET
 from ..router import BIG_SMALL, ROUTER_BANK, SMALL
 from ..switch import Branch
 
-#: Fallback for library callers that import `decide`/`decide_many` directly. The CLI resolves
-#: `verdict.toml` first and passes the result in, so this is only what you get without one.
-DEFAULT_MODEL = os.environ.get("VERDICT_MODEL", "models/verdict-v1-mlx")
+#: Fallback for library callers that import `decide`/`decide_many` directly: base Laya, the
+#: public default. The CLI resolves `verdict.toml` first and passes the result in.
+DEFAULT_MODEL = os.environ.get("VERDICT_MODEL", ENGINE_DEFAULT_MODEL)
 
 
 def _say_local(exc: Exception) -> None:

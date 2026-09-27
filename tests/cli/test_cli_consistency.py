@@ -244,3 +244,35 @@ def test_validate_warns_about_a_question_with_no_instructions(capsys):
     assert cli.main(["validate", "-q", '{"q": {"type": "noul"}}', "--json"]) == 0
     warnings = json.loads(capsys.readouterr().out)["warnings"]
     assert any("no instructions" in w for w in warnings)
+
+
+def test_a_plain_text_refusal_is_one_sentence_for_the_whole_bank(monkeypatch, capsys):
+    served(monkeypatch)
+    assert cli.main(["decide", "hello there", "-q", "triage"]) == 2
+    err = capsys.readouterr().err
+    assert err.count("plain text") == 1
+    for qid in ("intent", "is_urgent", "frustration", "churn_risk"):
+        assert qid in err
+
+
+def test_library_routing_defaults_to_the_public_model(monkeypatch):
+    import importlib
+
+    from verdict import engine
+    from verdict.cli import routing
+
+    monkeypatch.delenv("VERDICT_MODEL", raising=False)
+    assert importlib.reload(routing).DEFAULT_MODEL == engine.DEFAULT_MODEL
+
+
+def test_examples_reports_the_median_call_so_a_cold_load_does_not_inflate_it(monkeypatch, capsys):
+    from verdict.cli import examples_cmd
+
+    times = iter([0.0, 5.0] + [x for i in range(1, 12) for x in (i * 10.0, i * 10.0 + 0.03)])
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(examples_cmd, "time", SimpleNamespace(perf_counter=lambda: next(times),
+                                                              sleep=lambda s: None))
+    served(monkeypatch)
+    assert cli.main(["examples", "test-output", "--pause", "0"]) == 0
+    assert "test-output: 30 ms/call (median of 12; 30 to 5000 ms)" in capsys.readouterr().out

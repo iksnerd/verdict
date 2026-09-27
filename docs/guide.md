@@ -26,7 +26,7 @@ where each claim here comes from, [FINDINGS.md](FINDINGS.md). For runnable input
 verdict runs on Apple Silicon with Python 3.11:
 
 ```sh
-uv tool install --python 3.11 'verdict[mlx,laya] @ git+https://github.com/iksnerd/verdict.git@v0.6.0'
+uv tool install --python 3.11 'verdict[mlx,laya] @ git+https://github.com/iksnerd/verdict.git@v0.6.1'
 verdict init      # writes ~/.config/verdict/config.toml
 verdict --version
 ```

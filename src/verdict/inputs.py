@@ -156,11 +156,17 @@ def missing_fields(state: Any, questions: dict[str, Any]) -> list[str]:
     and nothing else would say so: a `triage` bank asked of `{"body": ...}` is the usual case."""
     if isinstance(state, str):
         # A text state has no fields at all, so a question about `message` is answered from
-        # nothing just as surely as a dict without that key.
-        return [f"question {name!r} asks about {', '.join(f'`{f}`' for f in fields)}, but the "
-                f"state is plain text; pass {{\"{fields[0]}\": ...}} instead"
-                for name, q in questions.items()
-                if (fields := _FIELD.findall(instruction_text(q)))]
+        # nothing just as surely as a dict without that key. One line for the whole bank: a
+        # preset names the same field in every question.
+        asking = {name: _FIELD.findall(instruction_text(q)) for name, q in questions.items()}
+        asking = {name: fields for name, fields in asking.items() if fields}
+        if not asking:
+            return []
+        fields = list(dict.fromkeys(f for fs in asking.values() for f in fs))
+        shape = ", ".join(f'"{f}": ...' for f in fields)
+        return [f"the state is plain text, but {', '.join(asking)} "
+                f"{'asks' if len(asking) == 1 else 'ask'} about "
+                f"{', '.join(f'`{f}`' for f in fields)}; pass {{{shape}}} instead"]
     if not isinstance(state, dict):
         return []
     out = []

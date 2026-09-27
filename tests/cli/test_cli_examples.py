@@ -144,7 +144,7 @@ def test_reports_latency_per_example(monkeypatch, capsys):
     fake_server(monkeypatch)
     assert cli.main(["examples", "citation-check"]) == 0
     out = capsys.readouterr().out
-    assert re.search(r"citation-check: \d+ ms/call over \d+ calls", out)
+    assert re.search(r"citation-check: \d+ ms/call \(median of \d+;", out)
 
 
 def test_pause_between_calls_is_not_counted_as_latency(monkeypatch, tmp_path, capsys):

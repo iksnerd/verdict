@@ -137,8 +137,12 @@ def _examples_cmd(args: argparse.Namespace) -> int:
                     correct += _correct(answer, expected)
             if scored:
                 print(f"{name}: {correct}/{scored} match the recorded expectation")
-            print(f"{name}: {sum(latencies_ms) / len(latencies_ms):.0f} ms/call over "
-                  f"{len(latencies_ms)} calls ({min(latencies_ms):.0f} to {max(latencies_ms):.0f} ms)")
+            # The median, not the mean: without a server the first call pays the model load
+            # (seconds), and a mean of twelve calls then reads as a slow backend.
+            import statistics
+
+            print(f"{name}: {statistics.median(latencies_ms):.0f} ms/call (median of "
+                  f"{len(latencies_ms)}; {min(latencies_ms):.0f} to {max(latencies_ms):.0f} ms)")
         return 0
     finally:
         if args.systemone:
