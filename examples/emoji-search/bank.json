@@ -1,0 +1,17 @@
+{"match": {"type": "choice", "instructions": "Which emoji best fits `message`?",
+           "criteria": {
+             "white_check_mark": "a white checkmark in a green box, done or correct",
+             "thumbsup": "a thumbs-up hand, approval",
+             "jack_o_lantern": "a carved pumpkin lantern with a candle inside",
+             "ghost": "a cartoon ghost",
+             "cloud_with_rain": "a cloud with rain falling from it",
+             "sunny": "a bright sun, clear weather",
+             "birthday": "a birthday cake with lit candles",
+             "gift": "a wrapped gift box with a ribbon",
+             "tired_face": "an exhausted, worn-out face",
+             "sleeping": "a face asleep with a Z",
+             "fire": "a flame, something impressive",
+             "eyes": "a pair of eyes, looking or noticing",
+             "rocket": "a rocket launching, shipped or fast",
+             "warning": "a yellow warning triangle with an exclamation mark",
+             "question": "a red question mark"}}}

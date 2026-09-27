@@ -1,6 +1,6 @@
 # Examples
 
-Four runnable examples. Every input is invented, and no real data is in this folder.
+Five runnable examples. Every input is invented, and no real data is in this folder.
 `tests/test_examples.py` checks that each bank still validates and that its inputs have the fields
 the questions name.
 
@@ -24,6 +24,7 @@ knowing what it gets wrong is the point.
 | `support-tickets/` | choice, score and yes/no in one bank | all three types, with a structured state |
 | `ticket-search/` | five yes/no, ranked with `verdict rank` | named answers as a searchable vector |
 | `commit-kinds/` | seven-way choice | where a small LLM beats verdict (FINDINGS §32) |
+| `emoji-search/` | one 15-way choice | picking the best match from a bounded candidate set |
 
 ## room-triage/
 
@@ -127,3 +128,29 @@ Five of seven are right. The two misses are the ones that need knowing what the 
 On 420 real commits the default model is right 44% of the time (FINDINGS §41), where Claude Haiku
 4.5 reached 67% on a similar set (FINDINGS §32), so for categories like these, use a small LLM if
 the data may leave the machine.
+
+## emoji-search/
+
+One bank, a 15-way choice standing in for the last step of an emoji-search pipeline: some cheap
+first pass (an embedding model, a keyword filter) has already narrowed a large catalog down to a
+short, bounded candidate list, and this picks the best one from it. The shape, not the catalog, is
+the point: a Choice question over a bounded set is what verdict is built for, unlike ranking all
+of a large catalog directly (`docs/api.md` — laya degrades past about 20 options).
+
+```
+0.96  lgtm                         -> white_check_mark
+1.00  it's raining again           -> cloud_with_rain
+1.00  happy birthday!!             -> birthday
+1.00  i'm dead tired               -> tired_face
+0.99  ship it                      -> rocket
+0.95  not sure what this does      -> question
+0.68  heads up, this might break   -> warning
+0.38  hallowe'en plans?            -> jack_o_lantern    (barely: sunny was close behind at 0.33)
+0.74  just noticed this            -> sunny             <- a miss (eyes was the intended match, at 0.16)
+0.72  that's amazing, nice work    -> thumbsup           (fire also fits; not a clean miss)
+```
+
+Nine of ten land on a defensible answer. `just noticed this` is the clean miss: `sunny` is an odd
+read of "noticed", and `eyes` never got close. `hallowe'en plans?` is the low-confidence one worth
+flagging rather than trusting: it landed on the right answer, but `sunny` was one point behind,
+which is what a 0.38 confidence is for.
