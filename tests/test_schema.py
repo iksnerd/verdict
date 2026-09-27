@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from verdict.schema import DecideRequest
+from verdict.schema import DecideRequest, Usage
 
 
 def req(questions):
@@ -42,3 +42,28 @@ def test_rejects_malformed_questions(bad):
 def test_requires_at_least_one_question():
     with pytest.raises(ValidationError):
         req({})
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        {"type": "choice", "instructions": "?", "criteria": {"a": "x", "b": "y"}, "weight": 2},
+        {"type": "score", "instructions": "?", "criteria": ["low", "high"], "weight": 2},
+    ],
+)
+def test_choice_and_score_reject_unknown_fields_like_noul_does(bad):
+    """`NoulQuestion` already forbids extras (schema.py); the real typesafe-sdk's request-side
+    `_Question` base forbids them uniformly across all three types. Matching that here catches a
+    typo'd field instead of silently dropping it."""
+    with pytest.raises(ValidationError):
+        req({"q": bad})
+
+
+def test_usage_input_tokens_is_optional_like_jevs_own_contract():
+    """`input_tokens` had no default at all, stricter than Jev's own `Usage` (either count may be
+    missing when unreported) for no reason tied to how it's actually used. `output_tokens` stays
+    required at `0`: every backend here always computes a real one, so there's nothing to widen
+    for a case that never happens (docs/api.md)."""
+    u = Usage.model_validate({})
+    assert u.input_tokens is None
+    assert u.output_tokens == 0

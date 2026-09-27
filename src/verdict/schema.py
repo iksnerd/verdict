@@ -23,6 +23,8 @@ class ChoiceQuestion(BaseModel):
     #: mirrors accepts.
     criteria: Union[dict[str, Any], list[Any]]
 
+    model_config = {"extra": "forbid"}
+
     @model_validator(mode="after")
     def _enough_options(self):
         if len(self.criteria) < 2:
@@ -37,6 +39,8 @@ class ScoreQuestion(BaseModel):
     type: Literal["score"]
     instructions: Instructions = None
     criteria: list[Any]
+
+    model_config = {"extra": "forbid"}
 
     @model_validator(mode="after")
     def _enough_levels(self):
@@ -151,7 +155,10 @@ Answer = Annotated[Union[ChoiceAnswer, ScoreAnswer, NoulAnswer], Field(discrimin
 
 
 class Usage(BaseModel):
-    input_tokens: int
+    #: Jev's own `Usage` allows either count to be missing when unreported; every backend here
+    #: always computes a real one (backend.py, backend_mlx.py, api.py), so `output_tokens` stays
+    #: a concrete `0` rather than widening to match a case that never happens (docs/api.md).
+    input_tokens: Optional[int] = None
     output_tokens: int = 0
 
 

@@ -98,6 +98,15 @@ def test_models_lists_the_jev_alias():
         assert set(m) == {"name", "description", "release_date"}
 
 
+def test_noul_answers_keep_confidence_though_jev_omits_it():
+    """typesafe-sdk 0.7.1's own `NoulAnswer` wire model has only `type` and `noul` (verified
+    against the cached wheel): Jev doesn't score noul confidence separately. verdict's routing
+    needs it, so `NoulAnswer` (schema.py) keeps the field on purpose. The real SDK's default
+    `extra="ignore"` drops it silently rather than failing, so this stays additive, not a break."""
+    body = uniform().post("/v1/systemone", json=JEV).json()["answers"]
+    assert set(body["spam"]) == {"type", "noul", "confidence"}
+
+
 def test_mlx_backend_reports_the_tokens_the_model_read():
     agent = FakeAgent()
     c = TestClient(create_app(MlxBackend(agent=agent)))
