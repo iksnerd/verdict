@@ -1,6 +1,6 @@
 [project]
 name = "verdict"
-version = "0.3.0"
+version = "0.4.0"
 description = "A typed decision API: state + typed questions in, calibrated probabilities out."
 requires-python = ">=3.11.4,<3.12"
 license = "Apache-2.0"

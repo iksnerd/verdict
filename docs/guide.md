@@ -26,7 +26,7 @@ where each claim here comes from, [FINDINGS.md](FINDINGS.md). For runnable input
 verdict runs on Apple Silicon with Python 3.11:
 
 ```sh
-uv tool install --python 3.11 'verdict[mlx,laya] @ git+https://github.com/iksnerd/verdict.git@v0.3.0'
+uv tool install --python 3.11 'verdict[mlx,laya] @ git+https://github.com/iksnerd/verdict.git@v0.4.0'
 verdict init      # writes ~/.config/verdict/config.toml
 verdict --version
 ```
@@ -267,6 +267,7 @@ The rules that came out of doing it once:
 | "the server answered 422: ..." | the server refused the question bank; verdict reports this rather than loading a model locally | fix the bank the message names; a malformed bank fails the same way with no server running |
 | "... Refused, because answers to this shape measured at chance" | the question asks about a consequence, difficulty or absence, or names a field the state lacks | reword it to ask what the text says; `--allow-unmeasured` to ask anyway, or `calibrate` it on real labels |
 | "a yes/no cut needs both yes and no labels" | every labelled example in the calibration set has the same answer | label some of the other class; there is no cut to fit on one |
+| "answers came from more than one model" | `calibrate` got answers from two models, such as a server that restarted on another checkpoint mid-run | run it again against one model; a cut fitted across two fits neither |
 | "the state looks like es ..." on English text | Laya's language guess on short prose | `--lang en` for that run |
 | "`<url>`/v1/systemone ... it may still be loading" | a `--systemone` server (Kev, Von, another verdict) hasn't answered a request yet; verdict retries this automatically and says so on stderr | wait for it, or start the server earlier; if it persists after 5 attempts, check that server's own logs -- it may have crashed on an earlier request |
 | `verdict update` fails with "fatal: unable to read tree" (or `verdict` disappears from PATH afterward) | `uv`'s own git cache for this repo got into a bad state; a plain re-fetch doesn't self-heal, and `uv tool install` isn't atomic against it -- a failed reinstall can remove the old install without completing the new one | `uv cache clean verdict --force`, then re-run `verdict update` (or the `uv tool install` line from the README); confirm with `uv tool list` |
@@ -355,10 +356,12 @@ row is allowed; each fitted question needs at least two labels, choices must nam
 and a yes/no training split must contain both classes. `--heldout` is in `[0, 1)`; zero disables
 the held-out split. Cut fitting includes constant classifiers so an inverted signal cannot force
 a worse-than-baseline threshold. A constant cut is a reason to improve the question, not evidence
-that it distinguishes the classes. Check the reported held-out metrics before using a fit.
+that it distinguishes the classes. Check the reported held-out metrics before using a fit. The
+fit file's `model` is the model that answered, as the server or in-process engine named it, not
+the configured one; a run whose answers came from two models is refused.
 
 `verdict init` preserves language, quantization, and extra checkpoint settings when rewriting a
-configuration. Backend changes still require measurement: never transfer a calibration file or
+configuration, read from the `--out` file itself when it exists. Backend changes still require measurement: never transfer a calibration file or
 confidence threshold from local Laya to hosted Jev without refitting. The
 [SDK capability guide](api.md#discovering-backend-differences) explains model selection, context
 budgets, and missing upstream confidence/usage fields. Python users can inspect
