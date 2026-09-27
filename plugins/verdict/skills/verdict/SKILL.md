@@ -39,7 +39,8 @@ has real runs.
   every time, and a fitted cut makes the score a decision.
 
 For one item, read it yourself: you are the stronger model. It reads the surface
-of the text, so it cannot say whether Postgres beats SQLite. It can say whether a
+of the text, so it cannot say whether Postgres beats SQLite, or which of several numbers is
+largest (chance on four; §46: let code compare, and ask it only what one number's text shows). It can say whether a
 message is asking a question. In `examples/`, "does this output report a failure?"
 scored 12/12, while "must this review comment block a merge?" read an SQL injection as a nit:
 the first is on the page, the second needs to know what the code does.

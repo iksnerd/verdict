@@ -1628,3 +1628,47 @@ Neither checkpoint ships, and the default model is unchanged.
 A bug was fixed on the way. The label transport let an `httpx` timeout escape, which ended
 two runs early while still exiting 0. It now raises `LabelError`, the stage counts one failure
 and carries on, and a resume fills the gap.
+
+## 46. It reads a sign perfectly and cannot compare numbers, so it cannot play the Iowa Gambling Task (2026-09-28)
+
+The Iowa Gambling Task (Bechara et al., 1994) is a test of learning under uncertainty. There are
+four decks: two pay well and lose more, two pay less and come out ahead, and the agent learns
+which are which from 100 draws. A private harness runs it, with seeded loss timing and deck
+labels shuffled per seed. Scored as net = good picks minus bad picks over 100 trials (random is
+about 0), on seeds 0 to 4. Each verdict agent saw a compact state per trial, built by the
+harness: each deck's draws, mean result and worst result, plus the last five draws. It asked one
+choice question with the options shuffled, and sampled from the probabilities. Base Laya,
+0.6.1, served over HTTP.
+
+| agent | mean net | sd |
+|---|---|---|
+| greedy (tracks each deck's mean payoff) | +75.2 | 3.6 |
+| gemma3:4b (full history, as text) | +62.4 | 66.5 |
+| qwen2.5:3b (full history, as text) | +25.2 | 60.9 |
+| random | -11.2 | 4.4 |
+| verdict, "Which deck should be drawn next to win as much money as possible?" | -6.0 | 34.5 |
+| verdict, "Which deck in `decks` has the highest `mean_result`?" | -7.2 | 32.7 |
+| Laya through the PyTorch port, the first question | -13.2 | 27.6 |
+
+Both verdict agents play at chance. The harness's own `verdict` agent, with its own seeded sampler,
+reran them at -3.2 and -2.0 (sd 29.8 and 21.4): the same conclusion, and a sign of how much of
+each number is sampling noise. Unlike §25 to §28, rewording to what the page shows changed
+nothing. Probes on invented states found out why:
+
+| probe (base Laya, argmax, no game) | right |
+|---|---|
+| which of four decks has the highest `mean_result`, clear-cut (one deck 150 to 250, the rest -300 to 20) | 6 / 24 (chance 6) |
+| the same, options without descriptions | 7 / 24 |
+| the largest of four bare numbers, `{"A": 212, "B": -40, ...}` | 12 / 24 |
+| one deck's stats: "Is `mean_result` negative?" | 40 / 40, AUC 1.00 |
+
+**It reads a fact on the page, a minus sign, perfectly, and compares numbers across fields not at
+all.** Even stripped to four bare numbers, picking the largest is only twice chance. The task is
+a comparison across decks, repeated 100 times, which is exactly what it cannot do. This is the
+same boundary as §32 and §41 from another side: not world knowledge this time, arithmetic.
+
+**Decision.** Do not ask verdict to rank or pick by numbers. Let code compare, and ask verdict
+only what a number's text shows, when a regex can't do it better. An agent that asks "is this
+deck's mean negative?" per deck would play near greedy's level, but the script would do all the
+learning; `mean < 0` is the same check for free. The harness keeps a `verdict` agent so the
+table can be rerun.

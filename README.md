@@ -1,7 +1,8 @@
 # verdict
 
 Fast, local answers to typed questions about text: yes/no, pick one, or a level, each with a
-probability, in tens of milliseconds on Apple Silicon. Nothing is generated and nothing is run on
+probability, in about 30 ms of model time (a tenth of a second a call against a running server)
+on Apple Silicon. Nothing is generated and nothing is run on
 your behalf. verdict answers; you, or your agent, act.
 
 Use it when the same judgment has to be made over hundreds or thousands of short texts (commands,
@@ -38,8 +39,10 @@ injection at 0.88 AUC ([FINDINGS §40](docs/FINDINGS.md)).
 It is the wrong tool for categories that need world knowledge (seven commit types: 0.44 accuracy,
 where an LLM does better) or a maintainer's judgment (bug report or support question: 0.59, and two
 rounds of fine-tuning did not fix it; [FINDINGS §41, §45](docs/FINDINGS.md)). It is also wrong for
-more than 20 options, for long documents (it reads the first 128 tokens), and for questions about
-consequences or difficulty, which score at chance. verdict refuses those questions and more than
+more than 20 options, for long documents (it reads the first 128 tokens), for comparing numbers
+(which of four decks has the highest mean: chance, where "is this one negative" is perfect;
+[§46](docs/FINDINGS.md)), and for questions about consequences or difficulty, which score at
+chance. verdict refuses those questions and more than
 20 options rather than answer them badly, and warns when a text runs past what it reads.
 
 ## Features
@@ -52,13 +55,19 @@ consequences or difficulty, which score at chance. verdict refuses those questio
   held-out split.
 - **Measured questions by name:** `verdict questions` lists questions with their measured results;
   `-q is_instruction,touches_secret` uses them.
-- **Guard rails:** question shapes that measured at chance are refused (`--allow-unmeasured` asks
-  anyway), and `validate` checks a bank with no model loaded.
+- **Guard rails:** question shapes that measured at chance, and questions about a field the
+  state does not have, are refused (`--allow-unmeasured` asks anyway), and `validate` checks a bank
+  with no model loaded.
+- **Built for scripts and agents:** every error is one `verdict:` line and exit 2, and under
+  `--json`/`--jsonl` also `{"error": {"code", "message"}}` on stdout, with codes to branch on.
+  `--jsonl` rows carry the `index` of the input line they answer. A typo gets a "did you mean",
+  and `verdict config` shows each setting and where it came from.
 - **Search by named answers:** `rank` orders a `decide --jsonl` run by a weighted sum of its
   answers and shows what each one contributed.
 - **Other languages:** `--lang multi` switches to Laya's multilingual checkpoint.
-- **An HTTP API** on localhost ([docs/api.md](docs/api.md)), including TypeSafe Jev's
-  `/v1/systemone` protocol, so Jev's SDKs work against it.
+- **An HTTP API** on localhost ([docs/api.md](docs/api.md)) that answers as the CLI does, with
+  the same refusals and the same numbers, including TypeSafe Jev's `/v1/systemone` protocol, so
+  Jev's SDKs work against it.
 - **Backend capabilities:** `GET /v1/capabilities` reports Laya/Jev limits and confidence
   semantics separately from the shared protocol ([SDK guide](docs/api.md#discovering-backend-differences)).
 - **Swap the backend:** `[model.extra]` names further local laya checkpoints; `SystemOneBackend`
@@ -94,6 +103,8 @@ claude plugin install verdict@verdict
 - [docs/FINDINGS.md](docs/FINDINGS.md): every measurement behind these docs, with sample sizes
   and intervals.
 - [docs/pipeline.md](docs/pipeline.md): building a checkpoint.
+- [docs/routing.md](docs/routing.md): the big-or-small model switch, kept as a worked example of
+  why a routing question can sit at chance.
 
 ## Developing
 
