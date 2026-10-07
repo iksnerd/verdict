@@ -3,6 +3,7 @@ from __future__ import annotations
 from contextlib import contextmanager
 
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import JSONResponse
 
 from pydantic import BaseModel, field_validator
 
@@ -95,6 +96,12 @@ def _release_date(backend: Backend) -> str:
     return datetime.date.fromtimestamp(stamp).isoformat()
 
 
+class Refused(Exception):
+    """A question the server will not ask. Answered as a 422 whose body keeps FastAPI's `detail`
+    and adds the CLI's `{"error": {"code", "message"}}`, so a caller can tell a refusal from the
+    other 422s (a malformed request has a `detail` list and no `error`)."""
+
+
 @contextmanager
 def _backend_errors():
     """One mapping of backend failures to HTTP, for every endpoint that asks the backend."""
@@ -103,7 +110,7 @@ def _backend_errors():
     except UnknownModel as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except QuestionError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+        raise Refused(str(exc)) from exc
     except ValueError as exc:
         # A SystemOneBackend's upstream (Kev, Von, another verdict) didn't answer: we are a
         # proxy here, so its failure is a bad gateway, not our own 500 with a traceback.
@@ -121,12 +128,23 @@ def create_app(backend: Backend | None = None) -> FastAPI:
         package_version = "0.0.0"
     app = FastAPI(title="verdict", version=package_version)
 
+    @app.exception_handler(Refused)
+    def _refused(_request, exc: Refused) -> JSONResponse:
+        message = str(exc)
+        return JSONResponse(status_code=422, content={
+            "detail": message, "error": {"code": "refused", "message": message}})
+
     @app.get("/healthz")
     def healthz():
         return {"status": "ok", "backend": backend.name}
 
     @app.post("/v1/decide", response_model=DecideResponse, response_model_exclude={"usage"},
-              response_model_exclude_none=True)
+              response_model_exclude_none=True,
+              responses={422: {"description": (
+                  'A question verdict will not ask: body {"detail": ..., "error": {"code": '
+                  '"refused", "message": ...}}. It names the shape and how to reword it; '
+                  "?allow_unmeasured=true asks anyway. A malformed request is also 422, with a "
+                  "list `detail` and no `error`.")}})
     def decide(request: DecideRequest, allow_unmeasured: bool = False,
                yesno: bool = False) -> DecideResponse:
         """Answers as `verdict decide` does: a question about a field the state lacks, or shaped
@@ -146,7 +164,7 @@ def create_app(backend: Backend | None = None) -> FastAPI:
         questions, rewritten, _ = library.prepare(
             request.state, laya_questions(request.questions),
             model=request.model or getattr(backend, "model_id", backend.name),
-            allow_unmeasured=allow_unmeasured, yesno=yesno)
+            allow_unmeasured=allow_unmeasured, yesno=yesno, opt_out=library.HTTP_OPT_OUT)
         out = backend.decide(DecideRequest(state=request.state, questions=questions,
                                            model=request.model))
         if not rewritten:

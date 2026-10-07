@@ -26,7 +26,7 @@ where each claim here comes from, [FINDINGS.md](FINDINGS.md). For runnable input
 verdict runs on Apple Silicon with Python 3.11:
 
 ```sh
-uv tool install --python 3.11 'verdict[mlx,laya] @ git+https://github.com/iksnerd/verdict.git@v0.6.2'
+uv tool install --python 3.11 'verdict[mlx,laya] @ git+https://github.com/iksnerd/verdict.git@v0.6.3'
 verdict init      # writes ~/.config/verdict/config.toml
 verdict --version
 ```
@@ -168,7 +168,9 @@ was measured on and how it did. Use them by name: `verdict decide STATE -q is_in
 question about a consequence, a difficulty or a risk ("could this cause harm", "how hard is this",
 §25, §29), a yes/no about an absence ("is this ordinary", §33), and a choice with more than 20
 options (§41). The error says why and how to
-reword it. `--allow-unmeasured` asks anyway, with a warning. `calibrate` only warns, because
+reword it. `--allow-unmeasured` asks anyway, with a warning. These refusals are verdict's own,
+from measuring real traffic: Laya's documentation lists urgency and harm severity as `score` uses
+and does not forbid them (§47). A question can be allowed by Laya's docs and refused here. `calibrate` only warns, because
 calibrating on real labels is how you find out whether such a question works for you.
 
 **A new yes/no is asked as a choice between `no` and `yes`**, and answered as a yes/no: the
@@ -265,7 +267,7 @@ The rules that came out of doing it once:
 | "question 'x' asks about `field`, which the state does not have" | the bank was written for different data | rename the state's key or the backticked field |
 | `spread q: 0.58 to 0.65 ... narrow range` | the inputs don't vary where the question looks, or they're boilerplate | check who wrote them; filter bots and templates |
 | "... not found, so using base laya" | `[model].path` names a local checkpoint that is not there | fix the path, or remove it to use base Laya on purpose |
-| "the server answered 422: ..." | the server refused the question bank; verdict reports this rather than loading a model locally | fix the bank the message names; a malformed bank fails the same way with no server running |
+| "the server answered 422: ..." | the server refused the question bank; verdict reports this rather than loading a model locally. A refusal for a measured-at-chance shape has `code` `refused`; a malformed bank has no code | fix the bank the message names; a malformed bank fails the same way with no server running |
 | "... Refused, because answers to this shape measured at chance" | the question asks about a consequence, difficulty or absence, or names a field the state lacks | reword it to ask what the text says; `--allow-unmeasured` to ask anyway, or `calibrate` it on real labels |
 | "a yes/no cut needs both yes and no labels" | every labelled example in the calibration set has the same answer | label some of the other class; there is no cut to fit on one |
 | "answers came from more than one model" | `calibrate` got answers from two models, such as a server that restarted on another checkpoint mid-run | run it again against one model; a cut fitted across two fits neither |
@@ -302,7 +304,8 @@ release is available. Every command's `--help` ends with its own exit status.
 An error is one `verdict:` line on stderr. With `--json` or `--jsonl`, stdout also gets
 `{"error": {"code": ..., "message": ...}}` (`decide` always, since it prints JSON), with `code`
 one of `usage`, `refused` (the bank or question can't be asked as written: reword it, or
-`--allow-unmeasured`), `no_server`, `server_timeout`, `server_error`, `config` or `not_found`.
+`--allow-unmeasured`; a server's refusal arrives as `refused` too), `no_server`, `server_timeout`,
+`server_error`, `config` or `not_found`.
 In `--jsonl` the error also carries the failing line's `index`. `validate --json` returns the
 same `error` object beside `"valid": false`. `decide --jsonl` gives every output
 row an `index`, the 0-based line of the input it answers, so rows pair with lines across skipped

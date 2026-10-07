@@ -28,7 +28,8 @@ def _fail(error: str | BaseException, code: str | None = None, **extra) -> int:
     exception itself where there is one, so its code is kept."""
     message = str(error)
     if code is None:
-        code = "usage" if isinstance(error, str) else _CODES.get(type(error).__name__, "usage")
+        code = ("usage" if isinstance(error, str) else getattr(error, "code", None)
+                or _CODES.get(type(error).__name__, "usage"))
     print(f"verdict: {message}", file=sys.stderr)
     if JSON_ERRORS:
         import json

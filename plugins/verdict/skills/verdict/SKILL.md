@@ -150,7 +150,9 @@ TypeSafe's cookbooks work locally with `TYPESAFE_BASE_URL=http://127.0.0.1:8799`
   Stop it and run `verdict serve`. Never gate on a uniform answer.
 - Each call takes about 2 s: no server is answering, so every call loads the model. Start one.
 - "Refused, because answers to this shape measured at chance": the question asks about a
-  consequence or an absence, or names a field the state lacks. Reword it or fix the state.
+  consequence or an absence, or names a field the state lacks. Reword it or fix the state. Over
+  HTTP it is a 422 whose body carries `error.code` `refused`; a 422 without `error` is a
+  malformed request. A refusal never succeeds on retry, so do not treat it as an outage.
 - A warning says the state isn't English: add `--lang multi` before reading any number.
 - A `verdict:` line and exit 2: a usage or settings error, stated in that line. Fix what it
   names; exit 2 never means "no". With `--json`/`--jsonl`, stdout also gets

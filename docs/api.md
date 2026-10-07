@@ -46,7 +46,26 @@ It answers as `verdict decide` does, so the same question gets the same number f
 
 - A question naming a field the state lacks (a plain-text state has none), or shaped like the
   questions that measured at chance (a consequence, difficulty or absence; more than 20 options),
-  is refused with a 422 and the reason. `?allow_unmeasured=true` asks anyway.
+  is refused with a 422 and the reason. `?allow_unmeasured=true` asks anyway. The check reads
+  each question's `instructions` only, not its `criteria`. It matches `dangerous`, `risk`/`risky`,
+  `consequence(s)`, `difficult(y)`, `cause` and `hard(er) is/for/to` (and, for a yes/no, words like
+  `ordinary` or `benign`), so "How dangerous is this ticket?" is refused and the same word in a
+  criterion is not. Ask what the text says instead.
+- A refusal's body keeps FastAPI's `detail` and adds the CLI's error envelope, so a caller can
+  tell it from a malformed request (a 422 whose `detail` is a list and which has no `error`):
+
+  ```json
+  {"detail": "priority asks about 'dangerous', a consequence or difficulty the text does not show; ... ?allow_unmeasured=true asks anyway",
+   "error": {"code": "refused", "message": "priority asks about 'dangerous', ..."}}
+  ```
+
+  A refusal is permanent for that question: retrying it unchanged gets the same answer. Treat it
+  as a bug in the bank, not as an outage.
+- These refusals are verdict's own, from measuring real traffic (FINDINGS §25, §29, §33), not
+  rules in Laya's documentation: Laya lists ticket urgency and harm severity as `score` uses, and
+  warns against `yes`/`no` keys on a `choice`. The yes/no rewrite uses those keys anyway because
+  it measured better than Laya's suggested `A`/`B` keys (§47). Laya's `labels` override is not in
+  the laya-mlx port yet, so verdict does not offer it.
 - A new yes/no is asked as a choice between `no` and `yes` and answered as a `noul`, P(yes), which
   ranked as well or better on every set measured (§38, §40). `?yesno=true` sends it as a plain
   yes/no. A library question keeps the shape it was measured in on the checkpoint it was measured on.

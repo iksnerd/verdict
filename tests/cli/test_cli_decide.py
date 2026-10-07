@@ -230,3 +230,13 @@ def test_an_invalid_bank_is_reported_by_question_not_as_pydantic_internals(monke
     err = capsys.readouterr().err
     assert message in err
     assert "tagged-union" not in err and "errors.pydantic.dev" not in err
+
+
+def test_a_served_refusal_is_a_refused_error_not_a_server_error(monkeypatch, capsys):
+    def refuse(*a, **k):
+        raise client.ServerError(422, "q asks about 'risk'", code="refused")
+
+    monkeypatch.setattr(client, "decide", refuse)
+    assert cli.main(["decide", '{"body": "x"}', "--questions", json.dumps(BANK)]) == 2
+    out = json.loads(capsys.readouterr().out)
+    assert out["error"]["code"] == "refused"

@@ -247,3 +247,22 @@ def test_a_404_is_a_stranger_on_the_port(monkeypatch):
     http_error(monkeypatch, 404, {"detail": "Not Found"})
     with pytest.raises(client.NoServer):
         client.decide("x", {"q": {"type": "noul"}})
+
+
+def test_a_served_refusal_keeps_its_code_and_names_the_cli_flag(monkeypatch):
+    """The server words its opt-out for HTTP callers; this client is the CLI's, so its user is
+    told the flag they can type."""
+    message = "q asks about 'risk'. Refused, because it measured at chance; ?allow_unmeasured=true asks anyway"
+    http_error(monkeypatch, 422, {"detail": message, "error": {"code": "refused", "message": message}})
+    with pytest.raises(client.ServerError) as info:
+        client.decide("x", {"q": {"type": "noul"}})
+    assert info.value.code == "refused"
+    assert "--allow-unmeasured asks anyway" in str(info.value)
+    assert "?allow_unmeasured" not in str(info.value)
+
+
+def test_a_server_error_without_an_envelope_has_no_code(monkeypatch):
+    http_error(monkeypatch, 500, {"detail": "boom"})
+    with pytest.raises(client.ServerError) as info:
+        client.decide("x", {"q": {"type": "noul"}})
+    assert info.value.code is None

@@ -1672,3 +1672,43 @@ only what a number's text shows, when a regex can't do it better. An agent that 
 deck's mean negative?" per deck would play near greedy's level, but the script would do all the
 learning; `mean < 0` is the same check for free. The harness keeps a `verdict` agent so the
 table can be rerun.
+
+
+## 47. Laya's README warns against yes/no keys; opaque A/B keys measure no better (2026-10-07)
+
+Laya's README ("Honest limits") warns that a `choice` rendered with boolean-word keys such as
+`true`/`false` or `yes`/`no` can follow the key instead of the option text, and suggests semantic
+or opaque keys (`A`/`B`) or its `labels` override, each to be validated on the checkpoint and
+states served. §38 rewrites every new yes/no as a choice whose keys are exactly `no` and `yes`, so
+this is the one place verdict does what that README cautions against. It was measured on the
+terms the README asks for (`scripts/eval_noul_ab_keys.py`): §38's samples, 100 per class, base
+Laya (`aac6fef/laya-mlx`), states clipped to 128 tokens, every item asked all four ways. The score
+is P(yes). The A/B arms key `yes` as `A` and `no` as `B`, each with the description `yes` or `no`,
+and differ only in which is listed first, to see whether the order matters.
+
+| set | plain yes/no | `no`/`yes` keys (shipped) | `A`=yes, `B`=no, `A` first | same, `B` first |
+|---|---|---|---|---|
+| SST-2 | 0.505 | **0.940** [0.904, 0.971] | 0.903 [0.858, 0.942] | 0.928 [0.889, 0.959] |
+| spam | 0.992 | **0.995** [0.988, 0.999] | 0.991 | 0.991 |
+| injection | 0.875 | **0.875** [0.818, 0.918] | 0.765 [0.697, 0.828] | 0.777 [0.708, 0.839] |
+
+The plain and `no`/`yes` columns reproduce §40. Opaque keys with descriptions are no better on any
+set and about 0.10 AUC worse on injection, where the intervals only just touch. Listing
+the same two options in the other order moved SST-2 by 0.025 and injection by 0.012, so gaps of
+that size are noise; the injection gap is several times larger.
+
+**Reading.** Laya's warning is real for the plain `noul`, whose `false`/`true` slots take SST-2
+to 0.505 on this checkpoint, which is what §38 fixed. It does not carry over to `no`/`yes` keys
+that sit beside their own descriptions: here the keys are not the only signal the model has.
+verdict keeps the rewrite, now with a measurement against the alternative Laya names.
+
+**Not measured.** Laya's own `labels` override (`{"true": "A", "false": "B"}` on a `noul`) exists
+in `laya` but not in the laya-mlx port (mizorewww/laya-mlx#17), so it could not be run. The
+descriptions were the generic `yes`/`no`; a task-specific one (Laya's example is "yes, the review
+is positive") was not tried, and §22 found describing the sides hurt. One checkpoint, three sets,
+100 per class.
+
+**Where verdict differs from Laya's docs on purpose.** Laya lists ticket urgency and harm severity
+as `score` use cases. The refusals for a consequence, difficulty or risk (§25, §29) are verdict's
+own measurements on real traffic, not a Laya rule, and Laya's README itself calls ordinal `score`
+the weakest primitive (SST-5 0.372). A question Laya's docs would allow can still be refused here.

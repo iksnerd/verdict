@@ -118,3 +118,8 @@ def test_ordinary_as_a_choice_option_is_fine():
     q = {"type": "choice", "instructions": "Is `text` spam?",
          "criteria": {"spam": "advertising", "ham": "an ordinary personal message"}}
     assert library.lint({"q": q}) == []
+
+
+def test_refusal_names_the_opt_out_of_the_front_door():
+    assert "--allow-unmeasured" in library.refusal(["q is bad"])
+    assert "?allow_unmeasured=true" in library.refusal(["q is bad"], opt_out="?allow_unmeasured=true")

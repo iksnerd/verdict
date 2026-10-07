@@ -106,3 +106,41 @@ def test_batch_and_single_agree_on_the_same_prompt():
     assert item["branch"] == single["branch"]
     assert item["reason"] == single["reason"]
     assert item["scores"] == single["scores"]
+
+
+def _refused(question="How dangerous is this ticket?", state=None):
+    bank = {"priority": {"type": "noul", "instructions": question}}
+    return client().post("/v1/decide", json={"state": state or {"message": "hi"}, "questions": bank})
+
+
+def test_a_refusal_names_the_http_opt_out_not_the_cli_flag():
+    r = _refused()
+    assert r.status_code == 422
+    detail = r.json()["detail"]
+    assert "?allow_unmeasured=true" in detail
+    assert "--allow-unmeasured" not in detail
+
+
+def test_a_refusal_carries_a_stable_code_beside_detail():
+    body = _refused().json()
+    assert body["error"]["code"] == "refused"
+    assert body["error"]["message"] == body["detail"]
+    assert "'dangerous'" in body["detail"]
+
+
+def test_a_missing_field_refusal_also_has_the_code_and_http_opt_out():
+    body = _refused("Is `message` about money?", state={"text": "x"}).json()
+    assert body["error"]["code"] == "refused"
+    assert "?allow_unmeasured=true" in body["detail"]
+
+
+def test_a_malformed_request_keeps_fastapis_shape():
+    r = client().post("/v1/decide", json={"state": "x", "questions": {}})
+    assert r.status_code == 422
+    assert "error" not in r.json()
+
+
+def test_the_openapi_schema_describes_the_refusal():
+    spec = client().get("/openapi.json").json()
+    text = spec["paths"]["/v1/decide"]["post"]["responses"]["422"]["description"]
+    assert "refused" in text and "allow_unmeasured" in text

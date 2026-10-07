@@ -45,10 +45,12 @@ class ServerError(Exception):
     """A verdict server answered and refused the call. Not a reason to fall back: the local model
     would be loaded for a call the server has already said is wrong, and its error would be lost."""
 
-    def __init__(self, status: int, detail: str):
+    def __init__(self, status: int, detail: str, code: str | None = None):
         super().__init__(f"the server answered {status}: {detail}")
         self.status = status
         self.detail = detail
+        #: The server's `error.code` (`refused` for a question it will not ask), else None.
+        self.code = code
 
 
 class ServerTimeout(Exception):
@@ -95,7 +97,7 @@ def _post(
         # nothing listening.
         if exc.code in _NOT_VERDICT:
             raise NoServer(f"{base} has no {path} ({exc.code})") from exc
-        raise ServerError(exc.code, _detail(exc)) from exc
+        raise _server_error(exc) from exc
     except (urllib.error.URLError, OSError, json.JSONDecodeError) as exc:
         if _timed_out(exc):
             raise ServerTimeout(base, timeout) from exc
@@ -113,17 +115,25 @@ def _post(
     return payload
 
 
-def _detail(exc: urllib.error.HTTPError) -> str:
-    """FastAPI's `detail`, as text; the raw body when it is not JSON."""
+def _server_error(exc: urllib.error.HTTPError) -> ServerError:
+    """The server's refusal as an exception: its `detail` as text and its `error.code`. The server
+    words the opt-out for HTTP callers (`?allow_unmeasured=true`); this client is the CLI's, so the
+    text names the flag its user can type."""
+    from .library import CLI_OPT_OUT, HTTP_OPT_OUT
+
     try:
         body = exc.read().decode(errors="replace")
     except OSError:
-        return exc.reason or ""
+        return ServerError(exc.code, exc.reason or "")
     try:
-        detail = json.loads(body).get("detail", body)
+        parsed = json.loads(body)
+        detail = parsed.get("detail", body)
+        envelope = parsed.get("error")
     except (ValueError, AttributeError):
-        return body
-    return detail if isinstance(detail, str) else json.dumps(detail)
+        return ServerError(exc.code, body)
+    code = envelope.get("code") if isinstance(envelope, dict) else None
+    text = detail if isinstance(detail, str) else json.dumps(detail)
+    return ServerError(exc.code, text.replace(HTTP_OPT_OUT, CLI_OPT_OUT), code)
 
 
 def route_batch(
@@ -184,7 +194,7 @@ def capabilities(url: str | None = None, model: str | None = None,
     except urllib.error.HTTPError as exc:
         if exc.code in _NOT_VERDICT:
             raise NoServer(f"{base} does not expose capability discovery") from exc
-        raise ServerError(exc.code, _detail(exc)) from exc
+        raise _server_error(exc) from exc
     except (urllib.error.URLError, OSError, json.JSONDecodeError) as exc:
         raise NoServer(f"capability discovery unavailable at {base}") from exc
     if not isinstance(payload, dict) or not {"family", "model"} <= payload.keys():

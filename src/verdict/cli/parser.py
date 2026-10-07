@@ -211,7 +211,8 @@ Examples:
 Loads one checkpoint, and the multilingual one only when a call asks for it (--lang multi). If
 model.path names a local checkpoint that is missing, it loads base laya instead and says so.
 Localhost only, no auth. POST /v1/decide answers as `verdict decide` does, with the same refusals
-and numbers (?allow_unmeasured=true, ?yesno=true opt out).
+and numbers (?allow_unmeasured=true, ?yesno=true opt out). A refusal is a 422 whose body
+has error.code "refused".
 
 Stop the one you started when you are done; it holds the model in GPU memory:
   kill $(lsof -ti TCP:8799 -sTCP:LISTEN)     # your url's port; never kill by name

@@ -142,8 +142,13 @@ def as_choice(questions: dict[str, Any], keep_measured: bool = True
     return out, rewritten
 
 
+#: How each front door spells the opt-out, so a refusal names the one its caller can use.
+CLI_OPT_OUT = "--allow-unmeasured"
+HTTP_OPT_OUT = "?allow_unmeasured=true"
+
+
 def prepare(state: Any, questions: dict[str, Any], *, model: str, allow_unmeasured: bool = False,
-            yesno: bool = False) -> tuple[dict[str, Any], set[str], list[str]]:
+            yesno: bool = False, opt_out: str = CLI_OPT_OUT) -> tuple[dict[str, Any], set[str], list[str]]:
     """What every front door does before asking: refuse a question about a field the state lacks
     and the shapes that measured at chance, then ask each new yes/no as a no/yes choice.
 
@@ -157,19 +162,19 @@ def prepare(state: Any, questions: dict[str, Any], *, model: str, allow_unmeasur
     problems = lint(questions)
     if missing and not allow_unmeasured:
         raise QuestionError("; ".join(missing) + ". Refused, because the model would answer from "
-                            "nothing; fix the state or the question, or --allow-unmeasured to "
+                            f"nothing; fix the state or the question, or {opt_out} to "
                             "ask anyway")
     if problems and not allow_unmeasured:
-        raise QuestionError(refusal(problems))
+        raise QuestionError(refusal(problems, opt_out))
     rewritten: set[str] = set()
     if not yesno:
         questions, rewritten = as_choice(questions, keep_measured=measured_on(model))
     return questions, rewritten, missing + problems
 
 
-def refusal(problems: list[str]) -> str:
+def refusal(problems: list[str], opt_out: str = CLI_OPT_OUT) -> str:
     return ("; ".join(problems) + ". Refused, because answers to this shape measured at chance; "
-            "--allow-unmeasured asks anyway")
+            f"{opt_out} asks anyway")
 
 
 def as_yesno(answers: dict[str, Any], rewritten: set[str]) -> dict[str, Any]:

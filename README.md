@@ -13,7 +13,7 @@ tickets, messages, agent turns) and a person or an LLM should read only what it 
 Apple Silicon, Python 3.11.
 
 ```sh
-uv tool install --python 3.11 'verdict[mlx,laya] @ git+https://github.com/iksnerd/verdict.git@v0.6.2'
+uv tool install --python 3.11 'verdict[mlx,laya] @ git+https://github.com/iksnerd/verdict.git@v0.6.3'
 verdict init        # picks a free port and writes ~/.config/verdict/config.toml
 verdict serve &     # holds the model, so each call costs milliseconds
 
@@ -66,8 +66,8 @@ chance. verdict refuses those questions and more than
   answers and shows what each one contributed.
 - **Other languages:** `--lang multi` switches to Laya's multilingual checkpoint.
 - **An HTTP API** on localhost ([docs/api.md](docs/api.md)) that answers as the CLI does, with
-  the same refusals and the same numbers, including TypeSafe Jev's `/v1/systemone` protocol, so
-  Jev's SDKs work against it.
+  the same refusals and the same numbers (a refusal is a 422 carrying `error.code` `refused`),
+  including TypeSafe Jev's `/v1/systemone` protocol, so Jev's SDKs work against it.
 - **Backend capabilities:** `GET /v1/capabilities` reports Laya/Jev limits and confidence
   semantics separately from the shared protocol ([SDK guide](docs/api.md#discovering-backend-differences)).
 - **Swap the backend:** `[model.extra]` names further local laya checkpoints; `SystemOneBackend`
