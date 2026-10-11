@@ -18,6 +18,10 @@ History is pushed, so do not rewrite it without asking.
   SDKs work via `TYPESAFE_BASE_URL`. `tests/test_systemone.py` pins that shape (read from
   `typesafe-sdk` 0.7.1's wire models, whose answer types are strict: floats must be floats).
 - Every backend implements `Backend` (`name`, `decide`). Anything new plugs in there.
+- verdict is not on PyPI, and the name `verdict` there is an unrelated project (Haize Labs). Every
+  install hint, in docs and in error messages, names the GitHub source (`'verdict[extras] @
+  git+https://github.com/iksnerd/verdict.git@vX.Y.Z'`); `tests/test_install_hints.py` fails on a bare
+  `pip install verdict` or `uv tool install 'verdict[...]'`.
 - verdict is a System 1 (Kahneman): fast typed judgments for a System 2, a person or an agent,
   to act on. It answers and never acts on an answer: no dispatch, no routing of work between
   models, nothing run because of a verdict. `verdict cascade` is the one place a second model is

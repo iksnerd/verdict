@@ -1,4 +1,4 @@
-"""Hosted Jev through TypeSafe's official SDK (`pip install 'verdict[jev]'`).
+"""Hosted Jev through TypeSafe's official SDK (the `jev` extra: `pip install typesafe-sdk`).
 
 The SDK owns the transport: authentication, retries with backoff and `Retry-After`, timeouts,
 HTTP/2 if asked, and request ids on errors. This module only translates: verdict's questions into
@@ -15,7 +15,9 @@ from typing import Any
 try:
     import typesafe_sdk as sdk
 except ImportError as exc:  # pragma: no cover - the message is the point
-    raise ImportError("JevBackend needs TypeSafe's SDK: pip install 'verdict[jev]'") from exc
+    raise ImportError("JevBackend needs TypeSafe's SDK: pip install typesafe-sdk (or reinstall "
+                      "verdict from GitHub with the jev extra; `verdict` on PyPI is a different "
+                      "project)") from exc
 
 from .capabilities import Capabilities, jev_capabilities
 from .errors import QuestionError

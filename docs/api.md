@@ -163,7 +163,7 @@ per server, so a cascade is two `verdict serve` processes and a client that merg
 
 ## Hosted Jev through TypeSafe's SDK
 
-`JevBackend` (`backend_jev.py`, `pip install 'verdict[jev]'`) is a `Backend` on the official
+`JevBackend` (`backend_jev.py`, the `jev` extra: `typesafe-sdk`) is a `Backend` on the official
 `typesafe-sdk`. The SDK owns the transport (authentication, retries with backoff and `Retry-After`,
 timeouts, request ids); the backend translates verdict's questions into the SDK's typed ones and its
 answers back, validates them with the same checks as `SystemOneBackend`, and maps the SDK's

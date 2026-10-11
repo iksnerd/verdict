@@ -45,8 +45,16 @@ with Verdict() as v:                       # the server `verdict serve` started
     r.nouls["act"].noul                    # 0.98
 ```
 
-Hosted Jev is optional: `pip install 'verdict[jev]'` adds TypeSafe's SDK and `TYPESAFE_API_KEY`
-supplies the key. Nothing leaves your machine unless you choose a command that says it will.
+Hosted Jev is optional. Add TypeSafe's SDK by reinstalling with the `jev` extra, and let
+`TYPESAFE_API_KEY` supply the key:
+
+```sh
+uv tool install --force --python 3.11 'verdict[mlx,laya,jev] @ git+https://github.com/iksnerd/verdict.git@v0.7.1'
+```
+
+verdict is installed from GitHub, not PyPI: the name `verdict` there is an unrelated project, so
+`pip install verdict` gets the wrong software. Nothing leaves your machine unless you choose a
+command that says it will.
 
 ## When it is the right tool
 
@@ -98,7 +106,7 @@ chance. verdict refuses those questions and more than
 - **Swap the backend:** `[model.extra]` names further local laya checkpoints;
   `verdict serve --systemone URL` (or `[systemone]` in the config) answers with any other
   `/v1/systemone` server instead, TypeSafe's Jev included (key in `$TYPESAFE_API_KEY`; every state
-  is sent there; hosted Jev goes through TypeSafe's SDK, `pip install 'verdict[jev]'`). It is a
+  is sent there; hosted Jev goes through TypeSafe's SDK, the `jev` extra above). It is a
   real, differently-trained model, not another laya checkpoint. `verdict examples --systemone URL`
   checks it against the same real inputs `examples/README.md` documents for Laya, with a match
   count and ms/call, not one-off questions.

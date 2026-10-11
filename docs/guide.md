@@ -36,6 +36,11 @@ verdict init      # writes ~/.config/verdict/config.toml
 verdict --version
 ```
 
+Add hosted Jev (TypeSafe's SDK) by reinstalling with the `jev` extra:
+`uv tool install --force --python 3.11 'verdict[mlx,laya,jev] @ git+https://github.com/iksnerd/verdict.git@v0.7.1'`.
+`verdict update` keeps it once it is installed. verdict is installed from GitHub, never `pip install
+verdict`: that name on PyPI is an unrelated project.
+
 verdict answers with base Laya (`aac6fef/laya-mlx`), which downloads itself from Hugging Face on
 first use. The author's fine-tune is private (its labels came from Gemini) and within noise of base
 Laya once a yes/no is asked as a no/yes choice (FINDINGS §40). `[model].path` points at any other

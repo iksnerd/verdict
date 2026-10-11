@@ -96,9 +96,16 @@ def _serve_remote(args, settings, url, key, create_app, uvicorn) -> int:
         try:
             from ..backend_jev import JevBackend
         except ImportError as exc:
-            raise ConfigError("hosted Jev uses TypeSafe's SDK, which is not installed: "
-                              "uv tool install --reinstall 'verdict[mlx,laya,jev]' (or "
-                              "`uv sync --extra jev` in a checkout)") from exc
+            from . import update
+
+            version = support._version().split()[-1]
+            extras = ",".join([*update.TOOL_EXTRAS.split(","), "jev"])
+            raise ConfigError(
+                "hosted Jev uses TypeSafe's SDK, which is not installed here. Add it with: "
+                f"uv tool install --force --python 3.11 'verdict[{extras}] @ "
+                f"git+{update._git_url(update.REPO_URL)}@v{version}' "
+                "(or `uv sync --extra jev` in a checkout). Not `pip install verdict`: "
+                "that name on PyPI is a different project") from exc
         backend = JevBackend(model, api_key=key, base_url=url)
     else:
         backend = SystemOneBackend(url, model, key)
