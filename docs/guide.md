@@ -31,7 +31,7 @@ what).
 verdict runs on Apple Silicon with Python 3.11:
 
 ```sh
-uv tool install --python 3.11 'verdict[mlx,laya] @ git+https://github.com/iksnerd/verdict.git@v0.7.0'
+uv tool install --python 3.11 'verdict[mlx,laya] @ git+https://github.com/iksnerd/verdict.git@v0.7.1'
 verdict init      # writes ~/.config/verdict/config.toml
 verdict --version
 ```
@@ -275,6 +275,7 @@ The rules that came out of doing it once:
 | "question 'x' asks about `field`, which the state does not have" | the bank was written for different data | rename the state's key or the backticked field |
 | `spread q: 0.58 to 0.65 ... narrow range` | the inputs don't vary where the question looks, or they're boilerplate | check who wrote them; filter bots and templates |
 | "... not found, so using base laya" | `[model].path` names a local checkpoint that is not there | fix the path, or remove it to use base Laya on purpose |
+| `verdict update` prints `Could not parse object` or `unable to read tree` | uv's cached clone of the repo lacks a tag pushed seconds ago | nothing: it retries once with a refresh, and if the update still fails it reinstalls the version you had and says so, so `verdict` keeps working |
 | "the server answered 422: ..." | the server refused the question bank; verdict reports this rather than loading a model locally. A refusal for a measured-at-chance shape has `code` `refused`; a malformed bank has no code | fix the bank the message names; a malformed bank fails the same way with no server running |
 | "... Refused, because answers to this shape measured at chance" | the question asks about a consequence, difficulty or absence, or names a field the state lacks | reword it to ask what the text says; `--allow-unmeasured` to ask anyway, or `calibrate` it on real labels |
 | "a yes/no cut needs both yes and no labels" | every labelled example in the calibration set has the same answer | label some of the other class; there is no cut to fit on one |

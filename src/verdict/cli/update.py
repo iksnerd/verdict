@@ -87,16 +87,35 @@ def _update_tool(args: argparse.Namespace) -> int:
     spec = f"verdict[{','.join(_extras())}] @ git+{_git_url(REPO_URL)}@v{newest}"
     install = ["uv", "tool", "install", "--force", "--python", "3.11", spec]
     code, out = _run(install)
-    if code != 0 and "Could not parse object" in out:
+    if code != 0 and any(marker in out for marker in STALE_CACHE):
         # uv resolved the new tag but its cached clone predates the commit, seen right after a tag
         # was pushed. Refreshing makes it fetch; once, so a real failure is not looped.
         code, out = _run(install[:3] + ["--refresh-package", "verdict"] + install[3:])
     if code != 0:
-        return support._fail(f"`uv tool install {spec}` failed:\n{out}")
+        return support._fail(f"`uv tool install {spec}` failed:\n{out}\n{_restore(current)}")
     print(f"updated {current} -> {newest}")
     if _server_up():
         print("A verdict server is running the old code: restart `verdict serve` to use it.")
     return 0
+
+
+#: What uv prints when its cached clone of the repo lacks a commit it just resolved: a tag pushed
+#: seconds ago. Both were seen releasing 0.7.0; a refresh fixes either.
+STALE_CACHE = ("Could not parse object", "unable to read tree")
+
+
+def _restore(version: str) -> str:
+    """Put the version that was installed back, and say what happened.
+
+    `uv tool install --force` removes the old install before it builds the new one, so a failed
+    update left no `verdict` on the PATH at all (found installing 0.7.0 from its own tag)."""
+    spec = f"verdict[{','.join(_extras())}] @ git+{_git_url(REPO_URL)}@v{version}"
+    install = ["uv", "tool", "install", "--force", "--python", "3.11", spec]
+    code, _ = _run(install)
+    if code == 0:
+        return f"restored v{version}, so `verdict` still works; the update did not happen"
+    return (f"v{version} could not be restored either, so `verdict` may be missing. Reinstall it with:\n"
+            f"  uv tool install --force --python 3.11 '{spec}'")
 
 
 def _git_url(url: str) -> str:

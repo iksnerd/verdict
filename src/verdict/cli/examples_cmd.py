@@ -89,6 +89,11 @@ def _systemone_ask(args: argparse.Namespace):
     return bench.systemone_asker(args.systemone, args.systemone_model, key)
 
 
+def _folders(root: Path) -> list[str]:
+    """Every example folder, banks and the others (a tree for `classify`, a Python script)."""
+    return sorted(p.name for p in root.iterdir() if p.is_dir() and not p.name.startswith((".", "_")))
+
+
 def _examples_cmd(args: argparse.Namespace) -> int:
     """Score examples/ banks with a backend, printing each row's answers."""
     try:
@@ -96,7 +101,9 @@ def _examples_cmd(args: argparse.Namespace) -> int:
     except FileNotFoundError as exc:
         return support._fail(exc)
 
-    available = _names(root)
+    # `--path` locates any example folder, since an installed copy has no other way to find the
+    # tree or the script; running one needs a bank.
+    available = _folders(root) if args.path else _names(root)
     names = args.name or available
     unknown = [n for n in names if n not in available]
     if unknown:

@@ -165,3 +165,24 @@ def test_examples_output_labels_a_choice_probability(monkeypatch, capsys):
     line = examples_cmd._format({"kind": {"type": "choice", "choice": "nit", "confidence": 0.1,
                                           "probabilities": {"nit": 0.7, "praise": 0.3}}})
     assert line == "kind=nit(p=0.70)"
+
+
+def test_examples_path_finds_the_folders_that_are_not_banks(capsys):
+    """banking-tree/ holds a tree for `classify` and python-api/ a script; the wheel ships both,
+    and `--path` is how an installed copy finds them."""
+    from pathlib import Path
+    assert cli.main(["examples", "--path", "banking-tree"]) == 0
+    assert (Path(capsys.readouterr().out.strip()) / "tree.json").is_file()
+    assert cli.main(["examples", "--path", "python-api"]) == 0
+    assert (Path(capsys.readouterr().out.strip()) / "demo.py").is_file()
+
+
+def test_examples_path_names_every_folder_when_one_is_unknown(capsys):
+    assert cli.main(["examples", "--path", "nonesuch"]) == 2
+    err = capsys.readouterr().err
+    assert "banking-tree" in err and "python-api" in err and "test-output" in err
+
+
+def test_running_a_folder_that_is_not_a_bank_says_so(capsys):
+    assert cli.main(["examples", "banking-tree"]) == 2
+    assert "no example banking-tree" in capsys.readouterr().err

@@ -425,8 +425,9 @@ you what the cascade is worth for your task, and says so when it is worth nothin
 ## banking-tree/
 
 Not a bank: a tree for `verdict classify`, the way past laya's 20-option limit. The 77 Banking77
-intents in ten groups of 2 to 12 options (`tree.json`), the one measured in FINDINGS §50. Real
-output on base Laya, on messages written for this README:
+intents in ten groups of 2 to 12 options (`tree.json`), the one measured in FINDINGS §50. From an
+installed copy, `verdict examples --path banking-tree` prints the folder (it works for
+`python-api` too). Real output on base Laya, on messages written for this README:
 
 ```
 $ verdict classify "My card still has not arrived and it has been two weeks" --tree tree.json

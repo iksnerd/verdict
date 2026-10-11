@@ -51,7 +51,7 @@ Examples:
   verdict decide '{"command": "cat .env"}' --questions touches_secret
   verdict decide '{"post": "buy followers now!!"}' --questions moderation
   verdict decide --jsonl --questions bank.json < states.jsonl > answers.jsonl
-  verdict classify "my transfer never arrived" --tree banking-tree.json        # over 20 options
+  verdict classify "my transfer never arrived" --tree tree.json     # over 20 options (examples/banking-tree)
   verdict cascade -q bank.json --escalate http://127.0.0.1:8801 < rows.jsonl   # Laya, then Jev
   verdict rank answers.jsonl about_money=1 says_leaving=0.5          # search by named answers
   verdict calibrate labelled.jsonl --questions bank.json --out fit.json
@@ -114,7 +114,7 @@ plus one per group tried, so --beam 2 is 3 passes and --beam 1 is 2.
 
 CLASSIFY_EPILOG = """\
 Examples:
-  verdict classify "my transfer never arrived" --tree banking-tree.json
+  verdict classify "my transfer never arrived" --tree "$(verdict examples --path banking-tree)/tree.json"
   verdict classify "$MSG" --tree tree.json --beam 3 --json
   git log -1 --format=%B | verdict classify - --tree commit-types.json --beam 1
 
