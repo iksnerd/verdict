@@ -1973,3 +1973,131 @@ tie, not a win over Jev. `--check` itself sends every labelled example to the se
 Laya's confidence is not calibrated, which is why `--share` is the default and `--below` is a fixed
 number only the user can justify. A better uncertainty signal than the largest probability is open:
 the oracle in §52 reaches 0.91 at 10% sent against 0.85 here.
+
+
+## 55. A fitted cut is the uncertainty signal that works; asking again a different way is not (2026-10-11)
+
+§52 left the cascade's weak spot: Laya's mistakes on look-alike inputs are confident (0.94 to 1.00),
+so a cut on its largest probability cannot see them, and the oracle that sends exactly Laya's errors
+reaches about 0.92 at 20% sent against 0.857 for the confidence signal (12 suites). Two ideas for a better signal were
+measured on the 12 bench suites (same items and seed; `scripts/eval_signals_collect.py`,
+`eval_signals_analyze.py`; each suite split in half, thresholds read off one half and scored on the
+other, as in §52).
+
+**Asking the same question another way does not help.** Per item, Laya was also asked with its
+options in the other order, and (for yes/no) as the plain yes/no. AUROC at flagging Laya's own
+mistakes, macro over 12 suites: largest probability 0.783, option-order disagreement 0.721, plain
+against choice disagreement 0.762, the average of the two orders 0.784, a sum of confidence and
+disagreement 0.779. The cascade built on any of them is level with the confidence one (10% sent:
+0.847 to 0.848; half: 0.874 to 0.877). Averaging the two orders does not improve Laya either
+(0.836 to 0.837), so option-order bias is not a lever on English choices. Laya's mistakes are
+consistent across forms, which is why asking differently cannot expose them.
+
+**Measuring against the fitted cut does.** Laya's yes/no scores are shifted: the cuts fitted on half
+of each suite were 0.14 (SST-2), 0.84 (spam), 0.19 (injection), 0.08 (Bulgarian) and 0.004 (Russian),
+none near 0.5. On the five yes/no suites, scored on the other half:
+
+| | SST-2 | spam | injection | Bulgarian | Russian | macro |
+|---|---|---|---|---|---|---|
+| Laya, cut at 0.5 | 0.710 | 0.920 | 0.780 | 0.850 | 0.810 | 0.814 |
+| Laya, fitted cut | 0.770 | 0.960 | 0.820 | 0.880 | 0.870 | **0.860** |
+| Jev | 0.920 | 0.950 | 0.850 | 0.990 | 0.900 | 0.922 |
+
+**Laya alone gains 0.046, on all five suites, with no training:** the default cut of 0.5 is wrong for
+these scores, and `verdict calibrate` fixes it from a labelled sample. And the distance to the fitted
+cut (in logit units) is a better signal for what to send than the distance to 0.5:
+
+| share sent to Jev | 10% | 20% | 30% | 50% |
+|---|---|---|---|---|
+| uncertainty = distance from 0.5 (§52) | 0.848 | 0.870 | 0.872 | 0.910 |
+| uncertainty = distance from the fitted cut | **0.882** | **0.906** | **0.916** | **0.926** |
+| a random share instead (Laya at the fitted cut) | 0.866 | 0.872 | 0.879 | 0.891 |
+
+Half sent matches Jev alone (0.922), and 30% sent gets 90% of the way from the fitted-cut Laya
+(0.860) to Jev. The gain over the old signal is part cut, part signal: Laya at the fitted cut already
+beats Laya at 0.5 by 0.046.
+
+**Live, through `verdict cascade --check --fit`** on the 200 public prompt-injection items: the cut
+fitted on 140 was 0.18; on the 60 held out Laya scored 0.733 at 0.5 and 0.767 at the cut, the cascade
+with 18 of 60 sent 0.850, and Jev 0.883. Sixty items is about plus or minus 0.1, so this agrees with
+the table above and is not an independent confirmation of it.
+
+**Caveats.** The fit needs labelled examples (here 100 per suite, half of each), so it is the
+`verdict calibrate` workflow, not something free. Five yes/no suites, about 100 test items each, one
+seed. The choice suites are not helped: a temperature changes no ranking. A confident error that
+lies on the right side of the fitted cut is still invisible. The oracle was measured on all 12
+suites (about 0.92 at 20% sent), not on these five, so the headroom that remains is not quantified
+here.
+
+
+## 56. Conformal prediction gives a coverage guarantee, not a better selection (2026-10-11)
+
+Split conformal prediction turns an answer into a set of labels that contains the truth with a chosen
+probability, and "escalate unless the set is one label" is a cascade rule with an error tolerance
+(alpha) instead of a share. Measured on the 12 bench suites with base Laya's shipped answers
+(`scripts/eval_conformal.py`; each suite split in half as in §52, the threshold fitted on the
+calibration half, everything reported on the other half):
+
+| alpha | target coverage | coverage | escalated (non-singleton) | cascade, conformal | same number by least confidence | random |
+|---|---|---|---|---|---|---|
+| 0.05 | 0.95 | 0.936 | 32% | 0.872 | 0.872 | 0.849 |
+| 0.10 | 0.90 | 0.880 | 21% | 0.850 | 0.850 | 0.839 |
+| 0.20 | 0.80 | 0.781 | 20% | 0.850 | 0.850 | 0.834 |
+| 0.30 | 0.70 | 0.672 | 28% | 0.848 | 0.848 | 0.836 |
+
+(Laya alone 0.825, Jev alone 0.881.) **Conformal selects exactly as well as the confidence signal of
+§52 and no better**: for two-option questions "the set has one label" is a confidence threshold, and
+the two rules pick the same items. Both beat sending at random by 0.02 to 0.03. Coverage lands 1 to 3
+points under the target on this split, plausible for about 100 calibration items per suite.
+
+What it does give is a contract. When Laya commits to a single label it is right 0.91 of the time at
+alpha 0.05, 0.88 at 0.10 and 0.87 to 0.88 at 0.20 and 0.30, against 0.825 overall, and on the items
+where it abstains it is right only 0.60 to 0.69. That is not the guarantee (the coverage guarantee is
+about the set, not about a singleton), and the share escalated is not a clean dial: it falls from 32% to
+20% and rises to 28% as alpha grows. Measured why: sets with several labels fall (31%, 18%, 9%, 6%
+of items at alpha 0.05, 0.10, 0.20, 0.30) while empty sets rise (2%, 4%, 12%, 23%), and both count as
+abstentions.
+
+**Decision.** Not shipped as a cascade selector: `--share` is the predictable budget and the fitted cut
+(§55) the better signal. A yes/no, abstain or no answer from `verdict calibrate` is possible later
+(the same information as a band around the cut), but nothing here argues for it over reading the
+items nearest the cut. One sample, about 100 test items per suite, one seed.
+
+
+## 57. A few-shot head on Laya's frozen encoder does not beat Laya's own answer (2026-10-11)
+
+The idea: keep Laya's encoder as it is and train a small classifier on its pooled embeddings from a
+handful of labelled examples, with no training of the model. Tried on the bench's seven choice tasks
+(sst2, spam, injection, AG News, emotion, Bulgarian and Russian reviews; 200 to 240 items each; Laya's
+base encoder for the English tasks and the multilingual one for Cyrillic; texts clipped to 128 tokens;
+`scripts/eval_probe_collect.py`, `eval_probe_analyze.py`). For each task and each n, n labelled examples
+per class are drawn (10 seeds), an L2 logistic regression (C fixed at 0.1, nothing tuned on the test
+items) is fitted on standardized embeddings, and every other item is scored; zero-shot Laya and Jev are
+scored on the same items. `blend` is the geometric mean of the probe and Laya's zero-shot answer;
+`dedicated` is the same probe on `embeddinggemma:300m` (Google's EmbeddingGemma, about 300M parameters, 768-dimensional vectors, run through Ollama), as a reference. Accuracy, macro over the tasks:
+
+| labelled per class | tasks | Laya zero-shot | Jev zero-shot | probe on Laya's encoder | blend | `embeddinggemma:300m` |
+|---|---|---|---|---|---|---|
+| 5 | 7 | 0.841 | 0.856 | 0.671 | 0.841 | 0.786 |
+| 10 | 7 | 0.842 | 0.856 | 0.717 | 0.846 | 0.820 |
+| 20 | 7 | 0.841 | 0.859 | 0.765 | 0.850 | 0.850 |
+| 40 | 5 | 0.898 | 0.934 | 0.861 | 0.918 | 0.928 |
+
+(40 per class needs 80 items of the smallest class, so emotion and AG News drop out; the zero-shot
+columns are macros over the same five tasks.)
+
+**A head on Laya's encoder loses to Laya's own zero-shot head at every size tried**: 0.67 to 0.77
+against 0.84 for 5 to 20 per class, and 0.861 against 0.898 at 40. Mixing the two buys little (+0.005 at
+5, +0.009 at 20, +0.020 at 40). The pooled embeddings are weak features here, consistent with §53 (they
+could not retrieve), and Laya's decision head already encodes the question; a few dozen examples do not
+out-learn it. **Not building a `verdict fit`.**
+
+The reference column is the useful side result. A probe on `embeddinggemma:300m` reaches 0.850 at 20
+per class and 0.928 at 40, beside Jev's 0.859 and 0.934, and on prompt injection at 20 per class it is
+0.883 against Laya's 0.803 and Jev's 0.869. That is an embedding model with labels (one model, not compared with others), not an improvement
+to Laya, and it sits with §53: Laya judges typed facts, a retrieval or embedding model plus a few labels
+finds what Laya cannot. It stays documentation-only until someone needs it.
+
+**Caveats.** One fixed regularization and no tuning, so a tuned probe on Laya's encoder could do
+somewhat better. 200 to 240 items per task limits n to 40 per class. Public English and Cyrillic review,
+spam, prompt and news sets; a task far from these may differ.

@@ -147,3 +147,91 @@ def test_a_share_sends_exactly_that_many_even_when_confidences_tie():
     assert c.select([0.5, 0.5, 0.5, 0.9], share=0.5) == {0, 1}
     assert c.select([0.9, 0.9, 0.9, 0.9], share=0.25) == {0}
     assert c.select([0.3, 0.9], share=0.0) == set()
+
+
+# ---- a fitted cut as the uncertainty signal (FINDINGS §55) ---------------------------------------
+
+import math  # noqa: E402
+
+
+def noul_row(p):
+    return {"model": "laya", "answers": {"spam": {"type": "noul", "noul": p, "confidence": max(p, 1 - p)}}}
+
+
+def spam_primary(table):
+    return lambda state, qs: noul_row(table[state["i"]])
+
+
+class SpamSecond:
+    def __init__(self):
+        self.calls = []
+
+    def __call__(self, state, qs):
+        self.calls.append(state["i"])
+        return {"model": "jev", "answers": {"spam": {"type": "noul", "noul": 0.01}}}
+
+
+SPAM_BANK = {"spam": {"type": "noul", "instructions": "Is this spam?"}}
+
+
+def test_with_a_cut_confidence_is_the_distance_from_the_cut_not_from_one_half():
+    near = cascade.confidence({"type": "noul", "noul": 0.80}, cut=0.80)
+    far = cascade.confidence({"type": "noul", "noul": 0.99}, cut=0.80)
+    assert near == pytest.approx(0.0, abs=1e-9) and far > 2
+    assert cascade.confidence({"type": "noul", "noul": 0.9}) == pytest.approx(0.9)   # unchanged without one
+
+
+def test_a_row_sitting_on_the_cut_is_escalated_first_even_when_it_looks_confident():
+    table = [0.99, 0.80, 0.30]       # raw confidence .99 / .80 / .70; distance from a cut of .8: 3.2 / 0 / 2.2
+    fits = {"spam": {"type": "noul", "cut": 0.80}}
+    sec = SpamSecond()
+    cascade.run([{"i": i} for i in range(3)], SPAM_BANK, spam_primary(table), sec, share=1 / 3, fits=fits)
+    assert sec.calls == [1]
+    sec2 = SpamSecond()
+    cascade.run([{"i": i} for i in range(3)], SPAM_BANK, spam_primary(table), sec2, share=1 / 3)
+    assert sec2.calls == [2], "without the fit the least-sure row is the one nearest 0.5"
+
+
+def test_primary_answers_carry_the_decision_at_the_cut():
+    fits = {"spam": {"type": "noul", "cut": 0.80}}
+    out = cascade.run([{"i": 0}, {"i": 1}], SPAM_BANK, spam_primary([0.85, 0.70]), SpamSecond(),
+                      share=0.0, fits=fits)
+    a0, a1 = (r["answers"]["spam"] for r in out.rows)
+    assert a0["decision"] is True and a1["decision"] is False and a0["cut"] == 0.80
+
+
+def test_a_fixed_confidence_cannot_be_combined_with_a_fitted_cut():
+    fits = {"spam": {"type": "noul", "cut": 0.80}}
+    with pytest.raises(QuestionError, match="share"):
+        cascade.run([{"i": 0}], SPAM_BANK, spam_primary([0.5]), SpamSecond(), below=0.6, fits=fits)
+
+
+def test_check_with_a_holdout_fits_on_part_and_reports_on_the_rest():
+    """Scores sit well under 0.5 for both classes, so the default cut calls everything no."""
+    n = 20
+    table = [0.40 + 0.01 * (i % 3) if i % 2 == 0 else 0.05 + 0.01 * (i % 3) for i in range(n)]
+    labels = [{"spam": i % 2 == 0} for i in range(n)]
+    report = cascade.check([{"i": i} for i in range(n)], SPAM_BANK, labels, spam_primary(table),
+                           SpamSecond(), share=0.5, holdout=0.3, errors=(ValueError,))
+    r = report["spam"]
+    assert r["n"] == 6 and 0.05 < r["cut"] < 0.40
+    assert r["primary_raw"] < r["primary"] == pytest.approx(1.0), "the fitted cut beats the default 0.5"
+    assert r["fit"]["type"] == "noul" and r["fit"]["cut"] == r["cut"]
+
+
+def test_check_without_a_holdout_still_measures_every_row_at_the_given_fit():
+    n = 8
+    table = [0.9, 0.1] * 4
+    report = cascade.check([{"i": i} for i in range(n)], SPAM_BANK, [{"spam": i % 2 == 0} for i in range(n)],
+                           spam_primary(table), SpamSecond(), share=0.5, errors=(ValueError,))
+    assert report["spam"]["n"] == 8 and report["spam"]["cut"] is None
+    assert report["spam"]["primary"] == report["spam"]["primary_raw"]
+
+
+def test_with_a_fit_an_escalated_yes_no_still_carries_a_decision_and_says_at_what_cut():
+    fits = {"spam": {"type": "noul", "cut": 0.80}}
+    out = cascade.run([{"i": 0}, {"i": 1}], SPAM_BANK, spam_primary([0.99, 0.80]), SpamSecond(),
+                      share=0.5, fits=fits)
+    kept, sent = (r["answers"]["spam"] for r in out.rows)
+    assert kept["tier"] == "primary" and kept["decision"] is True and kept["cut"] == 0.80
+    assert sent["tier"] == "escalated" and sent["decision"] is False and sent["cut"] == 0.5

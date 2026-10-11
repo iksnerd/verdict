@@ -91,6 +91,13 @@ verdict cascade -q bank.json --escalate http://127.0.0.1:8801 --share 0.3 < rows
 
 `--check` asks the second server about your labelled examples and reports, per question, the primary,
 the cascade and the second on their own, and names the questions where escalating would not help.
+
+Laya's yes/no scores are shifted away from 0.5 (fitted cuts of 0.004 to 0.84 on the bench suites), so
+fit the cut too: `--check ... --fit --out fit.json` fits it on 70% of your labelled examples and reports
+the other 30%, and `--calibration fit.json` then decides each yes/no at that cut and sends the answers
+*nearest* it. On five yes/no suites that took Laya alone from 0.814 to 0.860, and the cascade at 30%
+sent from 0.872 to 0.916 (§55). Asking Laya again in another form (options swapped, plain against
+choice) does not find its mistakes better than its own probabilities do (§55).
 Each output row marks every answer `primary` or `escalated`, and a line on stderr says how many
 states were sent out. Live on 200 public prompt-injection items: Laya 0.805, Jev 0.845, the cascade
 with 60 of 200 sent 0.845; on AG News the check said escalating would not help (§54).

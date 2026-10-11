@@ -57,8 +57,9 @@ Examples:
   verdict calibrate labelled.jsonl --questions bank.json --out fit.json
   verdict docs findings 38                                          # read a cited section
 
-The scores are uncalibrated: the ordering is trustworthy, the absolute numbers are not. Fit a
-cut on your own labelled examples (`verdict calibrate`) before gating anything on one.
+The scores are uncalibrated: the ordering is trustworthy, the absolute numbers are not, and 0.5
+is the wrong line for a yes/no (a fitted cut beat it on all five bench suites, §55). Fit a cut on
+your own labelled examples (`verdict calibrate`) before gating anything on one.
 
 Ask about what the text says. `ask` and `decide` refuse (exit 2) the shapes that scored at chance:
 a question about a consequence, difficulty or risk (FINDINGS §25, §29), a yes/no about an absence
@@ -86,6 +87,8 @@ Ask one question about one text, inline, and print one line.
   -o A -o B ...    choice; prints the top option and its probability (refund 0.61)
   -l LOW -l ...    score, levels lowest first; prints expected level and top level (1.30/2 high)
 
+A bare yes/no probability is not a decision: 0.5 is not the line between yes and no for Laya, so
+pass --cut (a number, or a `verdict calibrate` file) when you need yes or no (FINDINGS §55).
 A new yes/no is asked as a choice between no and yes and printed as P(yes): the plain form ranked
 positive reviews at 0.79 with none over 0.5, the no/yes choice at 0.96 (FINDINGS §33, §38).
 On the fine-tune, measured questions (`verdict questions`) are asked as measured; --yesno sends
@@ -136,8 +139,11 @@ it worse. Run --check on labelled examples first.
 
 Confidence is the probability of the answer given, from the primary's own numbers, so an
 uncalibrated model still ranks its answers; --share reads the cut from the batch, --below fixes
-it. Each output row marks every answer "primary" or "escalated". The second server sees only the
-escalated questions of the escalated states, and a summary on stderr says how many that was.
+it. Laya's yes/no scores are shifted away from 0.5, so a fitted cut helps twice (FINDINGS §55):
+it is the better decision (0.81 to 0.86 on five bench suites), and the answers nearest it are
+the ones worth sending (30% sent: 0.92, against 0.87 measured from 0.5). Each output row marks
+every answer "primary" or "escalated". The second server sees only the escalated questions of
+the escalated states, and a summary on stderr says how many that was.
 """
 
 CASCADE_EPILOG = """\
@@ -145,6 +151,8 @@ Examples:
   verdict cascade -q is_spam --escalate http://127.0.0.1:8801 < messages.jsonl
   verdict cascade -q bank.json --escalate http://127.0.0.1:8801 --share 0.2 < rows.jsonl
   verdict cascade -q bank.json --escalate http://127.0.0.1:8801 --check labelled.jsonl
+  verdict cascade -q bank.json --escalate http://127.0.0.1:8801 --check labelled.jsonl --fit --out fit.json
+  verdict cascade -q bank.json --escalate http://127.0.0.1:8801 --calibration fit.json < rows.jsonl
 
 The second server is usually `verdict serve --systemone https://api.typesafe.ai --port 8801`
 (needs $TYPESAFE_API_KEY); every escalated text is sent to Jev and billed. --check asks it about
@@ -615,6 +623,15 @@ def main(argv: list[str] | None = None) -> int:
     cs.add_argument("--check", metavar="LABELLED.jsonl",
                     help="measure on labelled examples whether escalating helps; asks the second "
                          "server about every example")
+    cs.add_argument("--calibration", metavar="FIT.json",
+                    help="a `verdict calibrate` file (or one from --check --fit --out): a yes/no "
+                         "is decided at its fitted cut and the unsure are those nearest it, not "
+                         "nearest 0.5 (FINDINGS §55); needs --share")
+    cs.add_argument("--fit", action="store_true",
+                    help="with --check: fit each yes/no cut on 70%% of the labelled examples and "
+                         "report the other 30%%, so the numbers are not flattered by the fit")
+    cs.add_argument("--out", metavar="FILE",
+                    help="with --check --fit: save the fitted cuts, for --calibration")
     cs.add_argument("--json", action="store_true", help="with --check, print the report as JSON")
     quality_flag(cs)
     server_flags(cs)

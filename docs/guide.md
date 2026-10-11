@@ -31,13 +31,13 @@ what).
 verdict runs on Apple Silicon with Python 3.11:
 
 ```sh
-uv tool install --python 3.11 'verdict[mlx,laya] @ git+https://github.com/iksnerd/verdict.git@v0.7.1'
+uv tool install --python 3.11 'verdict[mlx,laya] @ git+https://github.com/iksnerd/verdict.git@v0.8.0'
 verdict init      # writes ~/.config/verdict/config.toml
 verdict --version
 ```
 
 Add hosted Jev (TypeSafe's SDK) by reinstalling with the `jev` extra:
-`uv tool install --force --python 3.11 'verdict[mlx,laya,jev] @ git+https://github.com/iksnerd/verdict.git@v0.7.1'`.
+`uv tool install --force --python 3.11 'verdict[mlx,laya,jev] @ git+https://github.com/iksnerd/verdict.git@v0.8.0'`.
 `verdict update` keeps it once it is installed. verdict is installed from GitHub, never `pip install
 verdict`: that name on PyPI is an unrelated project.
 
@@ -115,8 +115,10 @@ verdict decide --jsonl -q examples/room-triage/bank.json < examples/room-triage/
 ## Turning a score into a decision
 
 The scores are uncalibrated. The ordering carries signal; the absolute number doesn't. An
-`rm -rf` scored 0.37 "destructive". To gate on a score, fit a cut on examples whose answer you
-know:
+`rm -rf` scored 0.37 "destructive". Laya's yes/no scores are shifted away from 0.5: the cuts fitted
+on five public suites (base Laya) were 0.004 to 0.84, none near 0.5, and fitting one took accuracy
+from 0.81 to 0.86 on examples it never saw, on every suite (FINDINGS §55). So 0.5 is the wrong line;
+fit a cut on examples whose answer you know:
 
 ```sh
 verdict calibrate labelled.jsonl -q bank.json --out fit.json
@@ -294,7 +296,7 @@ The rules that came out of doing it once:
 | command | does |
 |---|---|
 | `verdict ask TEXT QUESTION` | one question inline: yes/no, `-o` choice, `-l` score; `--cut` sets the exit status |
-| `verdict cascade -q BANK --escalate URL` | Laya answers every state from stdin; a second server (Jev) re-asks the least-sure `--share` (default 0.3) or those under `--below`; rows say `primary` or `escalated`; `--check LABELLED.jsonl` measures whether it helps for the task (§52, §54) |
+| `verdict cascade -q BANK --escalate URL` | Laya answers every state from stdin; a second server (Jev) re-asks the least-sure `--share` (default 0.3) or those under `--below`; rows say `primary` or `escalated`; `--check LABELLED.jsonl` measures whether it helps for the task, `--fit` (with `--out`) fits each yes/no cut on 70% and reports the held-out 30%, `--calibration FILE` uses a fitted cut to decide and to choose what to send (§52, §54, §55) |
 | `verdict classify TEXT --tree FILE` | one text into one leaf of a two-level tree, for more than 20 options: groups of at most 20, then the options of the best `--beam` groups (default 2); 77 options went from 0.38 flat to 0.55 (§50) |
 | `verdict decide STATE -q BANK` | a bank of questions about one state, as JSON; `--jsonl` for many states |
 | `verdict calibrate LABELLED -q BANK` | fits a cut or temperature on labelled examples, reported held out |

@@ -27,7 +27,9 @@ EVALS = Path("evals/router_prompts.jsonl")
 #: input, this is a replay cache so a threshold sweep or a scorecard rerun costs nothing and
 #: returns the same numbers. Delete it to re-measure.
 CACHE = Path("data/router_probs.json")
-DEFAULT_MODEL = "models/verdict-v1-mlx"
+#: Base Laya, what an install runs. The private fine-tune is opt-in with --model; a default that
+#: names weights most users do not have makes the refit fail for them.
+DEFAULT_MODEL = "aac6fef/laya-mlx"
 
 #: `difficulty` runs 0 to 3; `is_sensitive` is a probability.
 D_GRID = [i / 20 for i in range(0, 61)]

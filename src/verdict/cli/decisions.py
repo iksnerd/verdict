@@ -250,6 +250,18 @@ def _cascade_cmd(args: argparse.Namespace) -> int:
     except ValueError as exc:
         return support._fail(exc)
 
+    if args.fit and not args.check:
+        return support._fail("--fit fits a cut on labelled examples, so it needs --check LABELLED.jsonl")
+    if args.out and not (args.check and args.fit):
+        return support._fail("--out saves the cuts that --check --fit finds; add both")
+    if args.calibration and below is not None:
+        return support._fail("a fitted cut measures the unsure as a distance in logit units, not a "
+                             "probability: use --share with --calibration, not --below")
+    try:
+        fits = _read_fits(args.calibration)
+    except (OSError, ValueError) as exc:
+        return support._fail(f"{args.calibration}: {exc}")
+
     primary = inference._Asker(args)
     flags = {"allow_unmeasured": True} if args.allow_unmeasured else {}
     errors = (client.NoServer, client.ServerError, client.ServerTimeout)
@@ -271,13 +283,24 @@ def _cascade_cmd(args: argparse.Namespace) -> int:
         except (KeyError, ValueError, OSError) as exc:
             return support._fail(f"{args.check}: {exc}")
         report = cascade.check(states, questions, labels, primary, secondary, share=share,
-                               below=below, errors=errors)
+                               below=below, fits=fits, holdout=0.3 if args.fit else None,
+                               errors=errors)
+        if args.out:
+            Path(args.out).write_text(json.dumps(
+                {"questions": {q: r["fit"] for q, r in report.items() if r["fit"]}}, indent=2) + "\n")
+            print(f"verdict: wrote the fitted cuts to {args.out}; use them with --calibration",
+                  file=sys.stderr)
         if args.json:
             print(json.dumps(report, indent=2))
             return 0
+        held = " (held out)" if args.fit else ""
         for qid, r in report.items():
-            print(f"{qid}: primary {r['primary']:.3f}  cascade {r['cascade']:.3f} "
+            at = (f"primary {r['primary']:.3f} at cut {r['cut']:.3f} (at 0.5: {r['primary_raw']:.3f})"
+                  if r["cut"] is not None else f"primary {r['primary']:.3f} at 0.5")
+            print(f"{qid}{held}: {at}  cascade {r['cascade']:.3f} "
                   f"({r['escalated']} of {r['n']} escalated)  second {r['secondary']:.3f}")
+        if args.fit:
+            print("fitted on 70% of the examples; the numbers above are the 30% held out")
         no = [q for q, r in report.items() if not r["helps"]]
         if no:
             print(f"escalating would not help for: {', '.join(no)}. The second backend does not beat "
@@ -298,7 +321,7 @@ def _cascade_cmd(args: argparse.Namespace) -> int:
     if not numbered:
         return support._fail("no states on stdin; pipe one JSON state (or text) per line")
     result = cascade.run([state for _, state in numbered], questions, primary, secondary,
-                         share=share, below=below, errors=errors)
+                         share=share, below=below, fits=fits, errors=errors)
     for (index, state), row in zip(numbered, result.rows):
         print(json.dumps({"index": index, "state": state, **row}), flush=True)
     kept = len(numbered) - result.states_sent

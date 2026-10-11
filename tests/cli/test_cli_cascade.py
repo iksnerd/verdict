@@ -148,3 +148,94 @@ def test_the_command_has_help_with_an_example_and_its_exit_status(capsys):
         cli.main(["cascade", "--help"])
     out = capsys.readouterr().out
     assert "Example" in out and "Exit status" in out and "FINDINGS" in out
+
+
+# ---- a fitted cut: --calibration to use one, --check --fit to find one ---------------------------
+
+SPAM_BANK = json.dumps({"spam": {"type": "noul", "instructions": "Is `text` spam?"}})
+
+
+@pytest.fixture
+def many(monkeypatch):
+    """20 states. The primary scores spam 0.40 for even i and 0.05 for odd, so a cut at 0.5 calls all
+    of them no; the second server is right on every one."""
+    seen = []
+
+    def decide(state, questions, url=None, model=None, **flags):
+        i = int(state["text"].split()[-1])
+        if url == SECOND:
+            seen.append(i)
+            return {"model": "second", "answers": {"spam": {"type": "noul", "noul": 0.95 if i % 2 == 0 else 0.02}}}
+        p = 0.40 if i % 2 == 0 else 0.05
+        return {"model": "primary", "answers": {"spam": {"type": "choice", "choice": "no",
+                "probabilities": {"no": 1 - p, "yes": p}, "confidence": 0.5}}}
+
+    monkeypatch.setattr(client, "decide", decide)
+    return seen
+
+
+def labelled_many(tmp_path, n=20):
+    path = tmp_path / "many.jsonl"
+    path.write_text("".join(json.dumps({"state": {"text": f"msg {i}"}, "label": i % 2 == 0}) + "\n"
+                            for i in range(n)))
+    return str(path)
+
+
+def write_fit(tmp_path, cut):
+    path = tmp_path / "fit.json"
+    path.write_text(json.dumps({"questions": {"spam": {"type": "noul", "cut": cut}}}))
+    return str(path)
+
+
+def test_calibration_makes_the_unsure_the_ones_nearest_the_cut(servers, monkeypatch, tmp_path, capsys):
+    fit = write_fit(tmp_path, 0.97)          # row 2's spam score is 0.97: it sits on the cut
+    stdin(monkeypatch)
+    code, rows, _ = cli.main(["cascade", "-q", BANK, "--escalate", SECOND, "--server-only", "--share",
+                              "0.25", "--calibration", fit]), None, None
+    out = capsys.readouterr().out
+    rows = [json.loads(l) for l in out.splitlines() if l.startswith("{")]
+    assert code == 0
+    assert [i for i, r in enumerate(rows) if "spam" in r["escalated"]] == [2]
+    assert rows[0]["answers"]["spam"]["decision"] is True and rows[0]["answers"]["spam"]["cut"] == 0.97
+
+
+def test_a_fitted_cut_and_below_are_a_usage_error(servers, monkeypatch, tmp_path, capsys):
+    stdin(monkeypatch)
+    code, _, err = run(["--below", "0.6", "--calibration", write_fit(tmp_path, 0.5)], capsys)
+    assert code == 2 and "share" in err and servers["second"] == []
+
+
+def test_fit_needs_check(servers, monkeypatch, capsys):
+    stdin(monkeypatch)
+    code, _, err = run(["--fit"], capsys)
+    assert code == 2 and "--check" in err
+
+
+def test_check_fit_finds_the_cut_reports_the_held_out_part_and_saves_the_fit(many, tmp_path, capsys):
+    out_file = tmp_path / "fit.json"
+    code = cli.main(["cascade", "-q", SPAM_BANK, "--escalate", SECOND, "--server-only", "--share", "0.5",
+                     "--check", labelled_many(tmp_path), "--fit", "--out", str(out_file), "--json"])
+    report = json.loads(capsys.readouterr().out)["spam"]
+    assert code == 0 and report["n"] == 6, "6 of 20 are held out"
+    assert 0.05 < report["cut"] < 0.40 and report["primary_raw"] < report["primary"]
+    saved = json.loads(out_file.read_text())["questions"]["spam"]
+    assert saved["type"] == "noul" and saved["cut"] == report["cut"]
+
+
+def test_check_fit_in_words_says_what_was_held_out(many, tmp_path, capsys):
+    cli.main(["cascade", "-q", SPAM_BANK, "--escalate", SECOND, "--server-only", "--share", "0.5",
+              "--check", labelled_many(tmp_path), "--fit"])
+    out = capsys.readouterr().out
+    assert "held out" in out and "cut " in out and "at 0.5" in out
+
+
+def test_a_saved_fit_is_what_calibration_reads(many, tmp_path, monkeypatch, capsys):
+    out_file = tmp_path / "fit.json"
+    cli.main(["cascade", "-q", SPAM_BANK, "--escalate", SECOND, "--server-only", "--share", "0.5",
+              "--check", labelled_many(tmp_path), "--fit", "--out", str(out_file)])
+    capsys.readouterr()
+    monkeypatch.setattr("sys.stdin", io.StringIO("".join(json.dumps({"text": f"msg {i}"}) + "\n" for i in range(6))))
+    code = cli.main(["cascade", "-q", SPAM_BANK, "--escalate", SECOND, "--server-only", "--share", "0.5",
+                     "--calibration", str(out_file)])
+    rows = [json.loads(l) for l in capsys.readouterr().out.splitlines() if l.startswith("{")]
+    assert code == 0 and all("decision" in r["answers"]["spam"] for r in rows)

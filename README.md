@@ -18,7 +18,7 @@ can answer instead (`verdict serve --systemone`), or only for the answers Laya i
 Apple Silicon, Python 3.11.
 
 ```sh
-uv tool install --python 3.11 'verdict[mlx,laya] @ git+https://github.com/iksnerd/verdict.git@v0.7.1'
+uv tool install --python 3.11 'verdict[mlx,laya] @ git+https://github.com/iksnerd/verdict.git@v0.8.0'
 verdict init        # picks a free port and writes ~/.config/verdict/config.toml
 verdict serve &     # holds the model, so each call costs milliseconds
 
@@ -33,6 +33,11 @@ kill $(lsof -ti TCP:8799 -sTCP:LISTEN)   # holds the model in GPU memory; stop i
 
 The model, [Laya](https://huggingface.co/convaiinnovations/laya) (`aac6fef/laya-mlx`,
 Apache-2.0), downloads itself on first use. `verdict update` moves to the newest release.
+
+A yes/no comes back as P(yes), and 0.5 is not the line between yes and no: Laya's scores are shifted,
+and a cut fitted on your own labelled examples (`verdict calibrate labelled.jsonl -q bank.json --out
+fit.json`, then `--cut fit.json`) took accuracy from 0.81 to 0.86 on five public suites
+([FINDINGS §55](docs/FINDINGS.md)).
 
 The same thing from Python, with typed questions and a result grouped by type:
 
@@ -49,7 +54,7 @@ Hosted Jev is optional. Add TypeSafe's SDK by reinstalling with the `jev` extra,
 `TYPESAFE_API_KEY` supply the key:
 
 ```sh
-uv tool install --force --python 3.11 'verdict[mlx,laya,jev] @ git+https://github.com/iksnerd/verdict.git@v0.7.1'
+uv tool install --force --python 3.11 'verdict[mlx,laya,jev] @ git+https://github.com/iksnerd/verdict.git@v0.8.0'
 ```
 
 verdict is installed from GitHub, not PyPI: the name `verdict` there is an unrelated project, so
@@ -113,8 +118,9 @@ chance. verdict refuses those questions and more than
 - **Laya first, Jev for the unsure:** `verdict cascade -q BANK --escalate URL` answers everything
   locally and re-asks a second server about the least-sure answers only. On prompt injection,
   sending 30% matched Jev alone (0.845 against Laya's 0.805); `--check` tells you per task whether
-  it helps, and says so when it would not (AG News). Every escalated text leaves the machine
-  ([FINDINGS §52, §54](docs/FINDINGS.md)).
+  it helps, and says so when it would not (AG News). Fitting the yes/no cut (`--fit`, `--calibration`)
+  lifts Laya alone from 0.81 to 0.86 on five bench suites and makes the cascade pick better.
+  Every escalated text leaves the machine ([FINDINGS §52, §54, §55](docs/FINDINGS.md)).
 - **More than 20 options:** `verdict classify TEXT --tree FILE` walks a two-level tree. On Banking77
   (77 intents) it took base Laya from 0.38 flat to 0.55 ([FINDINGS §50](docs/FINDINGS.md)); the tree
   is `examples/banking-tree/tree.json`. For topical labels an embedding model does better still

@@ -414,6 +414,11 @@ jq -c .state examples/cascade/messages.jsonl | \
 # verdict: escalated 6 of 24 answers to http://127.0.0.1:8801: 6 of 24 states were sent there, 18 stayed on the primary
 ```
 
+With a few hundred labelled examples add `--fit` to the check: it fits the yes/no cut on 70% and
+reports the other 30%, `--out fit.json` saves it, and `--calibration fit.json` makes the cascade
+decide at that cut and send the answers nearest it (FINDINGS §55). Twenty-four rows is too few for
+that, so it is not shown here.
+
 Sending a quarter took Laya from 0.750 to 0.833, and half (`--share 0.5`) to 0.875, against Jev
 alone at 0.958 while three quarters of the messages stayed on this machine. Read the 25% run
 closely: of the six texts sent, two were Laya's mistakes and were fixed (the 0.84 and 0.64 ones),

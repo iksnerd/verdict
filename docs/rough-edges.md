@@ -80,7 +80,9 @@ them out unless you have measured otherwise.
 
 The checkpoints ship over-confident, and the multilingual one with no fitted temperatures (§2).
 Trust the order, not the number. **`verdict calibrate`** fits a cut from your own labelled examples
-and reports it on a held-out split.
+and reports it on a held-out split. It matters: Laya's yes/no scores sit away from 0.5 (fitted cuts
+of 0.004 to 0.84 on five bench suites), and deciding at the fitted cut instead of 0.5 took accuracy
+from 0.81 to 0.86 on held-out items, on every suite (§55).
 
 ## More questions cost more passes, and more is not better
 
