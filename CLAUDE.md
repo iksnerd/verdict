@@ -19,10 +19,12 @@ History is pushed, so do not rewrite it without asking.
   `typesafe-sdk` 0.7.1's wire models, whose answer types are strict: floats must be floats).
 - Every backend implements `Backend` (`name`, `decide`). Anything new plugs in there.
 - verdict is a System 1 (Kahneman): fast typed judgments for a System 2, a person or an agent,
-  to act on. It answers and never acts on an answer: no dispatch, no model-to-model routing,
-  nothing run because of a verdict. Anyone who wants an answer to launch something writes that in their own script.
+  to act on. It answers and never acts on an answer: no dispatch, no routing of work between
+  models, nothing run because of a verdict. `verdict cascade` is the one place a second model is
+  involved: it re-asks the same question of a second judge when the first is unsure (FINDINGS §52,
+  §54). The question moves, no task does, and the answer comes back typed and tagged with its tier. Anyone who wants an answer to launch something writes that in their own script.
   The only commands that run anything are maintenance: `verdict update` (in a checkout, `git pull
-  --ff-only` plus `uv sync --extra mlx --extra laya`; in a `uv tool` install, a reinstall of the
+  --ff-only` plus `uv sync --extra mlx --extra laya` (and `--extra jev` when TypeSafe's SDK is installed); in a `uv tool` install, a reinstall of the
   newest `v*` tag).
 - Tests first. `uv run pytest` is the gate; nothing needs the network or a model.
 
@@ -30,8 +32,8 @@ History is pushed, so do not rewrite it without asking.
 
 The shipped router (`difficulty` + `is_sensitive`) is **at chance on real agent traffic**, AUC 0.478,
 against 70.8% on the 72 hand-written prompts it was tuned on (§25). The diagnosis is not the model
-and not the fine-tune: the same checkpoint scores **0.753** on the same turns asked
-`is_instruction` instead (§26). Ask about what is on the page, not about how hard a task would be
+and not the model: the same checkpoint scores **0.753** (the private fine-tune; base Laya, what a
+public install runs, scores **0.65**, §49) on the same turns asked `is_instruction` instead (§26). Ask about what is on the page, not about how hard a task would be
 for a different model. Real outcome labels are free in agent transcripts: each one records which
 tools the agent called after each turn.
 
@@ -58,7 +60,9 @@ Do not re-derive these. Each is measured, in `docs/FINDINGS.md`.
 - Never gate a decision on a `uniform` backend answer. It means "no model", not "unsure".
 - Teacher labels come from Gemini only. Local Ollama models generate states, never labels.
 - Real data (private message logs, agent transcripts) is a sanity test set, never training data,
-  and is not sent to a hosted API without asking. Never quote it in tracked files: FINDINGS reports
+  and is not sent to a hosted API without asking. That includes `serve --systemone`,
+  `bench`/`examples --systemone` and `cascade --escalate` to a hosted server (Jev): public datasets
+  and invented text only, and `cascade --check` sends every labelled example it is given. Never quote it in tracked files: FINDINGS reports
   aggregates, and example inputs are invented.
 - Do not commit `.env`, `data/`, `models/`, `runs/`, `apol.db` or `experiments/`. The last two
   are not obvious: `runs/` holds large binary `.pt` items, and `experiments/` holds scripts that
@@ -69,7 +73,8 @@ Do not re-derive these. Each is measured, in `docs/FINDINGS.md`.
 - Commit and push only when asked.
 
 ## Commands
-- `uv sync --extra mlx --extra laya` then `uv run pytest`. Plain `uv sync` *removes* both extras,
+- `uv sync --extra mlx --extra laya --extra jev` then `uv run pytest` (`jev` is TypeSafe's SDK; its
+  tests skip without it). Plain `uv sync` *removes* the extras,
   which silently skips the laya-dependent tests (including the guard that the vendored router bank
   still matches `laya.router_questions()`) and breaks the CLI and the scorer.
 - `git config core.hooksPath .githooks` once per clone enables the pre-commit hook. It blocks the
@@ -85,9 +90,12 @@ Do not re-derive these. Each is measured, in `docs/FINDINGS.md`.
   changes instead), checks the tag against the version and refuses a missing or regressed
   scorecard. The default model is base Laya (`aac6fef/laya-mlx`); the fine-tune is private, in
   the Hugging Face repo `iksnerd/verdict-v1-mlx`, used only where `model.path` points at it.
-  Scorecards come from the release machine's configured model (the fine-tune).
+  Scorecards come from the release machine's configured model, which is base Laya since 0.7.0
+  (v0.1.0 to v0.6.3 measured the fine-tune; the gate compares a scorecard only with an earlier one
+  of the same `model`, so the first base scorecard is a baseline, not a regression).
 - Docs: README (landing), `docs/guide.md` (usage), `docs/api.md`, `docs/routing.md`,
-  `docs/pipeline.md`, and
+  `docs/pipeline.md`, `docs/patterns.md`, `docs/rough-edges.md`, `docs/models.md` (the last three
+  follow TypeSafe's docs; `verdict docs` serves them), and
   `examples/` (synthetic inputs, real outputs, checked by `tests/test_examples.py`). When a command
   or measured number changes, update the guide and the examples README in the same change.
 - `verdict update` fast-forwards this checkout and re-syncs with both extras, refusing on
@@ -115,7 +123,11 @@ Do not re-derive these. Each is measured, in `docs/FINDINGS.md`.
   [--json]` (checks a bank with no model), `verdict questions` (the measured library), `verdict presets`,
   `verdict calibrate`, `verdict bench [--verify CARD]`, `verdict examples [NAME...] [--systemone URL]`
   (scores `examples/` banks with a backend, real or `--systemone`, for comparing one against another),
-  `verdict rank`, `verdict docs`, `verdict config` (each setting and its source). Errors under
+  `verdict classify TEXT --tree FILE` (a two-level tree for more than 20 options, `--beam`),
+  `verdict cascade -q BANK --escalate URL` (`--share`/`--below`, `--check LABELLED.jsonl`: Laya
+  first, a second server for the unsure), `verdict serve --systemone URL` (a remote backend, key in
+  `$TYPESAFE_API_KEY`), `verdict rank`, `verdict docs` (also `patterns`, `rough-edges`, `models`),
+  `verdict config` (each setting and its source). Errors under
   `--json`/`--jsonl` also print `{"error": {"code", "message"}}` on stdout, and
   `decide --jsonl` rows carry `index`. The plugin's `verdict` skill says
   when an agent should reach for it.
@@ -123,8 +135,9 @@ Do not re-derive these. Each is measured, in `docs/FINDINGS.md`.
   `uv tool install --python 3.11 'verdict[mlx,laya] @ git+https://github.com/iksnerd/verdict.git@vX.Y.Z'`.
   `verdict update` moves it to the newest tag. Its weights live in `~/.local/share/verdict/models/`,
   and `models/verdict-v1-mlx` here is a symlink to them, so the pipeline and `uv run verdict` in
-  this repo still find them. The global CLI runs base Laya, what users get; only this checkout's
-  `verdict.toml` points at the fine-tune, so scorecards keep measuring it. Changes
+  this repo still find them. The global CLI and this checkout's `verdict.toml` both run base Laya,
+  what users get, so scorecards and library numbers measure it; the fine-tune is a private
+  archive, opted into with `--model` or `[model].path`. Changes
   here reach the global CLI only through a release (a `v*` tag).
 - The CLI's output is an interface: scripts outside this repo run `verdict decide --jsonl` and
   parse `answers.<qid>.noul` from each stdout line. A change to that output must keep the shape.

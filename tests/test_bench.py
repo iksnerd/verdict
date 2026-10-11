@@ -372,3 +372,82 @@ def test_bench_does_not_warn_about_long_items(toy_bench, monkeypatch, capsys):
     monkeypatch.setattr(bench, "fetch", lambda s: long_rows)
     assert cli.main(["bench", "--out", str(toy_bench / "v0.5.0.json"), "--pause", "0"]) == 0
     assert "first 128 tokens" not in capsys.readouterr().err
+
+
+# ---- latency and tokens ------------------------------------------------------------------------
+
+def test_a_scorecard_records_latency_per_call(toy_bench):
+    out = toy_bench / "v0.5.0.json"
+    assert cli.main(["bench", "--out", str(out), "--pause", "0"]) == 0
+    timing = json.loads(out.read_text())["timing"]
+    assert timing["calls"] == 10  # 5 per class, two classes
+    assert 0 <= timing["median_ms"] <= timing["p95_ms"]
+    assert timing["input_tokens"] is None and timing["output_tokens"] is None
+
+
+def test_a_systemone_scorecard_sums_the_tokens_the_service_reported(toy_bench, monkeypatch):
+    class Fake:
+        def __call__(self, state, questions, **kw):
+            return {**fake_noul(state, questions), "usage": {"input_tokens": 7, "output_tokens": 2}}
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(bench, "systemone_asker", lambda *a, **k: Fake())
+    out = toy_bench / "v0.5.0.json"
+    assert cli.main(["bench", "--systemone", "http://127.0.0.1:9", "--out", str(out),
+                     "--pause", "0"]) == 0
+    timing = json.loads(out.read_text())["timing"]
+    assert timing["input_tokens"] == 70 and timing["output_tokens"] == 20
+
+
+def test_timing_never_decides_whether_a_release_regressed(toy_bench):
+    """--verify compares suites only: a slow day is not a regression."""
+    slow = card(0.70, 0.60, 0.80)
+    slow["timing"] = {"calls": 1, "median_ms": 99999, "p95_ms": 99999,
+                      "input_tokens": None, "output_tokens": None}
+    (toy_bench / "v0.4.0.json").write_text(json.dumps(card(0.70, 0.60, 0.80)))
+    (toy_bench / "v0.5.0.json").write_text(json.dumps(slow))
+    assert cli.main(["bench", "--verify", str(toy_bench / "v0.5.0.json")]) == 0
+
+
+# ---- the gate compares like with like ----------------------------------------------------------
+
+def test_previous_can_be_limited_to_the_same_model(tmp_path):
+    for v, model in (("0.5.0", "verdict-v1-mlx"), ("0.6.0", "laya-mlx"), ("0.7.0", "verdict-v1-mlx")):
+        (tmp_path / f"v{v}.json").write_text(json.dumps(card(0.8, 0.7, 0.9, model=model)))
+    assert bench.previous(tmp_path, "0.8.0").stem == "v0.7.0"
+    assert bench.previous(tmp_path, "0.8.0", model="laya-mlx").stem == "v0.6.0"
+    assert bench.previous(tmp_path, "0.7.0", model="verdict-v1-mlx").stem == "v0.5.0"
+    assert bench.previous(tmp_path, "0.6.0", model="laya-mlx") is None
+
+
+def test_the_first_scorecard_of_a_new_model_is_a_baseline_not_a_regression(tmp_path, capsys):
+    """Moving the release scorecard from the fine-tune to base Laya must not be judged against the
+    fine-tune: SST-2 yes/no is 0.80 on one and 0.50 on the other (FINDINGS §35, §40)."""
+    (tmp_path / "v0.6.0.json").write_text(json.dumps(card(0.80, 0.74, 0.86, model="verdict-v1-mlx")))
+    (tmp_path / "v0.7.0.json").write_text(json.dumps(card(0.50, 0.45, 0.55, model="laya-mlx")))
+    assert cli.main(["bench", "--verify", str(tmp_path / "v0.7.0.json")]) == 0
+    err = capsys.readouterr().err
+    assert "baseline" in err and "laya-mlx" in err and "REGRESSED" not in err
+
+
+def test_the_next_scorecard_of_the_same_model_is_still_gated(tmp_path, capsys):
+    (tmp_path / "v0.6.0.json").write_text(json.dumps(card(0.80, 0.74, 0.86, model="verdict-v1-mlx")))
+    (tmp_path / "v0.7.0.json").write_text(json.dumps(card(0.50, 0.45, 0.55, model="laya-mlx")))
+    (tmp_path / "v0.8.0.json").write_text(json.dumps(card(0.30, 0.25, 0.35, model="laya-mlx")))
+    assert cli.main(["bench", "--verify", str(tmp_path / "v0.8.0.json")]) == 1
+    assert "v0.7.0.json: REGRESSED" in capsys.readouterr().err
+
+
+def test_a_scorecard_with_no_model_field_is_compared_as_before(tmp_path):
+    (tmp_path / "v0.5.0.json").write_text(json.dumps({"suites": card(0.8, 0.7, 0.9)["suites"]}))
+    (tmp_path / "v0.6.0.json").write_text(json.dumps({"suites": card(0.8, 0.7, 0.9)["suites"]}))
+    assert bench.previous(tmp_path, "0.6.0", model=None).stem == "v0.5.0"
+
+
+def test_bench_will_not_send_the_key_over_plain_http_to_a_remote_host(toy_bench, monkeypatch, capsys):
+    monkeypatch.setenv("TYPESAFE_API_KEY", "sk-live")
+    monkeypatch.setattr(bench, "systemone_asker", lambda *a, **k: pytest.fail("must not connect"))
+    assert cli.main(["bench", "--systemone", "http://api.example", "--pause", "0"]) == 2
+    assert "https" in capsys.readouterr().err

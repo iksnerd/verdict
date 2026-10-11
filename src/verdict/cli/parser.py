@@ -33,6 +33,11 @@ perfect (§46). Let code compare, and ask verdict what one item's text says.
 
 Start a server first so each call costs milliseconds instead of seconds; without one, every
 command still works by loading the model itself, and says so on stderr.
+
+Laya runs on this machine. `serve --systemone URL` answers with a remote model (Jev) instead, and
+`cascade` asks Laya first and re-asks Jev only about the answers Laya is least sure of. Both send
+text out, and say so. More than 20 options: `classify` with a tree. What it is bad at:
+`verdict docs rough-edges`.
 """
 
 EPILOG = """\
@@ -46,6 +51,8 @@ Examples:
   verdict decide '{"command": "cat .env"}' --questions touches_secret
   verdict decide '{"post": "buy followers now!!"}' --questions moderation
   verdict decide --jsonl --questions bank.json < states.jsonl > answers.jsonl
+  verdict classify "my transfer never arrived" --tree banking-tree.json        # over 20 options
+  verdict cascade -q bank.json --escalate http://127.0.0.1:8801 < rows.jsonl   # Laya, then Jev
   verdict rank answers.jsonl about_money=1 says_leaving=0.5          # search by named answers
   verdict calibrate labelled.jsonl --questions bank.json --out fit.json
   verdict docs findings 38                                          # read a cited section
@@ -55,13 +62,16 @@ cut on your own labelled examples (`verdict calibrate`) before gating anything o
 
 Ask about what the text says. `ask` and `decide` refuse (exit 2) the shapes that scored at chance:
 a question about a consequence, difficulty or risk (FINDINGS §25, §29), a yes/no about an absence
-("is this ordinary", §33), more than 20 options (§41), and a question naming a field the state
-lacks (plain text has none). --allow-unmeasured asks anyway. A new yes/no is asked as a choice
-between no and yes and answered as a yes/no (§38). The HTTP API does the same.
+("is this ordinary", §33), more than 20 options (§41; `classify` takes more, in a tree), and a
+question naming a field the state lacks (plain text has none). --allow-unmeasured asks anyway. A
+new yes/no is asked as a choice between no and yes and answered as a yes/no (§38). The HTTP API
+does the same.
 
 Settings: flag > environment ($VERDICT_URL, $VERDICT_MODEL, $VERDICT_MULTILINGUAL, $VERDICT_BITS,
-$VERDICT_LANG) > ./verdict.toml > ~/.config/verdict/config.toml > built-in. `verdict init` writes
-one; `verdict config` shows each resolved value and where it came from.
+$VERDICT_LANG, $VERDICT_SYSTEMONE_URL, $VERDICT_SYSTEMONE_MODEL) > ./verdict.toml >
+~/.config/verdict/config.toml > built-in. `verdict init` writes one; `verdict config` shows each
+resolved value and where it came from. `verdict serve --systemone URL` answers with a remote
+/v1/systemone server (Jev) and sends it every state; its key is $TYPESAFE_API_KEY, never a setting.
 
 Errors: one `verdict:` line on stderr and exit 2, never a traceback; exit 2 never means "no".
 With --json or --jsonl (and always for decide), also {"error": {"code", "message"}} on stdout.
@@ -85,6 +95,64 @@ A question about a consequence, difficulty or risk ("could this cause harm") or 
 absence ("is this ordinary") is refused, exit 2: those scored at chance. So is a question naming
 a field (`message`) when the text is plain text. Ask what the text says or does instead;
 --allow-unmeasured asks anyway.
+"""
+
+CLASSIFY_HELP = """\
+Classify one text into one leaf of a two-level tree, for more options than one choice can take.
+
+laya's options share one token budget, so past 20 an exclusive choice degrades (77 options: 0.43,
+FINDINGS §41) and `ask` and `decide` refuse it. A tree asks which of at most 20 groups, then which
+of at most 20 options inside the best few groups, and ranks leaves by P(group) * P(option | group).
+On Banking77 (77 labels, base laya) that took 0.38 to 0.55 with --beam 2 (FINDINGS §50). For
+topical labels an embedding model does better still (0.89, §53); this is the option that needs no
+second model. A model with its own limit, such as Jev, can take a flat bank of 255.
+
+The tree is JSON: {"instructions": "...", "groups": {NAME: {"description": "...", "options":
+{LABEL: "what it means, or null"}}}}. A label belongs to one group. Cost is 1 pass for the groups
+plus one per group tried, so --beam 2 is 3 passes and --beam 1 is 2.
+"""
+
+CLASSIFY_EPILOG = """\
+Examples:
+  verdict classify "my transfer never arrived" --tree banking-tree.json
+  verdict classify "$MSG" --tree tree.json --beam 3 --json
+  git log -1 --format=%B | verdict classify - --tree commit-types.json --beam 1
+
+--beam is how many groups are descended: 1 is cheapest, a wider beam recovers a leaf whose group
+ranked second (0.51 at beam 1, 0.55 at 2, 0.55 at 3 on Banking77). A tree level past 20 is refused,
+exit 2, naming the group; so is a question wording that measured at chance (--allow-unmeasured).
+
+Exit status: 0; 2 for a usage error, an unreadable or invalid tree, or a refused question.
+"""
+
+CASCADE_HELP = """\
+Answer every state with the primary backend, then ask a second server again about the answers the
+primary is least sure of. Most text never leaves the primary.
+
+Measured on 12 public suites (FINDINGS §52): Laya first, with the least-sure 20% sent to Jev,
+closes 56% of the gap to Jev; half closes 92%; the same shares sent at random close 22% and 52%.
+It is a per-task decision: where the primary is the better model (AG News) every item sent makes
+it worse. Run --check on labelled examples first.
+
+Confidence is the probability of the answer given, from the primary's own numbers, so an
+uncalibrated model still ranks its answers; --share reads the cut from the batch, --below fixes
+it. Each output row marks every answer "primary" or "escalated". The second server sees only the
+escalated questions of the escalated states, and a summary on stderr says how many that was.
+"""
+
+CASCADE_EPILOG = """\
+Examples:
+  verdict cascade -q is_spam --escalate http://127.0.0.1:8801 < messages.jsonl
+  verdict cascade -q bank.json --escalate http://127.0.0.1:8801 --share 0.2 < rows.jsonl
+  verdict cascade -q bank.json --escalate http://127.0.0.1:8801 --check labelled.jsonl
+
+The second server is usually `verdict serve --systemone https://api.typesafe.ai --port 8801`
+(needs $TYPESAFE_API_KEY); every escalated text is sent to Jev and billed. --check asks it about
+every labelled example once and reports, per question, the primary, the cascade and the second on
+their own, and names the questions where escalating would not help.
+
+Exit status: 0; 1 when some escalations failed (those rows keep the primary answer); 2 for a usage
+error or a refused question.
 """
 
 ASK_EPILOG = """\
@@ -197,7 +265,8 @@ Examples:
   verdict route --batch < prompts.txt
 
 At chance on real agent traffic (FINDINGS §25): kept as the worked example of a switch, not as
-a router to trust. `verdict ask` with a surface question is the better tool.
+a router to trust. `verdict ask` with a surface question is the better tool. It is refused when
+`serve` fronts Jev or another model: the thresholds were fitted to laya's scores.
 
 Exit status: 0 for small, 1 for big, 2 for an error. With --json, 0 on success whichever branch:
 the answer is in the JSON.
@@ -207,12 +276,14 @@ SERVE_EPILOG = """\
 Examples:
   verdict serve                  # binds server.url, 127.0.0.1:8799 by default
   verdict serve --port 8800
+  verdict serve --systemone https://api.typesafe.ai --port 8801   # Jev; every state is sent there
 
 Loads one checkpoint, and the multilingual one only when a call asks for it (--lang multi). If
 model.path names a local checkpoint that is missing, it loads base laya instead and says so.
-Localhost only, no auth. POST /v1/decide answers as `verdict decide` does, with the same refusals
-and numbers (?allow_unmeasured=true, ?yesno=true opt out). A refusal is a 422 whose body
-has error.code "refused".
+Localhost only, no auth (--systemone to a hosted server refuses a --host beyond localhost: it
+would forward, with your key, for anyone who can reach it). POST /v1/decide answers as
+`verdict decide` does, with the same refusals and numbers (?allow_unmeasured=true, ?yesno=true opt
+out). A refusal is a 422 whose body has error.code "refused".
 
 Stop the one you started when you are done; it holds the model in GPU memory:
   kill $(lsof -ti TCP:8799 -sTCP:LISTEN)     # your url's port; never kill by name
@@ -269,6 +340,8 @@ Examples:
   verdict docs                  # the README
   verdict docs guide | less
   verdict docs findings 46      # one section
+  verdict docs rough-edges      # where Laya fails, with the measurement behind each
+  verdict docs patterns         # fan-out, confidence routing, composite scoring, intent routing
 
 Exit status: 0, or 2 for an unknown topic or section.
 """
@@ -297,7 +370,10 @@ field it expects.
 BENCH_HELP = """\
 Score each suite's question on a fixed, balanced sample of a public labelled dataset, pinned by
 revision: AUC for yes/no, accuracy for choice, each with a 95% bootstrap interval. --verify
-compares a scorecard with the previous one, with no model.
+compares a scorecard with the previous one of the same model, with no model; the first scorecard of
+a model is its baseline. A scorecard also records timing (calls, median and p95 milliseconds, the
+tokens a service reported), which --verify ignores. --systemone scores Jev, through TypeSafe's SDK
+when it is installed.
 """
 
 BENCH_EPILOG = """\
@@ -511,6 +587,39 @@ def main(argv: list[str] | None = None) -> int:
     server_flags(a)
     a.set_defaults(fn=decisions._ask_cmd)
 
+    c = command("classify", "one text into one leaf of a two-level tree (more than 20 options)",
+                CLASSIFY_HELP, CLASSIFY_EPILOG)
+    c.add_argument("text", help="the text to classify; a JSON object is sent as a structured "
+                                "state; @FILE reads a file; - reads stdin")
+    c.add_argument("--tree", required=True, metavar="FILE",
+                   help="the tree: groups of at most 20 options, at most 20 groups")
+    c.add_argument("--beam", type=int, default=2, metavar="N",
+                   help="groups to descend (default 2); 1 is cheapest")
+    c.add_argument("--json", action="store_true",
+                   help="print the best leaf, its path and the runners-up as JSON")
+    quality_flag(c)
+    server_flags(c)
+    c.set_defaults(fn=decisions._classify_cmd)
+
+    cs = command("cascade", "primary answers all, a second server re-asks the least sure",
+                 CASCADE_HELP, CASCADE_EPILOG)
+    cs.add_argument("-q", "--questions", required=True, metavar="PRESET|JSON|FILE",
+                    help="the bank: a preset, measured question names, inline JSON or a file")
+    cs.add_argument("--escalate", required=True, metavar="URL",
+                    help="the second `verdict serve` to re-ask, e.g. one run with --systemone")
+    cs.add_argument("--share", type=float, metavar="F",
+                    help="escalate this fraction (0 to 1) of each question's answers, the least "
+                         "sure; the default when neither is given is 0.3")
+    cs.add_argument("--below", type=float, metavar="P",
+                    help="escalate the answers whose confidence is under P instead")
+    cs.add_argument("--check", metavar="LABELLED.jsonl",
+                    help="measure on labelled examples whether escalating helps; asks the second "
+                         "server about every example")
+    cs.add_argument("--json", action="store_true", help="with --check, print the report as JSON")
+    quality_flag(cs)
+    server_flags(cs)
+    cs.set_defaults(fn=decisions._cascade_cmd)
+
     d = command("decide", "a bank of typed questions about a state, as JSON",
                 DECIDE_HELP, DECIDE_EPILOG)
     d.add_argument("state", nargs="?", help="a JSON object, plain text, @FILE, or - for stdin")
@@ -546,7 +655,8 @@ def main(argv: list[str] | None = None) -> int:
     dc = command("docs", "read the README, guide, API notes, FINDINGS and more",
                  DOCS_HELP, DOCS_EPILOG)
     dc.add_argument("topic", nargs="?", default="readme", choices=list(docs_cmd.TOPIC_NAMES),
-                    help="readme (default), guide, api, findings, pipeline or routing")
+                    help="readme (default), guide, api, findings, pipeline, routing, patterns, "
+                         "rough-edges or models")
     dc.add_argument("section", nargs="?", type=int, help="with findings: one section, by number")
     dc.set_defaults(fn=docs_cmd._docs_cmd)
 
@@ -648,6 +758,13 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("--bits", type=int, choices=(16, 8),
                    help="8 quantizes the model at load: about half the GPU memory, the same "
                         "answers on every bench suite (FINDINGS §36); overrides model.bits")
+    s.add_argument("--systemone", metavar="URL",
+                   help="answer with a /v1/systemone server instead of local laya: "
+                        "https://api.typesafe.ai for Jev (needs $TYPESAFE_API_KEY). Every state is "
+                        "sent there. Overrides systemone.url in verdict.toml")
+    s.add_argument("--systemone-model", metavar="NAME",
+                   help="the model field sent with --systemone (default: systemone.model in "
+                        "verdict.toml, jev-latest)")
     s.add_argument("--log-level", default="warning")
     s.set_defaults(fn=setup._serve_cmd)
 

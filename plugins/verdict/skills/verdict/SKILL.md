@@ -46,8 +46,8 @@ scored 12/12, while "must this review comment block a merge?" read an SQL inject
 the first is on the page, the second needs to know what the code does.
 
 **Pick the right fast model.** Measured head to head on the same held-out items (FINDINGS
-§32): on a yes/no question about what the text shows, verdict matched Claude Haiku 4.5 (0.77
-against 0.73 AUC) for free, locally and faster. On a seven-way category Haiku won clearly (0.67
+§32, measured on the private fine-tune): on a yes/no question about what the text shows, verdict
+matched Claude Haiku 4.5 (0.77 against 0.73 AUC) for free, locally and faster. On a seven-way category Haiku won clearly (0.67
 against 0.48), and verdict barely beat keyword rules (0.46). So use verdict for bulk surface
 yes/no, and anything that must stay on the machine. Use a small LLM for sorting into several
 categories or anything needing world knowledge, if the data may leave the machine (ask first
@@ -95,7 +95,8 @@ closest bank rather than writing one from nothing; `verdict examples NAME` rerun
 Measured on real agent traffic (FINDINGS §25 to §33):
 
 - Ask about what the text *says*, not about something it can't see.
-  "Is this an instruction to perform an action?" predicts tool use at AUC 0.77.
+  "Is this an instruction to perform an action?" predicts tool use at AUC 0.65 on base Laya (0.75
+  on the private fine-tune).
   "How hard is this for a language model?" is at chance (0.48).
 - Write the obvious question first. Clever purpose-built wording lost to a plain
   question three times out of three.
@@ -121,6 +122,9 @@ Measured on real agent traffic (FINDINGS §25 to §33):
 ```sh
 verdict ask "<text>" "<yes/no question>"                     # 0.72
 verdict ask "<text>" "<question>" -o a -o "b=description"    # b 0.61, P(b)
+verdict classify "<text>" --tree tree.json                    # more than 20 options: groups, then options
+verdict cascade -q bank.json --escalate URL --check labelled.jsonl   # would a second backend help here?
+verdict cascade -q bank.json --escalate URL < rows.jsonl      # local first, the unsure share re-asked
 verdict ask "<text>" "<question>" -l low -l mid -l high      # 1.30/2 high
 verdict validate -q bank.json --json                         # no model; exit 2 if invalid
 verdict decide --jsonl -q bank.json --server-only < items.jsonl > scored.jsonl
@@ -141,6 +145,20 @@ verdict decide ... --calibration fit.json                    # adds "decision"
 TypeSafe's cookbooks work locally with `TYPESAFE_BASE_URL=http://127.0.0.1:8799` and any
 `TYPESAFE_API_KEY`. It is not a full substitute: past about 20 choice options laya degrades
 (Jev takes 255), and each extra question costs a full pass here, where Jev's fan-out is one.
+
+**Cascade: local first, a second backend for the unsure.** `verdict cascade` sends only the
+least-sure answers to a second server (usually Jev), so most text stays local; run `--check` on
+labelled examples first, because where the local model is the better one (AG News) escalating makes
+it worse. Ask before sending anything out: every escalated text leaves the machine.
+
+**Other models behind the same commands.** `verdict serve --systemone https://api.typesafe.ai`
+(needs `$TYPESAFE_API_KEY` and `verdict[jev]`) answers with hosted Jev instead of local laya.
+**Every state is then sent to that service and billed**, so use it only on text you may send. The
+commands, refusals and error codes do not change; `verdict route` is refused there, since the
+router is fitted to laya. On the public bench Jev led on sentiment and injection yes/no and on
+Bulgarian, matched laya elsewhere and trailed on AG News, at about 0.5 s a call (`verdict docs
+findings 48`). From Python, `from verdict import Verdict, Noul, Choice, Score` gives typed
+questions and a result with `.nouls`, `.choices` and `.scores` (`verdict docs api`).
 
 **When the tool misbehaves:**
 - "not found, so using base laya": `model.path` names a local checkpoint that is not there. Fix
@@ -169,8 +187,8 @@ A user asks which of the 1,500 shell commands their agent ran last month touched
 1. Too many to read well, and each answer is on the page: a yes/no about what the command does.
    That's a job for verdict. Sorting the commands by which service they touch would be a small
    LLM's job instead (FINDINGS §32).
-2. `verdict questions` lists `touches_secret` (AUC 0.77 on real blocked commands, Haiku 4.5
-   0.73). Use it by name, with states shaped as it says: `{"command": "..."}`.
+2. `verdict questions` lists `touches_secret` (AUC 0.77 on real blocked commands on the private
+   fine-tune, Haiku 4.5 0.73; not yet re-measured on base Laya). Use it by name, with states shaped as it says: `{"command": "..."}`.
 3. Check what is loaded, then start `verdict serve` in the background, or reuse one already
    answering on the port. Score a sample of 200 first:
    `verdict decide --jsonl -q touches_secret --server-only < commands.jsonl > scored.jsonl`.

@@ -82,7 +82,7 @@ def test_every_command_a_script_can_branch_on_states_its_exit_status(command, ca
     assert "Exit status" in capsys.readouterr().out, command
 
 
-COMMANDS = ["validate", "ask", "decide", "rank", "docs", "questions", "presets", "calibrate",
+COMMANDS = ["validate", "ask", "classify", "cascade", "decide", "rank", "docs", "questions", "presets", "calibrate",
             "bench", "examples", "route", "cases", "serve", "update", "config", "init"]
 
 

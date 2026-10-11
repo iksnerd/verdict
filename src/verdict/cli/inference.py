@@ -16,6 +16,10 @@ from .. import client
 from ..engine import load
 from ..errors import QuestionError
 
+#: What `/v1/capabilities` reports for a server fronting something other than laya.
+PROXY_FAMILIES = ("jev", "systemone")
+_UNASKED = object()
+
 #: Checkpoints loaded in this process, by path, so a run without a server loads each model once,
 #: not once per state (300 loads for a 300-state `decide --jsonl`).
 _ENGINES: dict[str, object] = {}
@@ -85,8 +89,22 @@ class _Asker:
         self.main_path = ((args.model or self.settings.model_path) if self.server_only
                           else _resolved_model(args.model, self.settings))
         self._warned: set[str] = set()
+        #: What the server fronts (`/v1/capabilities` family), asked once; see `_proxied`.
+        self._family: object = _UNASKED
         #: `--model` only chooses what loads locally; a server answers with its own checkpoint.
         self.model_flag = getattr(args, "model", None)
+
+    def _proxied(self) -> bool:
+        """Whether a server answers with a model that is not laya (hosted Jev, Kev, another
+        verdict). Laya's yes/no rewrite and option cap are about laya's token budget, so they apply
+        only when laya is what answers: with no server, or one that cannot say, laya's rules stand.
+        One cheap loopback GET per command, never per row."""
+        if self._family is _UNASKED:
+            try:
+                self._family = client.capabilities(self.url).get("family")
+            except (client.NoServer, client.ServerError, client.ServerTimeout):
+                self._family = None
+        return self._family in PROXY_FAMILIES
 
     def warn(self, line: str) -> None:
         if line not in self._warned:
@@ -102,9 +120,10 @@ class _Asker:
         questions = laya_questions(questions)
         answering = (self.settings.multilingual_path if self.lang == "multi"
                      else self.main_path)
+        proxied = self._proxied()
         questions, rewritten, problems = library.prepare(
             state, questions, model=answering, allow_unmeasured=self.allow_unmeasured,
-            yesno=self.yesno)
+            yesno=self.yesno or proxied, max_options=None if proxied else library.MAX_OPTIONS)
         for line in problems:
             self.warn(line)
         clipped = (inputs.maybe_clipped(state, self.settings.prompt_token_budget)
@@ -112,6 +131,9 @@ class _Asker:
         if clipped:
             self.warn(clipped)
         result = self._ask(state, questions)
+        if proxied and result.get("source") == "in-process":
+            # The server went away and laya answered here: its rules apply from the next row.
+            self._family = _UNASKED
         served = str(result.get("model", ""))
         if (self.model_flag and result.get("source", "").startswith("server")
                 and not served.endswith(str(self.model_flag).rstrip("/"))):

@@ -4,7 +4,9 @@
 
 > **The router is at chance on real agent traffic** (AUC 0.478 on 2,312 real turns, FINDINGS
 > §25). It is kept as the worked example of a switch, not as something to put in front of real
-> traffic. For real bulk questions, see the [guide](guide.md).
+> traffic. For real bulk questions, see the [guide](guide.md); for intent routing that is measured
+> (a choice over your own handlers, a tree past 20 options, a cascade from Laya to Jev for the
+> unsure), see `verdict docs patterns`.
 
 ## The idea: declare a decision as a switch
 
@@ -48,7 +50,7 @@ fit never saw:
 turns labelled by what the agent actually did, the router is at chance. 92% of real turns call
 tools, and more than half are few-word fragments that only mean something inside the session (§25). The same checkpoint scored
 0.753 on those turns when asked a question about what is on the page, "Is this an instruction?"
-(§26), which is why the rest of verdict asks surface questions.
+(§26; that checkpoint was the private fine-tune, and base Laya scores 0.65, §49), which is why the rest of verdict asks surface questions.
 
 Two things about the 70.8% still hold as method:
 

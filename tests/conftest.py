@@ -33,3 +33,18 @@ def typed(questions, noul_answer):
                  "probabilities": {"no": 1 - p, "yes": p}}
         out[qid] = a
     return out
+
+
+@pytest.fixture(autouse=True)
+def _no_real_server(monkeypatch):
+    """A test never reaches a `verdict serve` that happens to be running on the developer's
+    machine (the CLI asks a server what it fronts, at /v1/capabilities, before it answers). The
+    network layer refuses unless the test installs its own transport."""
+    import urllib.error
+
+    from verdict import client
+
+    def refuse(request, timeout=None):
+        raise urllib.error.URLError("no server in tests")
+
+    monkeypatch.setattr(client.urllib.request, "urlopen", refuse)

@@ -37,6 +37,7 @@ def shell(monkeypatch, tmp_path):
     (tmp_path / "pyproject.toml").write_text('[project]\nname = "verdict"\nversion = "0.2.0"\n')
     monkeypatch.setattr(update, "_checkout", lambda: tmp_path)
     monkeypatch.setattr(update, "_server_up", lambda: False)
+    monkeypatch.setattr(update, "_has_jev", lambda: False)
     fake = FakeShell(behind="3")
     monkeypatch.setattr(update, "_run", fake)
     return fake
@@ -133,6 +134,7 @@ def tool(monkeypatch, tmp_path):
     monkeypatch.setattr(update, "_checkout", lambda: tmp_path)  # no .git: a tool install
     monkeypatch.setattr(update, "_server_up", lambda: False)
     monkeypatch.setattr(support, "_version", lambda: "verdict 0.2.1")
+    monkeypatch.setattr(update, "_has_jev", lambda: False)  # whatever this venv happens to hold
     fake = ToolShell()
     monkeypatch.setattr(update, "_run", fake)
     return fake
@@ -216,3 +218,29 @@ def test_a_stale_cache_twice_fails_instead_of_looping(tool, monkeypatch, capsys)
 def test_check_exits_0_when_up_to_date(shell):
     shell.behind = "0"
     assert cli.main(["update", "--check"]) == 0
+
+
+def test_update_keeps_the_jev_extra_when_it_is_installed(shell, monkeypatch):
+    """Like mlx and laya: a sync without it removes TypeSafe's SDK and breaks hosted Jev."""
+    monkeypatch.setattr(update, "_has_jev", lambda: True)
+    assert cli.main(["update"]) == 0
+    sync = next(c for c in shell.calls if c[:2] == ["uv", "sync"])
+    assert {"mlx", "laya", "jev"} <= set(sync)
+
+
+def test_update_does_not_add_the_jev_extra_to_a_machine_without_it(shell, monkeypatch):
+    monkeypatch.setattr(update, "_has_jev", lambda: False)
+    assert cli.main(["update"]) == 0
+    sync = next(c for c in shell.calls if c[:2] == ["uv", "sync"])
+    assert "jev" not in sync
+
+
+def test_a_tool_update_keeps_the_jev_extra_too(monkeypatch):
+    calls = []
+    monkeypatch.setattr(update, "_has_jev", lambda: True)
+    monkeypatch.setattr(update, "_release_tags", lambda url: [(9, 9, 9)])
+    monkeypatch.setattr(update, "_run", lambda argv, cwd=None: (calls.append(argv), (0, ""))[1])
+    monkeypatch.setattr(update, "_server_up", lambda: False)
+    monkeypatch.setattr(support, "_version", lambda: "verdict 0.1.0")
+    assert update._update_tool(type("A", (), {"check": False})()) == 0
+    assert any("verdict[mlx,laya,jev]" in " ".join(c) for c in calls)

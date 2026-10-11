@@ -73,13 +73,16 @@ _ABSENCE = re.compile(r"\b(ordinary|normal|regular|typical|benign|legitimate)\b"
 MAX_OPTIONS = 20
 
 
-def lint(questions: dict[str, Any]) -> list[str]:
-    """Warnings for questions whose wording has failed before. Empty when nothing matches."""
+def lint(questions: dict[str, Any], max_options: int | None = MAX_OPTIONS) -> list[str]:
+    """Warnings for questions whose wording has failed before. Empty when nothing matches.
+
+    `max_options` is laya's token budget; pass None for a backend with its own limit (Jev takes 255).
+    """
     out = []
     for qid, q in questions.items():
         n = len(q.get("criteria") or {}) if q.get("type") == "choice" else 0
-        if n > MAX_OPTIONS:
-            out.append(f"{qid} has {n} options; past {MAX_OPTIONS} they share too few tokens to "
+        if max_options is not None and n > max_options:
+            out.append(f"{qid} has {n} options; past {max_options} they share too few tokens to "
                        "tell apart (Banking77, 77 options: 0.43, FINDINGS §41). Split it into "
                        "yes/no questions, shortlist the options first, or use an LLM")
         text = inputs.instruction_text(q)
@@ -148,7 +151,8 @@ HTTP_OPT_OUT = "?allow_unmeasured=true"
 
 
 def prepare(state: Any, questions: dict[str, Any], *, model: str, allow_unmeasured: bool = False,
-            yesno: bool = False, opt_out: str = CLI_OPT_OUT) -> tuple[dict[str, Any], set[str], list[str]]:
+            yesno: bool = False, opt_out: str = CLI_OPT_OUT,
+            max_options: int | None = MAX_OPTIONS) -> tuple[dict[str, Any], set[str], list[str]]:
     """What every front door does before asking: refuse a question about a field the state lacks
     and the shapes that measured at chance, then ask each new yes/no as a no/yes choice.
 
@@ -159,7 +163,7 @@ def prepare(state: Any, questions: dict[str, Any], *, model: str, allow_unmeasur
     from .errors import QuestionError
 
     missing = inputs.missing_fields(state, questions)
-    problems = lint(questions)
+    problems = lint(questions, max_options)
     if missing and not allow_unmeasured:
         raise QuestionError("; ".join(missing) + ". Refused, because the model would answer from "
                             f"nothing; fix the state or the question, or {opt_out} to "
@@ -190,3 +194,36 @@ def as_yesno(answers: dict[str, Any], rewritten: set[str]) -> dict[str, Any]:
         out[qid] = {"type": "noul", "noul": p, "confidence": round(max(p, 1 - p), 4),
                     "asked_as": "choice"}
     return out
+
+
+def ask(backend: Any, request: Any, *, allow_unmeasured: bool = False, yesno: bool = False,
+        opt_out: str = CLI_OPT_OUT) -> Any:
+    """`prepare` around `backend.decide`: what the HTTP API and the Python client both do, so the
+    same question gets the same treatment and the same number from either.
+
+    A proxy backend (`preserve_model_names`: Jev, Kev, another verdict) gets the refusals, so a
+    question is refused whichever model is behind it, and nothing else of laya's: no clipping, no
+    yes/no rewrite and no 20-option cap, since Jev takes 255. A refused question never reaches the
+    upstream. Raises `QuestionError` for a refusal.
+    """
+    from .schema import DecideRequest, DecideResponse, NoulAnswer, laya_questions
+
+    if getattr(backend, "preserve_model_names", False):
+        prepare(request.state, {qid: q.model_dump(exclude_none=True)
+                                for qid, q in request.questions.items()},
+                model=request.model or backend.name, allow_unmeasured=allow_unmeasured,
+                yesno=True, opt_out=opt_out, max_options=None)
+        return backend.decide(request)
+    questions, rewritten, _ = prepare(
+        request.state, laya_questions(request.questions),
+        model=request.model or getattr(backend, "model_id", backend.name),
+        allow_unmeasured=allow_unmeasured, yesno=yesno, opt_out=opt_out)
+    out = backend.decide(DecideRequest(state=request.state, questions=questions,
+                                       model=request.model))
+    if not rewritten:
+        return out
+    dumped = as_yesno({qid: a.model_dump() for qid, a in out.answers.items()}, rewritten)
+    answers = {qid: (NoulAnswer(noul=dumped[qid]["noul"], confidence=dumped[qid].get("confidence"))
+                     if qid in rewritten else a)
+               for qid, a in out.answers.items()}
+    return DecideResponse(model=out.model, answers=answers, usage=out.usage)

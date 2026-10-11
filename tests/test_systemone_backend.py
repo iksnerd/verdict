@@ -152,12 +152,105 @@ def test_models_degrades_to_empty_when_the_upstream_is_unreachable(monkeypatch):
     assert body["models"] == []
 
 
-def test_route_endpoints_turn_an_upstream_failure_into_a_502(monkeypatch):
+def test_decide_endpoints_turn_an_upstream_failure_into_a_502(monkeypatch):
     monkeypatch.setattr("time.sleep", lambda s: None)
     backend = SystemOneBackend("https://kev.example", "kev-latest", "k",
                                transport=httpx.MockTransport(lambda req: httpx.Response(503)))
     app = TestClient(create_app(backend), raise_server_exceptions=False)
-    for path, body in (("/v1/route", {"prompt": "x"}), ("/v1/route/batch", {"prompts": ["x"]})):
+    bank = {"q": {"type": "noul", "instructions": "Is this spam?"}}
+    for path, body in (("/v1/decide", {"state": {"message": "x"}, "questions": bank}),
+                       ("/v1/systemone", {"model": "kev-latest", "state": {"message": "x"},
+                                          "questions": bank})):
         r = app.post(path, json=body)
         assert r.status_code == 502, (path, r.status_code, r.text)
         assert "detail" in r.json()
+
+
+# A proxied server keeps verdict's wording refusals (one answer to "may I ask this" whichever
+# backend is behind it), but not Laya's option cap or its yes/no rewrite.
+
+def recording_backend(sent):
+    def handler(req: httpx.Request) -> httpx.Response:
+        body = json.loads(req.content)
+        sent.append(body)
+        answers = {}
+        for qid, q in body["questions"].items():
+            if q["type"] == "noul":
+                answers[qid] = {"type": "noul", "noul": 0.3}
+            else:
+                keys = list(q["criteria"])
+                p = round(1 / len(keys), 6)
+                answers[qid] = {"type": "choice", "choice": keys[0],
+                                "probabilities": {k: p for k in keys}, "confidence": 0.5}
+        return httpx.Response(200, json={"model": "jev-1.13.0", "answers": answers,
+                                         "usage": {"input_tokens": 3, "output_tokens": 0}})
+    return SystemOneBackend("https://jev.example", "jev-latest", "k",
+                            transport=httpx.MockTransport(handler))
+
+
+def ask(client, question, state=None, qs=""):
+    bank = {"q": {"type": "noul", "instructions": question}}
+    return client.post(f"/v1/decide{qs}", json={"state": state or {"message": "hi"},
+                                                "questions": bank})
+
+
+def test_a_proxied_server_still_refuses_what_measured_at_chance():
+    sent = []
+    r = ask(TestClient(create_app(recording_backend(sent))), "How dangerous is this ticket?")
+    assert r.status_code == 422 and r.json()["error"]["code"] == "refused"
+    assert "?allow_unmeasured=true" in r.json()["detail"]
+    assert sent == [], "a refused question must not reach the upstream"
+
+
+def test_a_proxied_server_asks_anyway_on_request():
+    sent = []
+    r = ask(TestClient(create_app(recording_backend(sent))), "How dangerous is this ticket?",
+            qs="?allow_unmeasured=true")
+    assert r.status_code == 200 and len(sent) == 1
+
+
+def test_a_proxied_server_does_not_rewrite_a_yes_no_into_a_choice():
+    sent = []
+    r = ask(TestClient(create_app(recording_backend(sent))), "Is this spam?")
+    assert r.status_code == 200
+    assert sent[0]["questions"]["q"]["type"] == "noul"
+    assert r.json()["answers"]["q"]["type"] == "noul"
+
+
+def test_a_proxied_server_has_no_twenty_option_cap():
+    sent = []
+    options = {f"o{i}": "" for i in range(40)}
+    bank = {"q": {"type": "choice", "instructions": "Which?", "criteria": options}}
+    r = TestClient(create_app(recording_backend(sent))).post(
+        "/v1/decide", json={"state": {"message": "hi"}, "questions": bank})
+    assert r.status_code == 200 and len(sent[0]["questions"]["q"]["criteria"]) == 40
+
+
+def test_the_jev_protocol_route_is_never_refused():
+    """Jev's SDKs cannot pass the opt-out, so /v1/systemone forwards as it always has."""
+    sent = []
+    bank = {"q": {"type": "noul", "instructions": "How dangerous is this ticket?"}}
+    r = TestClient(create_app(recording_backend(sent))).post(
+        "/v1/systemone", json={"model": "jev-latest", "state": {"message": "hi"},
+                               "questions": bank})
+    assert r.status_code == 200 and len(sent) == 1
+
+
+# /v1/route is laya's calibrated demo (difficulty + is_sensitive, FINDINGS §15, §25). It must not
+# quietly send that bank to a model it was never fitted on.
+
+def test_route_is_refused_on_a_proxied_backend_and_reaches_no_upstream():
+    sent = []
+    app = TestClient(create_app(recording_backend(sent)))
+    r = app.post("/v1/route", json={"prompt": "refactor this service"})
+    assert r.status_code == 422 and r.json()["error"]["code"] == "refused"
+    assert "laya" in r.json()["detail"] and "calibrated" in r.json()["detail"]
+    batch = app.post("/v1/route/batch", json={"prompts": ["a", "b"]})
+    assert batch.status_code == 422 and batch.json()["error"]["code"] == "refused"
+    assert sent == []
+
+
+def test_decide_still_works_on_the_same_proxied_backend():
+    sent = []
+    r = ask(TestClient(create_app(recording_backend(sent))), "Is this spam?")
+    assert r.status_code == 200 and len(sent) == 1

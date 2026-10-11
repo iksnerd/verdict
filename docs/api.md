@@ -69,7 +69,15 @@ It answers as `verdict decide` does, so the same question gets the same number f
 - A new yes/no is asked as a choice between `no` and `yes` and answered as a `noul`, P(yes), which
   ranked as well or better on every set measured (§38, §40). `?yesno=true` sends it as a plain
   yes/no. A library question keeps the shape it was measured in on the checkpoint it was measured on.
-- A proxy backend (`SystemOneBackend`) forwards the request as given: these findings are about Laya.
+- A proxy backend (`SystemOneBackend`) keeps the wording refusals above (the same question is refused
+  whichever model is behind it, and `?allow_unmeasured=true` still asks anyway) and nothing else of
+  Laya's: no clipping, no yes/no rewrite and no 20-option cap, since Jev takes 255. A refused question
+  never reaches the upstream. The CLI knows which backend a server fronts (it asks `GET /v1/capabilities`
+  once per command; a server that cannot say is treated as Laya), so with Jev behind `serve` it sends a
+  yes/no as asked and accepts a bank of up to 255 options, with the same wording refusals as everywhere.
+  `/v1/route` and `/v1/route/batch` are refused (422, `refused`) on a proxied backend: the router's
+  thresholds were fitted to Laya's `difficulty` and `is_sensitive` scores, and another model's numbers
+  on those questions would route on a scale nobody measured.
 
 ## `POST /v1/systemone` and `GET /v1/models`: Jev's protocol
 
@@ -113,14 +121,89 @@ What does not carry over: Jev takes up to 255 choice options, and laya degrades 
 pass there and one pass per question here (§11). `verdict bench --systemone URL` scores any
 `/v1/systemone` endpoint on the same suites, Jev included with `TYPESAFE_API_KEY`.
 
+## The Python client: `Verdict`
+
+The CLI and the HTTP API are not the only front doors. `from verdict import Verdict, Noul, Choice,
+Score` is a typed Python API shaped like TypeSafe's SDK: question classes that fail at
+construction, a result grouped into `.nouls`, `.choices` and `.scores`, a sync `with` client and one
+error type with a `.status`.
+
+```python
+from verdict import Choice, Noul, Verdict, VerdictError
+
+with Verdict() as v:                      # the server `verdict serve` started
+    try:
+        r = v.decide({"message": "I was charged twice"}, {
+            "refund": Noul(instructions="Is a refund requested?"),
+            "dept": Choice(instructions="Which team?",
+                           criteria={"billing": "refunds", "tech": "bugs"}),
+        })
+    except VerdictError as err:
+        print(err.status, err.code, err)  # 422 refused ...
+    else:
+        print(r.nouls["refund"].noul, r.choices["dept"].choice, r.model)
+```
+
+The transport is your explicit choice and never a surprise: `Verdict(url=...)` asks a running
+server (the configured one by default), and `Verdict(backend=MlxBackend(...))` or
+`Verdict(backend=JevBackend(...))` answers in this process. Nothing loads a model unless you build
+one, and with no server the error says `no_server` instead of quietly loading 800 MB. The caller
+owns a backend it passes in. The refusals are the CLI's and the HTTP API's, through the same code
+(`library.ask`): a question measured at chance raises `VerdictError` with `status` 422 and `code`
+`"refused"`, and `allow_unmeasured=True` asks anyway. Codes: `refused`, `no_server`,
+`server_timeout`, `server_error`, `upstream` (502), `unknown_model` (400) and `invalid_question`.
+Score `legend` and `probabilities` are keyed by strings, as on the wire. `v.models()` lists what can
+answer and `v.capabilities(model=None)` returns the backend's limits and confidence semantics
+(`family`, option and level caps), over HTTP or from the backend you passed.
+`v.classify(state, tree, beam=2)` walks a two-level tree for more than 20 options and returns a
+`Classification` (`.label`, `.path`, `.probability`, `.candidates`, `.passes`); a level past 20 raises
+`VerdictError` with code `refused` (FINDINGS §50). The CLI's `verdict cascade` composes two servers
+(a primary and a second to re-ask the least-sure answers of); the HTTP API itself stays one backend
+per server, so a cascade is two `verdict serve` processes and a client that merges (§52, §54).
+
+## Hosted Jev through TypeSafe's SDK
+
+`JevBackend` (`backend_jev.py`, `pip install 'verdict[jev]'`) is a `Backend` on the official
+`typesafe-sdk`. The SDK owns the transport (authentication, retries with backoff and `Retry-After`,
+timeouts, request ids); the backend translates verdict's questions into the SDK's typed ones and its
+answers back, validates them with the same checks as `SystemOneBackend`, and maps the SDK's
+exceptions to verdict's two: a service-side 422 is a `QuestionError` (reword it), anything else an
+`UpstreamError`, whose message carries the status and `request_id` and none of the body, since a
+body can echo a private state. Jev's limits (255 options, 2 to 10 score levels) are checked before a
+request is sent. `verdict serve --systemone https://api.typesafe.ai` uses it; any other server keeps
+`SystemOneBackend`, which needs no SDK.
+
+```python
+from verdict.backend_jev import JevBackend
+
+with JevBackend("jev-latest") as backend:        # $TYPESAFE_API_KEY, or api_key=
+    print(backend.models())
+```
+
 ## Swapping the backend to another /v1/systemone server
 
-`SystemOneBackend` (`backend_systemone.py`) is a `Backend` that forwards `decide()` to any other
+`SystemOneBackend` (`backend_systemone.py`, no SDK needed) is a `Backend` that forwards `decide()` to any other
 `/v1/systemone`-compatible server instead of running a local checkpoint: another `verdict serve`,
 a real hosted Jev, or an independent open model whose server speaks the same contract (validated
 against [Kev](https://github.com/jaredpalmer/kev), a real Qwen3.5-based decision model with its
 own `/v1/systemone` server — a genuinely different architecture from laya's, not another laya
 checkpoint). It validates the shared wire shape while retaining provider-specific values:
+
+From the command line, `verdict serve --systemone URL [--systemone-model NAME]` does exactly this
+(or set `[systemone]` `url` and `model` in `verdict.toml`, `$VERDICT_SYSTEMONE_URL` and
+`$VERDICT_SYSTEMONE_MODEL`). The key is `$TYPESAFE_API_KEY` and nothing else: it is not a config key,
+because `verdict init` writes that file and people commit it, and a loopback server needs none.
+Every `ask`, `decide` and `/v1/decide` call then goes through verdict's own API to that server, with
+its refusals and error codes, and **every state is sent to it** (billed per input token for
+`https://api.typesafe.ai`). `verdict serve` says so on startup and loads no local model.
+
+```
+export TYPESAFE_API_KEY=...
+verdict serve --systemone https://api.typesafe.ai          # model jev-latest
+verdict ask "Please refund the duplicate charge." "Is a refund requested?"
+```
+
+The same thing from Python:
 
 ```python
 import uvicorn
@@ -155,7 +238,8 @@ with SystemOneBackend("https://api.typesafe.ai", model="jev-1.13.0",
 
 `request.model` overrides the constructor's default. The state and question types are forwarded
 without clipping, Noul-to-Choice rewriting, or fallback to a local model. The official
-`api.typesafe.ai` host selects the Jev capability profile automatically. For a custom Jev gateway,
+`api.typesafe.ai` host selects the Jev capability profile automatically (`verdict serve` uses
+`JevBackend` for it instead, above). For a custom Jev gateway,
 pass `profile="jev"`; other SystemOne servers use `profile="systemone"`, with unknown limits.
 A model named `jev-latest` on localhost does not by itself establish that the server runs Jev.
 

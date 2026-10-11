@@ -20,8 +20,19 @@ class UpstreamError(ValueError):
     """An upstream server failed or returned an invalid decision; never a usable answer."""
 
 
-def validate_response(raw: Any, request: DecideRequest) -> DecideResponse:
-    """Check semantic consistency as well as types, without rewriting provider values."""
+def _precision(values) -> float:
+    """The rounding step the probabilities show: 0.01 if every one is a multiple of 0.01, else
+    0.0001. Anything finer than that is Laya's four decimals, whatever the exact digits."""
+    return 0.01 if all(abs(v * 100 - round(v * 100)) < 1e-6 for v in values) else 0.0001
+
+
+def validate_response(raw: Any, request: DecideRequest,
+                      precision: float | None = None) -> DecideResponse:
+    """Check semantic consistency as well as types, without rewriting provider values.
+
+    `precision` is the rounding step the backend is known to use (hosted Jev: 0.01). Unstated, it is
+    inferred from the values, which is a guess: a malformed answer built from round numbers gets the
+    looser tolerance."""
     try:
         result = DecideResponse.model_validate(raw, strict=True)
         if not result.model or set(result.answers) != set(request.questions):
@@ -42,12 +53,15 @@ def validate_response(raw: Any, request: DecideRequest) -> DecideResponse:
                 raise ValueError(f"{qid}: probability keys do not match criteria")
             if any(not math.isfinite(v) or not 0 <= v <= 1 for v in p.values()):
                 raise ValueError(f"{qid}: invalid probabilities")
-            # Four-decimal Laya distributions can accumulate rounding error over many options.
-            tolerance = max(1e-6, len(p) * 0.000051)
+            # A provider rounds each probability to its own precision: Laya to four decimals, hosted
+            # Jev to two (a valid Jev choice can sum to 0.99). Allow half a unit of the precision
+            # the values actually show, per option, and no more.
+            step = precision or _precision(p.values())
+            tolerance = max(1e-6, len(p) * step * 0.51)
             if abs(sum(p.values()) - 1) > tolerance:
                 raise ValueError(f"{qid}: probabilities must sum to 1")
             if a.type == "choice":
-                if a.choice not in p or p[a.choice] + .0001 < max(p.values()):
+                if a.choice not in p or p[a.choice] + max(.0001, step * 1.01) < max(p.values()):
                     raise ValueError(f"{qid}: choice is not a highest-probability option")
             else:
                 if set(a.legend) != set(p) or any(a.legend[str(i)] != v for i, v in enumerate(q.criteria)):
@@ -55,7 +69,7 @@ def validate_response(raw: Any, request: DecideRequest) -> DecideResponse:
                 if not math.isfinite(a.score) or not 0 <= a.score <= len(p) - 1:
                     raise ValueError(f"{qid}: score outside rubric")
                 expected = sum(int(k) * v for k, v in p.items())
-                if abs(a.score - expected) > max(.0001, len(p) ** 2 * .000051):
+                if abs(a.score - expected) > max(.0001, len(p) ** 2 * step * 0.51):
                     raise ValueError(f"{qid}: score does not match probability-weighted levels")
         if result.usage:
             for value in (result.usage.input_tokens, result.usage.output_tokens):
@@ -147,7 +161,7 @@ class SystemOneClient:
             raw = response.json()
         except ValueError as exc:
             raise UpstreamError("upstream returned invalid JSON") from exc
-        validate_response(raw, request)
+        validate_response(raw, request, precision=0.01 if self.profile == "jev" else None)
         return raw
 
     def models(self) -> list[dict[str, Any]]:

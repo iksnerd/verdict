@@ -207,3 +207,106 @@ def _ask_cmd(args: argparse.Namespace) -> int:
         shown = f"{score:.4f}"
     print(f"{'yes' if yes else 'no'} {shown}")
     return 0 if yes else 1
+
+
+def _classify_cmd(args: argparse.Namespace) -> int:
+    """A text into one leaf of a two-level tree: the way past laya's 20-option limit."""
+    from .. import hierarchy, inputs
+
+    try:
+        tree = json.loads(Path(args.tree).read_text())
+        state = inputs.read_state(args.text)
+    except json.JSONDecodeError as exc:
+        return support._fail(f"{args.tree} is not valid JSON: {exc}")
+    except (ValueError, OSError) as exc:
+        return support._fail(exc)
+
+    result = hierarchy.classify(inference._Asker(args), state, tree, beam=args.beam)
+    if args.json:
+        print(json.dumps(result.as_dict(), indent=2))
+        return 0
+    print(f"{result.label} {result.probability:.2f}  ({' > '.join(result.path)})")
+    return 0
+
+
+def _cascade_cmd(args: argparse.Namespace) -> int:
+    """Laya answers every state; the answers it is least sure of are asked again of a second server.
+
+    The second server sees only the escalated questions of the escalated states, and the summary says
+    how many that was. `--check` measures, on labelled examples, whether that helps for this task."""
+    from .. import calibrate, cascade, client, config, inputs
+    from ..schema import laya_questions
+
+    if args.share is not None and args.below is not None:
+        return support._fail("give --share or --below, not both: --share escalates that fraction of "
+                             "each question's answers (the least sure), --below escalates the "
+                             "answers less sure than a fixed confidence")
+    share, below = args.share, args.below
+    if share is None and below is None:
+        share = 0.3
+    try:
+        questions = laya_questions(inputs.load_questions(args.questions))
+        second_url = config.check_url(args.escalate, "--escalate")
+    except ValueError as exc:
+        return support._fail(exc)
+
+    primary = inference._Asker(args)
+    flags = {"allow_unmeasured": True} if args.allow_unmeasured else {}
+    errors = (client.NoServer, client.ServerError, client.ServerTimeout)
+
+    def secondary(state, qs):
+        return client.decide(state, qs, second_url, **flags)
+
+    if args.check:
+        try:
+            rows = [json.loads(line) for line in Path(args.check).read_text().splitlines() if line.strip()]
+            states = [r["state"] for r in rows]
+            labels = []
+            for i, r in enumerate(rows):
+                lab = r.get("labels") or ({next(iter(questions)): r["label"]}
+                                         if "label" in r and len(questions) == 1 else None)
+                if not isinstance(lab, dict):
+                    raise ValueError(f"example {i + 1} needs \"labels\": {{question: value}}")
+                labels.append(lab)
+        except (KeyError, ValueError, OSError) as exc:
+            return support._fail(f"{args.check}: {exc}")
+        report = cascade.check(states, questions, labels, primary, secondary, share=share,
+                               below=below, errors=errors)
+        if args.json:
+            print(json.dumps(report, indent=2))
+            return 0
+        for qid, r in report.items():
+            print(f"{qid}: primary {r['primary']:.3f}  cascade {r['cascade']:.3f} "
+                  f"({r['escalated']} of {r['n']} escalated)  second {r['secondary']:.3f}")
+        no = [q for q, r in report.items() if not r["helps"]]
+        if no:
+            print(f"escalating would not help for: {', '.join(no)}. The second backend does not beat "
+                  "the primary on these examples, so sending text out buys nothing (FINDINGS §52).")
+        else:
+            print("escalating helps for every question checked.")
+        return 0
+
+    if getattr(sys.stdin, "isatty", lambda: False)():
+        return support._fail("cascade reads states from stdin, one JSON state per line, and stdin "
+                             "is a terminal; pipe or redirect a file: verdict cascade -q BANK "
+                             "--escalate URL < states.jsonl")
+    try:
+        numbered = list(_jsonl_states(sys.stdin, warn=lambda line: print(f"verdict: {line}",
+                                                                         file=sys.stderr)))
+    except ValueError as exc:
+        return support._fail(exc)
+    if not numbered:
+        return support._fail("no states on stdin; pipe one JSON state (or text) per line")
+    result = cascade.run([state for _, state in numbered], questions, primary, secondary,
+                         share=share, below=below, errors=errors)
+    for (index, state), row in zip(numbered, result.rows):
+        print(json.dumps({"index": index, "state": state, **row}), flush=True)
+    kept = len(numbered) - result.states_sent
+    print(f"verdict: escalated {result.escalated} of {result.answers} answers to {second_url}: "
+          f"{result.states_sent} of {len(numbered)} states were sent there, {kept} stayed on the "
+          "primary", file=sys.stderr)
+    if result.failed:
+        print(f"verdict: {len(result.failed)} state(s) could not be escalated and kept the primary "
+              f"answer (first: {result.failed[0][1]})", file=sys.stderr)
+        return 1
+    return 0

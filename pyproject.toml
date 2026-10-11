@@ -1,6 +1,6 @@
 [project]
 name = "verdict"
-version = "0.6.3"
+version = "0.7.0"
 description = "A typed decision API: state + typed questions in, calibrated probabilities out."
 requires-python = ">=3.11.4,<3.12"
 license = "Apache-2.0"
@@ -29,6 +29,9 @@ bench = [
 cloud = [
     "modal>=1.5.5",
 ]
+jev = [
+    "typesafe-sdk>=0.7.4",
+]
 
 [dependency-groups]
 dev = ["pytest>=8", "httpx>=0.27"]
@@ -48,6 +51,9 @@ packages = ["src/verdict"]
 "docs/FINDINGS.md" = "verdict/_docs/FINDINGS.md"
 "docs/pipeline.md" = "verdict/_docs/pipeline.md"
 "docs/routing.md" = "verdict/_docs/routing.md"
+"docs/patterns.md" = "verdict/_docs/patterns.md"
+"docs/rough-edges.md" = "verdict/_docs/rough-edges.md"
+"docs/models.md" = "verdict/_docs/models.md"
 # `verdict examples` reads these from an installed tool the same way.
 "examples" = "verdict/_examples"
 

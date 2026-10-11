@@ -1,5 +1,5 @@
 {
-  "about": "Questions measured to work, usable as `-q NAME`. Real-label entries cite FINDINGS; bench-backed entries take their question from bench_suites.json and their number from the latest scorecard. Failed questions are not listed here; they are what library.lint warns about.",
+  "about": "Questions measured to work, usable as `-q NAME`. Real-label entries cite FINDINGS; bench-backed entries take their question from bench_suites.json and their number from the latest scorecard, which is base Laya, the model a public install runs. A real-label entry says which model it was measured on. Failed questions are not listed here; they are what library.lint warns about.",
   "questions": [
     {
       "name": "is_instruction",
@@ -8,8 +8,8 @@
         "instructions": "Is this an instruction to perform an action, rather than a question?"
       },
       "state": "a user turn to an agent, as plain text",
-      "measured": "AUC 0.77 held out on real agent turns, predicting that the agent used tools",
-      "source": "FINDINGS §26, §27"
+      "measured": "AUC 0.65 (0.61 to 0.69) on 2,125 real agent turns, predicting that the agent used tools; base Laya, asked as the no/yes choice (0.68 plain). The private fine-tune scored 0.75",
+      "source": "FINDINGS §26, §27, §49"
     },
     {
       "name": "is_approval",
@@ -18,7 +18,7 @@
         "instructions": "Is this an approval (ok, yes, go ahead)?"
       },
       "state": "a user turn to an agent, as plain text",
-      "measured": "AUC 0.69 on 700 real turns, predicting that a skill fired",
+      "measured": "AUC 0.69 on 700 real turns, predicting that a skill fired; measured on the private fine-tune, not yet on base Laya",
       "source": "FINDINGS §28"
     },
     {
@@ -28,7 +28,7 @@
         "instructions": "Does `command` read, print or change a secret, key, token or credential?"
       },
       "state": "{\"command\": \"<a shell command>\"}",
-      "measured": "AUC 0.77 held out (Haiku 4.5 0.73, regex 0.64), predicting a blocked command",
+      "measured": "AUC 0.77 held out (Haiku 4.5 0.73, regex 0.64), predicting a blocked command; measured on the private fine-tune, not yet on base Laya",
       "source": "FINDINGS §29, §32"
     },
     {
@@ -38,29 +38,29 @@
         "instructions": "Does `latest` say the work is finished, shipped or resolved?"
       },
       "state": "{\"latest\": \"<a status update>\"}",
-      "measured": "read, no labels: about 9 of the top 11 right",
+      "measured": "read, no labels: about 9 of the top 11 right; read on the private fine-tune, not yet on base Laya",
       "source": "FINDINGS §30"
     },
     {
       "name": "sentiment",
       "bench": "sst2-choice",
       "state": "{\"text\": \"<a review sentence>\"}",
-      "measured": "accuracy 0.91 (AUC 0.96) on 200 SST-2 review sentences, chance 0.50",
-      "source": "verdict bench, suite sst2-choice, scorecard v0.2.4"
+      "measured": "accuracy 0.91 (AUC 0.97) on 200 SST-2 review sentences, chance 0.50; base Laya",
+      "source": "verdict bench, suite sst2-choice, scorecard v0.7.0"
     },
     {
       "name": "is_spam",
       "bench": "spam-yesno",
       "state": "{\"text\": \"<an SMS message>\"}",
-      "measured": "AUC 0.98 on 200 SMS messages; 97% of spam over 0.5",
-      "source": "verdict bench, suite spam-yesno, scorecard v0.2.4"
+      "measured": "AUC 0.98 on 200 SMS messages; 98% of spam over 0.5; base Laya",
+      "source": "verdict bench, suite spam-yesno, scorecard v0.7.0"
     },
     {
       "name": "prompt_injection",
       "bench": "injection-choice",
       "state": "{\"text\": \"<a prompt to an assistant>\"}",
-      "measured": "accuracy 0.83 (AUC 0.95) on 200 English prompts; injection recall 0.70, so rank or fit a cut",
-      "source": "verdict bench, suite injection-choice, scorecard v0.2.4"
+      "measured": "accuracy 0.81 (AUC 0.93) on 200 English prompts; injection recall 0.67, so rank or fit a cut; base Laya",
+      "source": "verdict bench, suite injection-choice, scorecard v0.7.0"
     }
   ]
 }

@@ -1,0 +1,132 @@
+{
+  "instructions": "What is the customer asking about?",
+  "groups": {
+    "card_ordering_and_delivery": {
+      "description": "getting, activating, linking or tracking a card",
+      "options": {
+        "activate my card": null,
+        "card about to expire": null,
+        "card arrival": null,
+        "card delivery estimate": null,
+        "card linking": null,
+        "disposable card limits": null,
+        "get disposable virtual card": null,
+        "get physical card": null,
+        "getting spare card": null,
+        "getting virtual card": null,
+        "order physical card": null
+      }
+    },
+    "card_problems_and_security": {
+      "description": "a card that does not work, was lost, or is at risk",
+      "options": {
+        "card not working": null,
+        "card swallowed": null,
+        "change pin": null,
+        "compromised card": null,
+        "contactless not working": null,
+        "lost or stolen card": null,
+        "lost or stolen phone": null,
+        "passcode forgotten": null,
+        "pin blocked": null,
+        "virtual card not working": null
+      }
+    },
+    "card_payments": {
+      "description": "payments made with a card, including declined, pending or wrong ones",
+      "options": {
+        "card acceptance": null,
+        "card payment fee charged": null,
+        "card payment not recognised": null,
+        "card payment wrong exchange rate": null,
+        "declined card payment": null,
+        "direct debit payment not recognised": null,
+        "extra charge on statement": null,
+        "pending card payment": null,
+        "reverted card payment?": null,
+        "transaction charged twice": null
+      }
+    },
+    "cash_withdrawals": {
+      "description": "ATMs and cash",
+      "options": {
+        "atm support": null,
+        "cash withdrawal charge": null,
+        "cash withdrawal not recognised": null,
+        "declined cash withdrawal": null,
+        "pending cash withdrawal": null,
+        "wrong amount of cash received": null,
+        "wrong exchange rate for cash withdrawal": null
+      }
+    },
+    "top_ups": {
+      "description": "adding money to the account",
+      "options": {
+        "automatic top up": null,
+        "balance not updated after bank transfer": null,
+        "balance not updated after cheque or cash deposit": null,
+        "pending top up": null,
+        "top up by bank transfer charge": null,
+        "top up by card charge": null,
+        "top up by cash or cheque": null,
+        "top up failed": null,
+        "top up limits": null,
+        "top up reverted": null,
+        "topping up by card": null,
+        "verify top up": null
+      }
+    },
+    "transfers": {
+      "description": "sending or receiving money by transfer",
+      "options": {
+        "beneficiary not allowed": null,
+        "cancel transfer": null,
+        "declined transfer": null,
+        "failed transfer": null,
+        "pending transfer": null,
+        "receiving money": null,
+        "transfer fee charged": null,
+        "transfer into account": null,
+        "transfer not received by recipient": null,
+        "transfer timing": null
+      }
+    },
+    "exchange_and_currency": {
+      "description": "exchange rates, charges and supported currencies",
+      "options": {
+        "exchange charge": null,
+        "exchange rate": null,
+        "exchange via app": null,
+        "fiat currency support": null
+      }
+    },
+    "identity_and_account": {
+      "description": "verifying identity and managing the account",
+      "options": {
+        "age limit": null,
+        "edit personal details": null,
+        "terminate account": null,
+        "unable to verify identity": null,
+        "verify my identity": null,
+        "verify source of funds": null,
+        "why verify identity": null
+      }
+    },
+    "refunds": {
+      "description": "refunds and money that has not shown up",
+      "options": {
+        "Refund not showing up": null,
+        "request refund": null
+      }
+    },
+    "general_information": {
+      "description": "questions about the service, countries and supported cards",
+      "options": {
+        "apple pay or google pay": null,
+        "country support": null,
+        "supported cards and currencies": null,
+        "visa or mastercard": null
+      }
+    }
+  }
+}

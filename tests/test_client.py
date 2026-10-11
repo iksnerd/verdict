@@ -266,3 +266,33 @@ def test_a_server_error_without_an_envelope_has_no_code(monkeypatch):
     with pytest.raises(client.ServerError) as info:
         client.decide("x", {"q": {"type": "noul"}})
     assert info.value.code is None
+
+
+def test_models_lists_what_the_server_lists(monkeypatch):
+    from io import BytesIO
+
+    class Resp(BytesIO):
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    seen = {}
+
+    def fake(request, timeout=None):
+        seen["url"] = request if isinstance(request, str) else request.full_url
+        return Resp(json.dumps({"models": [{"name": "jev-latest"}, {"name": "english"}]}).encode())
+
+    monkeypatch.setattr(client.urllib.request, "urlopen", fake)
+    assert [m["name"] for m in client.models("http://127.0.0.1:9999")] == ["jev-latest", "english"]
+    assert seen["url"] == "http://127.0.0.1:9999/v1/models"
+
+
+def test_models_on_a_stranger_is_no_server(monkeypatch):
+    def fake(url, timeout=None):
+        raise urllib.error.HTTPError(url, 404, "Not Found", {}, BytesIO(b"{}"))
+
+    monkeypatch.setattr(client.urllib.request, "urlopen", fake)
+    with pytest.raises(client.NoServer):
+        client.models("http://127.0.0.1:9999")

@@ -39,6 +39,10 @@ DEFAULTS: dict[str, Any] = {
     "model": {"path": "aac6fef/laya-mlx", "prompt_token_budget": 128,
               "multilingual": "aac6fef/laya-multilingual-mlx", "bits": 16, "lang": "auto",
               "extra": {}},
+    # A backend other than local Laya for `verdict serve`: any /v1/systemone server, Jev included.
+    # Unset by default, so nothing leaves this machine unless it is named here (or by a flag).
+    # The API key is deliberately not a setting: $TYPESAFE_API_KEY only.
+    "systemone": {"url": "", "model": "jev-latest"},
 }
 
 #: Environment overrides, as (section, key) -> variable name.
@@ -48,6 +52,8 @@ ENV_OVERRIDES = {
     ("model", "multilingual"): "VERDICT_MULTILINGUAL",
     ("model", "bits"): "VERDICT_BITS",
     ("model", "lang"): "VERDICT_LANG",
+    ("systemone", "url"): "VERDICT_SYSTEMONE_URL",
+    ("systemone", "model"): "VERDICT_SYSTEMONE_MODEL",
 }
 
 
@@ -57,11 +63,13 @@ class Settings:
     behaviour worth it. Using it here would undo the saving §19 just made."""
 
     __slots__ = ("url", "model_path", "prompt_token_budget", "multilingual_path", "source",
-                 "defaulted", "bits", "lang", "extra_checkpoints")
+                 "defaulted", "bits", "lang", "extra_checkpoints", "systemone_url",
+                 "systemone_model")
 
     def __init__(self, url, model_path, prompt_token_budget,
                  multilingual_path=DEFAULTS["model"]["multilingual"], source=None, defaulted=(),
-                 bits=16, lang="auto", extra_checkpoints=None):
+                 bits=16, lang="auto", extra_checkpoints=None, systemone_url=None,
+                 systemone_model=DEFAULTS["systemone"]["model"]):
         self.url = url
         #: Which checkpoint reads the state: auto (English, warn on other languages), en, multi.
         self.lang = lang
@@ -73,6 +81,10 @@ class Settings:
         #: Further named laya checkpoints, loaded on first request that names them (config.py's
         #: [model.extra]). A request's `model` selects one by name; unknown names are refused.
         self.extra_checkpoints = dict(extra_checkpoints) if extra_checkpoints else {}
+        #: A /v1/systemone server to answer instead of local Laya (None: local). Every state is
+        #: sent to it. The key is `systemone_key`, never stored here.
+        self.systemone_url = systemone_url
+        self.systemone_model = systemone_model
         #: The file it came from, or None when everything is a default.
         self.source = source
         #: Sections the loaded file did not set, so `verdict init` can say what it will add.
@@ -107,7 +119,8 @@ def _merge(base: dict, over: dict) -> dict:
 
 #: What a config file may set; anything else is a typo that would otherwise be ignored in silence.
 KNOWN = {"server": {"url"},
-         "model": {"path", "prompt_token_budget", "multilingual", "bits", "lang", "extra"}}
+         "model": {"path", "prompt_token_budget", "multilingual", "bits", "lang", "extra"},
+         "systemone": {"url", "model"}}
 
 
 def _read(found: Path) -> dict[str, Any]:
@@ -172,6 +185,8 @@ def load(path: Path | None = None) -> Settings:
         bits=_bits(data["model"]["bits"]),
         lang=_lang(data["model"]["lang"]),
         extra_checkpoints=_extra(data["model"]["extra"]),
+        systemone_url=_systemone_url(data["systemone"]["url"]),
+        systemone_model=_systemone_model(data["systemone"]["model"]),
     )
 
 
@@ -185,7 +200,9 @@ def explain(path: Path | None = None) -> list[dict[str, Any]]:
               ("model", "prompt_token_budget"): settings.prompt_token_budget,
               ("model", "multilingual"): settings.multilingual_path,
               ("model", "bits"): settings.bits, ("model", "lang"): settings.lang,
-              ("model", "extra"): settings.extra_checkpoints}
+              ("model", "extra"): settings.extra_checkpoints,
+              ("systemone", "url"): settings.systemone_url,
+              ("systemone", "model"): settings.systemone_model}
     rows = []
     for (section, key), value in values.items():
         var = ENV_OVERRIDES.get((section, key))
@@ -251,6 +268,58 @@ def _lang(value) -> str:
     return value
 
 
+def _systemone_url(value, where: str | None = None) -> str | None:
+    """None when unset; otherwise http(s)://host[:port]. A port is optional: api.typesafe.ai has
+    none. A remote server must be https: the API key travels in a header and every state in the
+    body, so cleartext is only acceptable on loopback."""
+    from urllib.parse import urlsplit
+
+    if not value:
+        return None
+    where = where or ("$VERDICT_SYSTEMONE_URL" if os.environ.get("VERDICT_SYSTEMONE_URL") == value
+                      else "[systemone].url")
+    url = str(value).rstrip("/")
+    parts = urlsplit(url)
+    if parts.scheme not in ("http", "https") or not parts.hostname:
+        raise ConfigError(f"{where} is {value!r}; it takes http(s)://host[:port], like "
+                          "https://api.typesafe.ai")
+    if parts.scheme == "http" and parts.hostname not in LOOPBACK:
+        raise ConfigError(f"{where} is {value!r}; a remote server needs https, because "
+                          "$TYPESAFE_API_KEY is sent in a header and every state in the body. "
+                          "Plain http is only for loopback")
+    return url
+
+
+def check_systemone_url(value, where: str = "--systemone") -> str:
+    """The same check for a `--systemone` flag, which never passes through `load`."""
+    return _systemone_url(value, where)
+
+
+def _systemone_model(value) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise ConfigError(f"[systemone].model is {value!r}; it takes the model name the server "
+                          "expects, like jev-latest")
+    return value.strip()
+
+
+LOOPBACK = ("127.0.0.1", "localhost", "::1")
+
+
+def systemone_key(url: str) -> str:
+    """The key for a /v1/systemone server: $TYPESAFE_API_KEY, or a placeholder for loopback,
+    where a local server (verdict itself, Kev) ignores it. Never read from a file: `verdict init`
+    writes the config and people commit it."""
+    from urllib.parse import urlsplit
+
+    key = os.environ.get("TYPESAFE_API_KEY")
+    if key:
+        return key
+    if (urlsplit(url).hostname or url) in LOOPBACK:
+        return "local"
+    raise ConfigError(f"{url} needs $TYPESAFE_API_KEY. Every state asked about is sent to that "
+                      "service and billed per input token")
+
+
 def _extra(value) -> dict[str, str]:
     if not isinstance(value, dict):
         raise ConfigError(f"[model.extra] is {value!r}; it takes a table of name = \"hf-id-or-path\" "
@@ -291,6 +360,17 @@ def _extra_toml(extra: dict[str, str]) -> str:
     return f"[model.extra]\n{lines}"
 
 
+def _systemone_toml(s: Settings) -> str:
+    """`[systemone]`, only when one is chosen. Unset, it is a comment: a table that is present
+    reads as a decision to send every state to a remote service."""
+    if not s.systemone_url:
+        return ('# [systemone] answers with a /v1/systemone server (TypeSafe Jev, Kev, another verdict)\n'
+                '# instead of local laya, and sends it every state. The key is $TYPESAFE_API_KEY only.\n'
+                '# url = "https://api.typesafe.ai"\n# model = "jev-latest"')
+    return (f"[systemone]\n# Every state is sent to this server. The key is $TYPESAFE_API_KEY only.\n"
+            f"url = {_toml_str(s.systemone_url)}\nmodel = {_toml_str(s.systemone_model)}")
+
+
 def to_toml(s: Settings) -> str:
     """Render settings as the file `verdict init` writes. Hand-rolled because `tomllib` reads only,
     and the shape is two small tables rather than a reason to take a dependency."""
@@ -318,6 +398,8 @@ bits = {s.bits}
 lang = {_toml_str(s.lang)}
 
 {_extra_toml(s.extra_checkpoints)}
+
+{_systemone_toml(s)}
 
 # There is deliberately no [thresholds] table. The cuts are applied by the switch inside the
 # server process, so a value here would be read and ignored on the server path, and a config key

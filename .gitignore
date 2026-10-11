@@ -33,3 +33,4 @@ plugins/verdict/skills/verdict/EVOLUTION.md
 
 # Drafts, notes, and anything else not meant to ship: never committed.
 docs/personal/
+.idea/

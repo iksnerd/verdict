@@ -35,7 +35,7 @@ fi
 
 python="$repo/.venv/bin/python"
 if [ ! -x "$python" ]; then
-  echo "pre-commit: no .venv; run: uv sync --extra mlx --extra laya" >&2
+  echo "pre-commit: no .venv; run: uv sync --extra mlx --extra laya --extra jev" >&2
   exit 1
 fi
 snapshot=$(mktemp -d "${TMPDIR:-/tmp}/verdict-precommit.XXXXXX")

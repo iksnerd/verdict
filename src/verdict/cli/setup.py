@@ -21,13 +21,19 @@ def _serve_cmd(args: argparse.Namespace) -> int:
     """
     import uvicorn
 
+    from .. import config
     from ..api import create_app
-    from ..backend_mlx import MlxBackend
 
     import socket
 
     settings = support._settings()
-    args.model = inference._resolved_model(args.model, settings)
+    remote = (config.check_systemone_url(args.systemone) if args.systemone
+              else settings.systemone_url)
+    if remote:
+        # Fail on a missing key before binding anything or claiming to serve.
+        key = config.systemone_key(remote)
+    else:
+        args.model = inference._resolved_model(args.model, settings)
     args.port = args.port if args.port is not None else settings.port
 
     # Check the port before loading 400 MB of weights and before claiming to serve. This printed
@@ -47,6 +53,11 @@ def _serve_cmd(args: argparse.Namespace) -> int:
     finally:
         probe.close()
 
+    if remote:
+        return _serve_remote(args, settings, remote, key, create_app, uvicorn)
+
+    from ..backend_mlx import MlxBackend
+
     budget = args.budget if args.budget is not None else settings.prompt_token_budget
     bits = args.bits or settings.bits
     backend = MlxBackend(args.model, multilingual_id=settings.multilingual_path,
@@ -60,6 +71,48 @@ def _serve_cmd(args: argparse.Namespace) -> int:
     print("  it binds to localhost and has no auth; do not expose it beyond this machine.")
     uvicorn.run(create_app(backend), host=args.host, port=args.port,
                 log_level=args.log_level)
+    return 0
+
+
+def _serve_remote(args, settings, url, key, create_app, uvicorn) -> int:
+    """Serve a /v1/systemone server (Jev, Kev, another verdict) behind verdict's own API.
+
+    No model loads here. The request goes upstream as given, so laya's clipping and rewrites do
+    not apply; the refusals do (api.py), so a question gets the same answer to "may I ask this"
+    whichever backend is behind it. Every state leaves this machine, which the first lines say.
+    """
+    from urllib.parse import urlsplit
+
+    from ..backend_systemone import SystemOneBackend
+    from ..config import LOOPBACK, ConfigError
+
+    if (urlsplit(url).hostname or "") not in LOOPBACK and args.host not in LOOPBACK:
+        raise ConfigError(f"--host {args.host} would expose an unauthenticated server that forwards "
+                          f"to {url} with $TYPESAFE_API_KEY, and bills it. Bind to localhost")
+    model = args.systemone_model or settings.systemone_model
+    if (urlsplit(url).hostname or "") == "api.typesafe.ai":
+        # Hosted Jev goes through TypeSafe's own SDK (retries, request ids); anything else
+        # speaking the protocol (Kev, another verdict) keeps the dependency-free client.
+        try:
+            from ..backend_jev import JevBackend
+        except ImportError as exc:
+            raise ConfigError("hosted Jev uses TypeSafe's SDK, which is not installed: "
+                              "uv tool install --reinstall 'verdict[mlx,laya,jev]' (or "
+                              "`uv sync --extra jev` in a checkout)") from exc
+        backend = JevBackend(model, api_key=key, base_url=url)
+    else:
+        backend = SystemOneBackend(url, model, key)
+    billed = "" if (urlsplit(url).hostname or url) in LOOPBACK else " and billed per input token"
+    print(f"serving {backend.name} on http://{args.host}:{args.port}", flush=True)
+    print(f"  every state asked about is sent to {url}{billed}; nothing is read locally.",
+          flush=True)
+    print(f"  it binds to {args.host} and has no auth; do not expose it beyond this machine.",
+          flush=True)
+    try:
+        uvicorn.run(create_app(backend), host=args.host, port=args.port,
+                    log_level=args.log_level)
+    finally:
+        backend.close()
     return 0
 
 

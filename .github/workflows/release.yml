@@ -30,7 +30,7 @@ jobs:
           enable-cache: true
 
       - name: Install with both extras
-        run: uv sync --extra mlx --extra laya
+        run: uv sync --extra mlx --extra laya --extra jev
 
       - name: Test
         run: uv run --no-sync pytest -q

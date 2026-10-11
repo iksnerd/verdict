@@ -1712,3 +1712,264 @@ is positive") was not tried, and §22 found describing the sides hurt. One check
 as `score` use cases. The refusals for a consequence, difficulty or risk (§25, §29) are verdict's
 own measurements on real traffic, not a Laya rule, and Laya's README itself calls ordinal `score`
 the weakest primitive (SST-5 0.372). A question Laya's docs would allow can still be refused here.
+
+
+## 48. Hosted Jev against Laya on the public bench: ahead where Laya was weak, behind on AG News (2026-10-10)
+
+The head-to-head the roadmap kept waiting on a key for. `verdict bench` on its 12 pinned suites,
+the same items and seed for each contestant: hosted Jev (`jev-latest`, served as `jev-1.13.0`, through
+`verdict bench --systemone`), base Laya (`aac6fef/laya-mlx`) and the fine-tune (the v0.6.3 release
+scorecard). Laya clips each state to 128 tokens and Jev reads it whole. AUC for yes/no, accuracy for
+the rest, 95% intervals; "ahead" below means the intervals are disjoint. The scorecards are in
+`bench/head-to-head/`, and an APOL benchmark (`jev-vs-laya`) replays them.
+
+| suite | fine-tune | base Laya | Jev | Jev against base |
+|---|---|---|---|---|
+| sst2, yes/no | 0.797 | 0.500 | **0.989** [0.98, 1.00] | ahead |
+| sst2, choice | 0.905 | 0.910 | 0.960 [0.93, 0.98] | tied |
+| spam, yes/no | 0.985 | 0.982 | 0.986 | tied |
+| spam, choice | 0.965 | 0.960 | 0.965 | tied |
+| injection, yes/no | 0.952 | 0.914 | **0.992** [0.98, 1.00] | ahead |
+| injection, choice | 0.830 | 0.805 | 0.865 [0.81, 0.91] | tied |
+| AG News, 4 topics | **0.945** | **0.940** | 0.825 [0.77, 0.88] | **behind** |
+| emotion, 6 labels | 0.467 | 0.475 | 0.500 [0.44, 0.56] | tied |
+| Bulgarian, choice | 0.925 | 0.925 | **0.985** [0.96, 1.00] | ahead |
+| Bulgarian, yes/no | 0.963 | 0.963 | **1.000** [1.00, 1.00] | ahead |
+| Russian, choice | 0.880 | 0.880 | 0.895 | tied |
+| Russian, yes/no | 0.944 | 0.944 | 0.979 [0.96, 0.99] | tied |
+
+Macro mean: Jev 91.2, fine-tune 88.0, base Laya 85.0. **Jev is clearly ahead on 4 suites, tied on 7
+and clearly behind on 1.** The macro overstates it: base Laya's plain SST-2 yes/no sits at chance
+(§33), which alone costs it about 4 points, and the fine-tune and base share the Bulgarian and
+Russian numbers because both use the same multilingual checkpoint there.
+
+**Where Jev is better.** The two yes/no suites Laya is weakest on (SST-2, injection) and the
+Bulgarian reviews. On SST-2 as a choice, where Laya is fine, they tie, so the yes/no gap is the
+slot-label problem (§33, §38) and not sentiment skill. The Bulgarian gap is real across both forms
+and fits Jev reading more languages than the multilingual checkpoint does.
+
+**Where it is not.** AG News: 0.825 against 0.94, the only clear loss. Laya's README lists AG News in
+its training mix, so Laya's number is probably inflated, and Jev's training data is not published,
+so neither side is a clean held-out test. Emotion is level, all four near 0.5; Jev's own published
+0.595 was a different sample.
+
+**What was found on the way.** Jev rounds its probabilities to two decimals and adjusts them to
+sum to 1, so a valid answer can sum to 0.99, and its stated `choice` can sit one rounding step
+(0.01) under the displayed maximum. The response validator, sized for Laya's four decimals, rejected
+about 1 in 100 valid Jev choices as "invalid", which the first full run turned into a failed suite.
+Both checks now allow the precision the values actually show (`systemone._precision`), with tests,
+and still refuse a distribution that is off by more than rounding.
+
+**Not measured, and why it matters.** Cost (token counts were not recorded when this ran; the bench
+now records them, with latency, in a `timing` block of the scorecard, and `--verify` ignores it).
+Latency: about 0.5 s a call from this laptop (2,440 sequential calls took about 20 minutes) against
+30 to 40 ms for local Laya. Contamination: if Jev trained on SST-2 or the prompt-injection set, its
+lead there is smaller than shown. 200 to 240 items a suite, one seed.
+
+**Decision.** Nothing changes by default: verdict stays local and private, and Jev is an explicit
+choice (`verdict serve --systemone`). If a task needs Bulgarian or Russian, a
+yes/no on sentiment or injection, or has no GPU to spare, Jev is the measured better option; for
+topic classification like AG News, local Laya wins on accuracy, latency and cost.
+
+
+## 49. On base Laya, "is this an instruction?" is 0.65, not 0.77: the numbers we quoted were the fine-tune's (2026-10-10)
+
+A public install runs base Laya (`aac6fef/laya-mlx`). The release scorecards, the library's
+measured values and the numbers in the docs came from the private fine-tune, so a user could not get
+what we quoted. Decision (the owner's): measure and improve the base from 0.7.0, and treat the
+fine-tune as an archive.
+
+**The flagship, re-measured.** `is_instruction` on the same kind of real data as §26: the human turns
+of the 120 newest agent transcripts, 2,125 of them, each labelled positive when the agent used any
+tool before the next human turn (92.4% are). Base Laya, 128-token clip, asked the way base users
+get it (as the no/yes choice of §38):
+
+| | AUC, predicting tool use |
+|---|---|
+| base Laya, as the no/yes choice (shipped) | **0.651** [0.612, 0.694] |
+| base Laya, plain yes/no | 0.676 [0.638, 0.718] |
+| private fine-tune, §26 (2,312 turns) | 0.753 |
+
+A first pass on a 400-turn sample read 0.713 [0.60, 0.80]: only about 30 of 400 turns are negatives,
+which is why the whole set was used. The fine-tune's 0.753 and this are on different turn sets (the
+transcripts grew) and unpaired, so the gap of about 0.1 is indicative, not exact; the interval
+excludes 0.75. Plain is nominally ahead of the rewrite here (0.676 against 0.651), but the intervals
+overlap and the rewrite's case is the SST-2 and injection evidence (§38, §40), so nothing changed.
+One developer's traffic, noisy labels.
+
+**What changed.**
+- The release scorecard measures base Laya. `bench/scorecards/v0.7.0.json` is the first, and
+  `--verify` compares a scorecard only with an earlier one of the same `model`, so a base card is a
+  baseline and not a "regression" against fine-tune cards (SST-2 yes/no is 0.80 on one and 0.50 on the
+  other). The next base card is gated as before.
+- The three bench-backed library entries take their numbers from that card (sentiment 0.91,
+  spam 0.98, injection 0.81 as accuracy), `is_instruction` carries the base figure above, and the
+  three remaining real-label entries (`is_approval`, `touches_secret`, `work_finished`) say they were
+  measured on the fine-tune and not yet on base.
+- The docs, the agent skill and `CLAUDE.md` stop quoting 0.77 as what a user gets.
+
+**Where base is weakest, and so where to work** (the 12 suites, FINDINGS §48): emotion 0.475,
+injection as a choice 0.805, and Bulgarian and Russian against Jev. On real traffic the open
+question is whether another wording of `is_instruction` recovers part of the 0.1 on base, in the
+manner of §27 and §28.
+
+
+## 50. A two-level tree takes 77 options from 0.38 to 0.55 on base Laya (2026-10-11)
+
+The one place §48 showed Jev far ahead, and the one thing `ask` and `decide` refuse, is many options:
+Laya's README puts Banking77 (77 intents) at 0.43 against Jev's 0.87, because options share a token
+budget (§41). `verdict classify` asks a choice among at most 20 groups, then a choice among the
+options of the best `--beam` groups, and ranks leaves by P(group) * P(option | group)
+(`verdict.hierarchy`). Measured on the public Banking77 test split (the MTEB parquet mirror,
+CC BY 4.0): 308 items, 4 per intent, seed 0, base Laya, 128-token clip, ten groups of 2 to 12
+options, every item asked all four ways (`scripts/eval_hierarchy_banking77.py`).
+
+| | accuracy | passes per item |
+|---|---|---|
+| flat, one 77-way choice | 0.380 [0.328, 0.442] | 1 |
+| tree, beam 1 | 0.506 [0.455, 0.562] | 2 |
+| tree, beam 2 | **0.545** [0.490, 0.601] | 3 |
+| tree, beam 3 | 0.552 [0.497, 0.607] | 4 |
+
+The flat figure reproduces Laya's own 0.425 within noise. **The tree helps by about 0.17 for three
+passes (about 0.1 s), and the intervals are disjoint from flat's at every beam.** A wider beam
+recovers leaves whose group ranked second; past beam 2 it buys little. It does not reach Jev, which
+takes all 77 in one request at 0.87 (Laya's README, a third-party figure).
+
+**Caveats that matter.** The tree was built by hand by someone who knew the 77 labels and their
+neighbours, so the gain is an upper bound for a tree a stranger would write: the groups are the
+kind a reader would draw, and a poor grouping puts a leaf where stage one cannot find it. One
+dataset, one seed, one sample. Laya's confidences are not calibrated (§2), so the joint probability
+ranks leaves, and a low one is the signal to send an item to a person: a live miss ("I want to close
+my account" read as `visa or mastercard`) scored 0.11, against 0.94 for a clear `card arrival`.
+
+**What changed.** `verdict classify TEXT --tree FILE [--beam N]` and `Verdict.classify` in the Python
+client; the tree used here ships as `examples/banking-tree/tree.json`. A level past 20 is refused by
+name. Refusals still apply to the question wording at both levels.
+
+
+## 51. Reading more text does not close the gap to Jev (2026-10-11)
+
+In §48 Jev read each text whole and Laya clipped to 128 tokens, so part of Jev's lead might have been
+the longer read. Re-scored the long-text bench suites on base Laya at read budgets of 128, 256 and
+512 tokens, the same items and seed as the release scorecard and the bench's own pinned question
+shapes (English suites on base Laya, Bulgarian and Russian on the multilingual checkpoint;
+`scripts/eval_budget_sweep.py`):
+
+| suite | median tokens | over 128 | 128 | 256 | 512 |
+|---|---|---|---|---|---|
+| injection, yes/no (AUC) | 31 | 8% | 0.914 | 0.914 | 0.914 |
+| injection, choice | 31 | 8% | 0.805 | 0.800 | 0.800 |
+| AG News | 52 | 0% | 0.940 | 0.940 | 0.940 |
+| Bulgarian, choice | 79 | 33% | 0.925 | 0.920 | 0.925 |
+| Bulgarian, yes/no (AUC) | 79 | 33% | 0.963 | 0.972 | 0.972 |
+| Russian, choice | 33 | 4% | 0.880 | 0.880 | 0.880 |
+| Russian, yes/no (AUC) | 33 | 4% | 0.944 | 0.943 | 0.943 |
+
+**Nothing moves outside its interval.** The one change, Bulgarian yes/no, is +0.009 with overlapping
+intervals. These texts are short (a third of the Bulgarian reviews and a few percent of the rest run
+past 128 tokens), so the clip was never the limit. Jev's lead on injection and on Bulgarian is the
+model, not the read, and the levers left are on the answering side: how many questions are asked and
+how the answers are decoded, not how much text is shown. The 128-token default stands; the clip
+matters for long documents, which these suites do not contain.
+
+
+## 52. Laya first, Jev only for the items Laya is least sure of: half the items closes 92% of the gap (2026-10-11)
+
+§48 left a choice: Laya, free and private, or Jev, better. A cascade asks Laya about everything and
+sends only the items it is least sure of to Jev, so most text never leaves the machine. Per-item
+answers from both on the 12 bench suites (2,440 items; Laya as a base user gets it, a yes/no as the
+no/yes choice, English suites on base Laya and Cyrillic on the multilingual checkpoint; Jev asked
+each suite's own question; `scripts/eval_cascade_collect.py`). Each suite is split in half by a
+seeded shuffle: the uncertainty threshold that sends a given share is read off the first half
+(Laya's `1 - max probability`) and scored on the second, so it is never tuned on what it is scored
+on. Accuracy of the final decision, macro over the 12 suites:
+
+| share sent to Jev | 0% | 10% | 20% | 30% | 40% | 50% | 70% | 100% |
+|---|---|---|---|---|---|---|---|---|
+| cascade | 0.825 | 0.847 | 0.857 | 0.857 | 0.867 | **0.877** | 0.883 | 0.881 |
+| a random share instead | 0.825 | 0.832 | 0.837 | 0.843 | 0.849 | 0.854 | 0.864 | 0.881 |
+| oracle (Laya's errors first) | 0.825 | 0.909 | 0.919 | 0.919 | 0.914 | 0.912 | 0.898 | 0.881 |
+
+The gap between Laya alone (0.825) and Jev alone (0.881) is 0.055. **Sending 10% closes 39% of it, 20%
+closes 56%, half closes 92%, and 70% slightly passes Jev alone** (0.883), because where the two
+disagree Laya is sometimes right and Jev wrong. The signal is real: the same shares sent at random
+close 12%, 22% and 52%. The oracle shows headroom a better uncertainty signal could take (91% at 10%).
+
+**It is a per-task decision, not a global one.** On AG News Laya beats Jev (0.92 against 0.82) and
+every item sent to Jev makes the cascade worse; on the Bulgarian yes/no it goes 0.85 to 0.93 at 30%
+and on the SST-2 yes/no 0.71 to 0.89 at 50%. Judge a task on your own labelled examples
+(`verdict calibrate`) before sending anything.
+
+**Caveats.** About 100 test items per suite, one seed, so the per-suite curves are noisy; the macro
+is steadier. The yes/no decision uses each model's own 0.5 (Laya's no/yes argmax, Jev's `noul`).
+Laya's confidence is not calibrated (§2), which is why the threshold is read off a share and not
+quoted as a probability. Jev costs latency (about 0.5 s) and sends the text out for the share it
+gets. This is a measurement, not a command yet.
+
+## 53. For many topical labels the right tool is an embedding model: 0.89, against Jev 0.78 and Laya 0.38 to 0.55 (2026-10-11)
+
+§50 took Laya from 0.38 to 0.55 on Banking77 with a hand-built tree. The question after it was
+whether the tree could be built mechanically, and whether retrieval does better. Same 308 items
+(4 per intent, seed 0, base Laya, 128-token clip; `scripts/eval_autotree_banking77.py`,
+`eval_fusion_banking77.py`, `eval_jev_banking77.py`):
+
+| approach | accuracy |
+|---|---|
+| embedding model alone: nearest label to the text (`embeddinggemma:300m`, no Laya) | **0.886** |
+| Jev, flat 77-way | 0.779 [0.734, 0.825] |
+| Laya choice over the embedding model's top 10 | 0.653 [0.601, 0.708] |
+| Laya choice over the top 20 | 0.623 [0.568, 0.679] |
+| hand-built tree, beam 2 (§50) | 0.545 [0.490, 0.601] |
+| tree clustered from the embedding model's label vectors, beam 2 | 0.341 [0.289, 0.393] |
+| Laya flat, 77 options | 0.380 [0.328, 0.442] |
+| tree clustered from Laya's own encoder, beam 2 | 0.286 [0.234, 0.334] |
+| shortlist from Laya's own encoder, top 20, then a choice | 0.295 [0.244, 0.347] |
+
+**Laya's own encoder cannot retrieve or group.** Its mean-pooled embeddings put the gold label in
+the top 20 only 42% of the time, and trees or shortlists built from them are worse than no tree. Laya's README says the same
+("a dedicated bi-encoder usually shortlists better"). **A dedicated embedding model finds the gold
+label in the top 3 98% of the time and the top 10 99.7%**, and its nearest label alone is right
+0.886 of the time.
+
+**Laya adds nothing on top.** A blend of retrieval and Laya's probability over the top 5 chooses
+weight 1.00 for retrieval on the first half; on the second half retrieval alone scores 0.877, the
+blend 0.877 and Laya alone 0.708. Re-choosing among the retrieved labels with Laya is worse than not
+asking it (0.653 against 0.886). Mechanically clustered trees (0.34) lose to the hand-built one
+(0.55): grouping label names by similarity does not produce the groups a reader would draw.
+
+**The rule this gives.** Laya is a judge of typed facts about a text: is it spam, is it an
+instruction, which of a few named options. It is not a retriever. Matching a text to one of many
+topical labels is retrieval, and an embedding model does it better and cheaper than Laya or Jev here.
+`verdict classify` stays as the option that needs no second model.
+
+**Caveats.** Banking77's labels are descriptive phrases, which favours matching label names to the
+text; a task whose labels are not self-describing (issue type, dialogue acts, §41) is another
+question. One dataset, one sample, and the embedding model's training data is not known to exclude
+it. Jev's 0.779 here is below the 0.87 in Laya's README, a different sample and prompt.
+
+
+## 54. The cascade, live: it matched Jev on prompt injection with 30% sent, and refused AG News (2026-10-11)
+
+`verdict cascade` (`verdict.cascade`) turns §52 into a command. Primary: base Laya, `verdict serve`
+on 8799. Second: `verdict serve --systemone https://api.typesafe.ai` on 8801, so Jev through
+TypeSafe's SDK. 200 public items per task, the bench's own pinned samples and questions, `--share 0.3`,
+`--check` against the labels:
+
+| task | primary (Laya) | cascade, 60 of 200 sent | second (Jev) | the check said |
+|---|---|---|---|---|
+| prompt injection, yes/no | 0.805 | **0.845** | 0.845 | escalating helps |
+| AG News, 4 topics | **0.940** | 0.855 | 0.825 | escalating would not help |
+
+On injection the cascade reached Jev's accuracy while 140 of the 200 texts never left the machine.
+On AG News the second backend is worse than the primary, so every item sent costs accuracy, and
+`--check` said so from the labelled examples before anything was sent: the guard §52 asked for.
+A live run on the injection states then answered all 200, escalated 60 (marked `tier: escalated`,
+the rest `primary`) and reported "60 of 200 states were sent there, 140 stayed on the primary".
+
+**Caveats.** The cut is read off the batch's own confidences, with no labels, so nothing is tuned on
+the answers; but it is one sample of 200 and one seed, and an accuracy of 0.845 against 0.845 is a
+tie, not a win over Jev. `--check` itself sends every labelled example to the second server once.
+Laya's confidence is not calibrated, which is why `--share` is the default and `--below` is a fixed
+number only the user can justify. A better uncertainty signal than the largest probability is open:
+the oracle in §52 reaches 0.91 at 10% sent against 0.85 here.

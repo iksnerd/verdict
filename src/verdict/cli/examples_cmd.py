@@ -77,6 +77,9 @@ def _systemone_ask(args: argparse.Namespace):
 
     from .. import bench
 
+    from .. import config
+
+    config.check_systemone_url(args.systemone)  # a ConfigError is a ValueError: reported, exit 2
     host = urlparse(args.systemone).hostname or args.systemone
     key = os.environ.get("TYPESAFE_API_KEY") or ("local" if host in ("127.0.0.1", "localhost")
                                                  else None)

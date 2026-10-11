@@ -16,6 +16,9 @@ TOPICS = {
     "findings": "docs/FINDINGS.md",
     "pipeline": "docs/pipeline.md",
     "routing": "docs/routing.md",
+    "patterns": "docs/patterns.md",
+    "rough-edges": "docs/rough-edges.md",
+    "models": "docs/models.md",
 }
 
 _PACKED = Path(__file__).with_name("_docs")

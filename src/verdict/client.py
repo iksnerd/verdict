@@ -202,6 +202,25 @@ def capabilities(url: str | None = None, model: str | None = None,
     return payload
 
 
+def models(url: str | None = None, timeout: float = CONNECT_TIMEOUT) -> list[dict[str, Any]]:
+    """`GET /v1/models`: what the server says it can answer with. `NoServer` for a stranger on the
+    port or nothing listening, like `capabilities`."""
+    base = (url or server_url()).rstrip("/")
+    try:
+        with urllib.request.urlopen(base + "/v1/models", timeout=timeout) as response:
+            payload = json.loads(response.read())
+    except urllib.error.HTTPError as exc:
+        if exc.code in _NOT_VERDICT:
+            raise NoServer(f"{base} does not list models") from exc
+        raise _server_error(exc) from exc
+    except (urllib.error.URLError, OSError, json.JSONDecodeError) as exc:
+        raise NoServer(f"no model list at {base}") from exc
+    listed = payload.get("models") if isinstance(payload, dict) else None
+    if not isinstance(listed, list):
+        raise NoServer(f"{base} returned an invalid model list")
+    return listed
+
+
 def route(prompt: str, url: str | None = None,
           timeout: float = BATCH_TIMEOUT_BASE) -> dict[str, Any]:
     """`POST /v1/route`. Raises `NoServer` when the caller should fall back to in-process.

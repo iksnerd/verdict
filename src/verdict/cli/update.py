@@ -15,6 +15,18 @@ REPO_URL = os.environ.get("VERDICT_REPO", "https://github.com/iksnerd/verdict.gi
 TOOL_EXTRAS = "mlx,laya"
 
 
+def _has_jev() -> bool:
+    """Whether TypeSafe's SDK (the `jev` extra) is installed here. An update keeps it if so, like
+    mlx and laya, but does not add it to a machine that never asked for hosted Jev."""
+    import importlib.util
+
+    return importlib.util.find_spec("typesafe_sdk") is not None
+
+
+def _extras() -> list[str]:
+    return TOOL_EXTRAS.split(",") + (["jev"] if _has_jev() else [])
+
+
 def _checkout() -> Path:
     """The repo the running CLI was installed from: `src/verdict/cli/update.py` sits four levels
     in. The `~/.local/bin` shim runs this repo's venv with an editable install, so updating the
@@ -72,7 +84,7 @@ def _update_tool(args: argparse.Namespace) -> int:
     if args.check:
         print(f"verdict {current} installed; v{newest} is available. `verdict update` installs it")
         return 1
-    spec = f"verdict[{TOOL_EXTRAS}] @ git+{_git_url(REPO_URL)}@v{newest}"
+    spec = f"verdict[{','.join(_extras())}] @ git+{_git_url(REPO_URL)}@v{newest}"
     install = ["uv", "tool", "install", "--force", "--python", "3.11", spec]
     code, out = _run(install)
     if code != 0 and "Could not parse object" in out:
@@ -126,7 +138,8 @@ def _update_cmd(args: argparse.Namespace) -> int:
             return support._fail(f"{repo} has uncommitted changes; commit or stash them, then update")
         before = step(["git", "rev-parse", "--short", "HEAD"])
         step(["git", "pull", "--ff-only", "--quiet"])
-        step(["uv", "sync", "--quiet", "--extra", "mlx", "--extra", "laya"])
+        step(["uv", "sync", "--quiet",
+              *(a for extra in _extras() for a in ("--extra", extra))])
         after = step(["git", "rev-parse", "--short", "HEAD"])
         log = step(["git", "log", "--oneline", f"{before}..{after}"])
     except RuntimeError as exc:

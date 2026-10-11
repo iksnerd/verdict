@@ -182,10 +182,15 @@ def scorecards(directory: Path) -> list[Path]:
     return sorted(Path(directory).glob("v*.json"), key=_version_key)
 
 
-def previous(directory: Path, version: str) -> Optional[Path]:
-    """The newest scorecard older than `version`."""
+def previous(directory: Path, version: str, model: Optional[str] = None) -> Optional[Path]:
+    """The newest scorecard older than `version`. With `model`, the newest older one of the same
+    model: the release scorecard moved from the fine-tune to base Laya, and a base card judged
+    against a fine-tune card would "regress" on exactly what the fine-tune was made for (SST-2
+    yes/no, FINDINGS §35). The first card of a model has no predecessor and is its own baseline."""
     mine = _version_key(Path(f"v{version}.json"))
     older = [p for p in scorecards(directory) if _version_key(p) < mine]
+    if model is not None:
+        older = [p for p in older if json.loads(p.read_text()).get("model") == model]
     return older[-1] if older else None
 
 
@@ -197,8 +202,21 @@ def _default_transport():
 
 def systemone_asker(base_url: str, model: str, key: str, *, attempts: int = 5,
                     backoff: float = 1.0, timeout: float = 30.0, transport=None):
-    """A closable, callable SystemOne client. No Laya preprocessing is applied upstream."""
+    """A closable, callable SystemOne client. No Laya preprocessing is applied upstream.
+
+    Hosted Jev (api.typesafe.ai) goes through TypeSafe's SDK when it is installed, the same code
+    `verdict serve --systemone` uses; any other server, or no SDK, gets the plain client."""
+    from urllib.parse import urlsplit
+
     from .systemone import SystemOneClient
 
+    if (urlsplit(base_url).hostname or "") == "api.typesafe.ai":
+        try:
+            from .backend_jev import JevAsker
+        except ImportError:
+            pass
+        else:
+            return JevAsker(base_url, model, key, attempts=attempts, backoff=backoff,
+                            timeout=timeout, transport=transport)
     return SystemOneClient(base_url, model, key, attempts=attempts, backoff=backoff,
                            timeout=timeout, transport=transport or _default_transport())

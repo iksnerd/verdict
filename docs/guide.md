@@ -21,12 +21,17 @@ where each claim here comes from, [FINDINGS.md](FINDINGS.md). For runnable input
 11. [Configuration reference](#configuration-reference)
 12. [Scripts and agents](#scripts-and-agents)
 
+Three companion pages, in the shape of TypeSafe's docs: `verdict docs patterns` (fan-out,
+confidence routing, composite scoring, intent routing), `verdict docs rough-edges` (where Laya
+fails, with the measurement behind each) and `verdict docs models` (which checkpoint, or Jev, for
+what).
+
 ## Install and update
 
 verdict runs on Apple Silicon with Python 3.11:
 
 ```sh
-uv tool install --python 3.11 'verdict[mlx,laya] @ git+https://github.com/iksnerd/verdict.git@v0.6.3'
+uv tool install --python 3.11 'verdict[mlx,laya] @ git+https://github.com/iksnerd/verdict.git@v0.7.0'
 verdict init      # writes ~/.config/verdict/config.toml
 verdict --version
 ```
@@ -141,10 +146,11 @@ Run a secret scan before using transcripts: one in 2,348 prompts held a live cre
 | the job | use | why |
 |---|---|---|
 | one item, or a few dozen | read them yourself | you're more accurate, and it fits in one read |
-| a yes/no about what the text shows, over hundreds of items | **verdict** | matched Claude Haiku 4.5 (0.77 vs 0.73 AUC), free and local (§32) |
+| a yes/no about what the text shows, over hundreds of items | **verdict** | matched Claude Haiku 4.5 (0.77 vs 0.73 AUC on the private fine-tune; base Laya is not re-measured on it yet), free and local (§32) |
 | anything that must stay on your machine | **verdict** | nothing leaves it |
 | sorting into several categories, or anything needing world knowledge or a maintainer's judgment | a small LLM, if the data may leave the machine | Haiku 0.67 vs verdict 0.44 to 0.48 on 7 commit types (§32, §41); GitHub bug vs support question 0.59, most questions read as bugs, not fixed by two rounds of fine-tuning (§41, §45) |
-| more than 20 options | a shortlist first, yes/no per option, or an LLM | options share one token budget; 77 options scored 0.43 (§41). verdict refuses past 20 |
+| matching a text to one of many topical labels (intents, topics) | an embedding model; `verdict classify` if you want no second model | on Banking77 (77 intents) the nearest label by `embeddinggemma:300m` scored 0.89, Jev 0.78, Laya 0.38 flat and 0.55 with a tree; Laya added nothing on top (§50, §53) |
+| more than 20 options that are not topical | a tree (`verdict classify`), or Jev | options share one token budget; 77 options scored 0.43 (§41). verdict refuses past 20 |
 | long documents | an LLM, or split the text | only the first 128 tokens are read; verdict warns when a state is far past that |
 | consequences, difficulty, counting, dates, pulling out values | an LLM | nothing on the page answers them; the first two score at chance (§25, §29) |
 | a fixed pattern (a file name, a flag) | a regex | exact, instant, and a floor for the others to beat |
@@ -156,8 +162,8 @@ beats it on cost, speed and privacy: 400 items in 62 s for $0, against 403 s and
 that it loses, and a good pipeline uses both: verdict over everything, an LLM on what it flags.
 
 Ask about **what is on the page**, never about something the text can't show. "Is this an
-instruction to perform an action?" predicts tool use at 0.77 AUC. "How hard is this for a language
-model?" is at chance, 0.48 (§25, §26). Write the plain question first: it beat the clever one three
+instruction to perform an action?" predicts tool use at 0.65 AUC on base Laya (0.75 on the private
+fine-tune); "How hard is this for a language model?" is at chance, 0.48 (§25, §26, §49). Write the plain question first: it beat the clever one three
 times out of three (§28).
 
 **Start from a question that has been measured.** `verdict questions` lists them, each with what it
@@ -197,7 +203,7 @@ property, which the text can't show. Ask for the property itself.
 1. Put each command in a state: `{"command": "..."}`, one per line.
 2. `verdict decide --jsonl -q examples/secret-commands/bank.json < commands.jsonl > scored.jsonl`
 3. Sort by `answers.secrets.noul` and read the top slice yourself. On 400 real commands this
-   question separated blocked ones at 0.77 AUC. It misses commands that write secrets without
+   question separated blocked ones at 0.77 AUC on the private fine-tune (base Laya not re-measured). It misses commands that write secrets without
    naming them, such as `vercel env pull`.
 4. To gate automatically, label a few hundred and run `verdict calibrate` first.
 
@@ -250,10 +256,12 @@ The rules that came out of doing it once:
   name (`support = "org/support-mlx"`), loaded on first use like `multilingual` is. Each one that
   gets used stays resident, so naming several in one session puts that many models on the GPU —
   it is for a checkpoint you will actually use across the session, not a menu to sample from.
-- **A genuinely different model, not another laya checkpoint:** `SystemOneBackend` (`docs/api.md`)
-  forwards to any other `/v1/systemone` server instead of loading anything into this process — a
-  local [Kev](https://github.com/jaredpalmer/kev) server, say. It runs in its own process with its
-  own memory footprint (Kev-0.8B: about 1.8 GB of weights), so "one model at a time" still means
+- **A genuinely different model, not another laya checkpoint:** `verdict serve --systemone URL`
+  (or `[systemone]` in `verdict.toml`) forwards to any other `/v1/systemone` server instead of
+  loading anything into this process, TypeSafe's Jev included (`$TYPESAFE_API_KEY`, never a config
+  key). Every state is sent there, and billed for a hosted server; `docs/api.md` has the details. A
+  local [Kev](https://github.com/jaredpalmer/kev) server is the other worked case. Either runs in
+  its own process; Kev-0.8B holds about 1.8 GB of weights, so "one model at a time" still means
   checking what that other server is holding before you start it, the same as checking `ollama ps`
   before `verdict serve`.
 
@@ -263,7 +271,7 @@ The rules that came out of doing it once:
 |---|---|---|
 | every call takes about 2 s | no server running, so each call loads the model | `verdict serve &` |
 | answers are all 0.5 / "no model" | a server running the `uniform` backend (`uvicorn verdict.api:app`) | stop it; use `verdict serve` |
-| `verdict` breaks after a hand-typed `uv sync` | plain `uv sync` drops the mlx and laya extras | `verdict update`, or `uv sync --extra mlx --extra laya` in the repo |
+| `verdict` breaks after a hand-typed `uv sync` | plain `uv sync` drops the mlx, laya and jev extras | `verdict update`, or `uv sync --extra mlx --extra laya` in the repo |
 | "question 'x' asks about `field`, which the state does not have" | the bank was written for different data | rename the state's key or the backticked field |
 | `spread q: 0.58 to 0.65 ... narrow range` | the inputs don't vary where the question looks, or they're boilerplate | check who wrote them; filter bots and templates |
 | "... not found, so using base laya" | `[model].path` names a local checkpoint that is not there | fix the path, or remove it to use base Laya on purpose |
@@ -280,6 +288,8 @@ The rules that came out of doing it once:
 | command | does |
 |---|---|
 | `verdict ask TEXT QUESTION` | one question inline: yes/no, `-o` choice, `-l` score; `--cut` sets the exit status |
+| `verdict cascade -q BANK --escalate URL` | Laya answers every state from stdin; a second server (Jev) re-asks the least-sure `--share` (default 0.3) or those under `--below`; rows say `primary` or `escalated`; `--check LABELLED.jsonl` measures whether it helps for the task (§52, §54) |
+| `verdict classify TEXT --tree FILE` | one text into one leaf of a two-level tree, for more than 20 options: groups of at most 20, then the options of the best `--beam` groups (default 2); 77 options went from 0.38 flat to 0.55 (§50) |
 | `verdict decide STATE -q BANK` | a bank of questions about one state, as JSON; `--jsonl` for many states |
 | `verdict calibrate LABELLED -q BANK` | fits a cut or temperature on labelled examples, reported held out |
 | `verdict rank SCORED NAME=WEIGHT ...` | ranks a `decide --jsonl` run by a weighted sum of its rescaled answers, with each dimension's share; no model |
@@ -287,7 +297,7 @@ The rules that came out of doing it once:
 | `verdict questions [NAME] [--json]` | questions measured to work, each with its result; use by name with `-q` |
 | `verdict presets [NAME] [--json]` | Laya's built-in banks |
 | `verdict validate -q BANK [--json]` | checks a bank with no server or model: structure, wording, truncation ([scripts and agents](#scripts-and-agents)) |
-| `verdict bench [--verify CARD]` | answer quality on pinned public datasets; the release gate; `--systemone URL` scores a Jev-compatible endpoint |
+| `verdict bench [--verify CARD]` | answer quality on pinned public datasets; the release gate; `--systemone URL` scores a Jev-compatible endpoint (hosted Jev through TypeSafe's SDK when `verdict[jev]` is installed). The scorecard also records `timing`: calls, median and p95 milliseconds, and the tokens a service reported; `--verify` ignores it |
 | `verdict examples [NAME...]` | runs `examples/` banks against a backend, printing ms/call and, where a row carries an `expected` label, a match count against it; `--systemone URL` checks a different backend (Kev, another verdict) against the same real inputs; `--path NAME` prints an installed example's directory |
 | `verdict serve` | holds the model on localhost:8799; also speaks TypeSafe's Jev protocol ([api.md](api.md)) |
 | `verdict update [--check]` | installs the newest release (or pulls, in a dev checkout) |
@@ -321,7 +331,7 @@ reason to load a second copy of the model beside it.
 Settings resolve flag > environment > `./verdict.toml` > `~/.config/verdict/config.toml` >
 built-in default, key by key: a local file that sets only `bits` keeps the user file's `url`.
 `verdict config` shows each value and the file or variable it came from. An unknown section or
-key in either file is an error, not ignored. These five override a `[section].key` in a file:
+key in either file is an error, not ignored. These seven override a `[section].key` in a file:
 
 | variable | overrides | default |
 |---|---|---|
@@ -330,6 +340,13 @@ key in either file is an error, not ignored. These five override a `[section].ke
 | `VERDICT_MULTILINGUAL` | `[model].multilingual`, the checkpoint `"model": "multilingual"` answers from | `aac6fef/laya-multilingual-mlx` |
 | `VERDICT_BITS` | `[model].bits`, quantization at load (16 or 8, §36) | 16 |
 | `VERDICT_LANG` | `[model].lang`, `auto`, `en` or `multi` | `auto` |
+| `VERDICT_SYSTEMONE_URL` | `[systemone].url`, a remote `/v1/systemone` server for `verdict serve` to answer with (https unless loopback) | unset: local Laya |
+| `VERDICT_SYSTEMONE_MODEL` | `[systemone].model`, the model field sent to it | `jev-latest` |
+
+The API key for a remote `/v1/systemone` server is `$TYPESAFE_API_KEY` and nothing else. It is
+deliberately not a setting, because `verdict init` writes the config and people commit it; a
+loopback server needs none. `verdict serve --systemone URL` (or `[systemone]`) sends every state to
+that server, `verdict cascade --escalate URL` sends the least-sure ones, and both say so.
 
 `VERDICT_REPO` is different: it names the release source for `verdict update`
 (`cli/update.py`), not a `verdict.toml` setting, so it has no flag or config-file form. Default

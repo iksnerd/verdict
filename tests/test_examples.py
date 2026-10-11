@@ -76,3 +76,30 @@ def test_the_documented_install_line_names_the_current_version():
         text = (root / doc).read_text()
         pins = set(__import__("re").findall(r"verdict\.git@v(\d+\.\d+\.\d+)", text))
         assert pins == {version}, f"{doc} installs {sorted(pins)}, pyproject says {version}"
+
+
+def test_the_python_example_runs_against_any_client(capsys):
+    """examples/python-api/demo.py takes a client, so it runs here with no model and no server."""
+    import importlib.util
+
+    from verdict import Verdict
+    from verdict.backend import UniformBackend
+
+    spec = importlib.util.spec_from_file_location("demo", EXAMPLES / "python-api" / "demo.py")
+    demo = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(demo)
+    demo.main(Verdict(backend=UniformBackend()))
+    out = capsys.readouterr().out
+    for line in ("refund   0.50", "refused  status 422, code refused", "classify ", "backend  uniform"):
+        assert line in out, out
+
+
+def test_the_cascade_example_has_both_a_run_file_and_a_labelled_file():
+    folder = EXAMPLES / "cascade"
+    bank = json.loads((folder / "bank.json").read_text())
+    assert list(bank) == ["injection"]
+    run = [json.loads(l) for l in (folder / "messages.jsonl").read_text().splitlines() if l.strip()]
+    labelled = [json.loads(l) for l in (folder / "labelled.jsonl").read_text().splitlines() if l.strip()]
+    assert len(run) == len(labelled) == 24
+    assert [r["expected"]["injection"] for r in run] == [r["label"] for r in labelled]
+    assert sum(r["label"] for r in labelled) == 12, "balanced, so accuracy is not flattered"

@@ -10,7 +10,8 @@ import sys
 from . import support
 
 #: `verdict docs` topics; kept equal to `docs.TOPICS` by tests/test_docs_cmd.py.
-TOPIC_NAMES = ("readme", "guide", "api", "findings", "pipeline", "routing")
+TOPIC_NAMES = ("readme", "guide", "api", "findings", "pipeline", "routing", "patterns",
+               "rough-edges", "models")
 
 
 def _docs_cmd(args: argparse.Namespace) -> int:

@@ -26,13 +26,22 @@ def _bench_cmd(args: argparse.Namespace) -> int:
     if args.verify:
         path = Path(args.verify)
         current = json.loads(path.read_text())
-        prev_path = Path(args.against) if args.against else bench.previous(path.parent,
-                                                                             path.stem.lstrip("v"))
+        prev_path = Path(args.against) if args.against else bench.previous(
+            path.parent, path.stem.lstrip("v"), model=current.get("model"))
         prev = json.loads(prev_path.read_text()) if prev_path else None
         problems = bench.verify(current, prev)
         for line in problems:
             print(f"verdict bench: {line}", file=sys.stderr)
-        against = prev_path.name if prev_path else "nothing (first scorecard)"
+        if prev_path:
+            against = prev_path.name
+        else:
+            version = path.stem.lstrip("v")
+            earlier = sorted({json.loads(p.read_text()).get("model", "?")
+                              for p in bench.scorecards(path.parent)
+                              if p != path and p.stem.lstrip("v") != version})
+            seen = f" (earlier scorecards are for {', '.join(earlier)})" if earlier else ""
+            against = (f"nothing: no earlier scorecard for {current.get('model', 'this model')}"
+                       f"{seen}, so this one is the baseline")
         print(f"{path.name} against {against}: "
               f"{'REGRESSED' if problems else 'ok'}", file=sys.stderr)
         return 1 if problems else 0
@@ -54,6 +63,12 @@ def _bench_cmd(args: argparse.Namespace) -> int:
     if args.systemone:
         from urllib.parse import urlparse
 
+        from .. import config
+
+        try:
+            config.check_systemone_url(args.systemone)
+        except config.ConfigError as exc:
+            return support._fail(exc)
         host = urlparse(args.systemone).hostname or args.systemone
         key = os.environ.get("TYPESAFE_API_KEY") or (
             "local" if host in ("127.0.0.1", "localhost") else None)
@@ -76,18 +91,28 @@ def _bench_cmd(args: argparse.Namespace) -> int:
     try:
         calls = 0
         askers = {}
+        spent: list[float] = []  # seconds per call, the pause between calls excluded
+        tokens = {"input_tokens": None, "output_tokens": None}  # None until a service reports
 
         def paced(state, questions, lang=None):
             nonlocal calls
             if calls and args.pause:
                 time.sleep(args.pause)
             calls += 1
+            t = time.perf_counter()
             if lang and not args.systemone:
                 # A suite in another language names its checkpoint; the rest use the served one.
                 if lang not in askers:
                     askers[lang] = inference._Asker(argparse.Namespace(**{**vars(args), "lang": lang}))
-                return askers[lang](state, questions)
-            return ask(state, questions)
+                result = askers[lang](state, questions)
+            else:
+                result = ask(state, questions)
+            spent.append(time.perf_counter() - t)
+            for key in tokens:
+                reported = (result.get("usage") or {}).get(key)
+                if isinstance(reported, int):
+                    tokens[key] = (tokens[key] or 0) + reported
+            return result
 
         results = {}
         for s in suites:
@@ -107,7 +132,8 @@ def _bench_cmd(args: argparse.Namespace) -> int:
             print(f"{s.name:<12} {r['metric']} {r['value']:.3f} "
                   f"[{r['ci'][0]:.3f}, {r['ci'][1]:.3f}]  n={r['n']}{extra}")
         doc = {"version": version("verdict"), "model": model_name, "budget": budget, "bits": bits,
-               "date": time.strftime("%Y-%m-%d"), "suites": results}
+               "date": time.strftime("%Y-%m-%d"), "suites": results,
+               "timing": _timing(spent, tokens)}
         if args.out:
             Path(args.out).parent.mkdir(parents=True, exist_ok=True)
             Path(args.out).write_text(json.dumps(doc, indent=2) + "\n")
@@ -116,6 +142,16 @@ def _bench_cmd(args: argparse.Namespace) -> int:
     finally:
         if args.systemone:
             ask.close()
+
+
+def _timing(spent: list[float], tokens: dict) -> dict:
+    """What a run cost, beside the answers: latency per call and the tokens a service reported.
+    Never part of the regression check (`bench.verify` reads suites only): a slow day, or a
+    hosted service, is not a worse model. A local checkpoint reports no tokens, so they are None."""
+    ordered = sorted(spent)
+    at = lambda q: round(ordered[min(len(ordered) - 1, int(q * len(ordered)))] * 1000, 1)
+    return {"calls": len(spent), "median_ms": at(0.5) if ordered else None,
+            "p95_ms": at(0.95) if ordered else None, **tokens}
 
 
 def _rank_cmd(args: argparse.Namespace) -> int:

@@ -155,27 +155,11 @@ def create_app(backend: Backend | None = None) -> FastAPI:
 
     def _prepared(request: DecideRequest, *, allow_unmeasured: bool, yesno: bool
                   ) -> DecideResponse:
-        """`library.prepare` around `backend.decide`, the one path both endpoints share. A proxy
-        backend forwards the request untouched: those findings are about laya, not its upstream."""
-        if getattr(backend, "preserve_model_names", False):
-            return backend.decide(request)
+        """`library.ask` over HTTP: the one path both endpoints, and the Python client, share."""
         from . import library
 
-        questions, rewritten, _ = library.prepare(
-            request.state, laya_questions(request.questions),
-            model=request.model or getattr(backend, "model_id", backend.name),
-            allow_unmeasured=allow_unmeasured, yesno=yesno, opt_out=library.HTTP_OPT_OUT)
-        out = backend.decide(DecideRequest(state=request.state, questions=questions,
-                                           model=request.model))
-        if not rewritten:
-            return out
-        dumped = library.as_yesno({qid: a.model_dump() for qid, a in out.answers.items()},
-                                  rewritten)
-        answers = {qid: (NoulAnswer(noul=dumped[qid]["noul"],
-                                    confidence=dumped[qid].get("confidence"))
-                         if qid in rewritten else a)
-                   for qid, a in out.answers.items()}
-        return DecideResponse(model=out.model, answers=answers, usage=out.usage)
+        return library.ask(backend, request, allow_unmeasured=allow_unmeasured, yesno=yesno,
+                           opt_out=library.HTTP_OPT_OUT)
 
     @app.post("/v1/systemone", response_model=SystemOneResponse, response_model_exclude_none=True)
     def systemone(request: SystemOneRequest) -> SystemOneResponse:
@@ -232,6 +216,12 @@ def create_app(backend: Backend | None = None) -> FastAPI:
         were fitted on; the CLI clips because it has a tokenizer loaded, and before this the
         server did not, so the two front doors could disagree on a long prompt. A backend with no
         engine (uniform) has no tokenizer and needs none."""
+        if getattr(backend, "preserve_model_names", False):
+            # The thresholds were fitted on laya's difficulty and is_sensitive scores. Another
+            # model's numbers on the same questions would route on a scale nobody measured.
+            raise Refused(f"routing is calibrated for laya's difficulty and is_sensitive scores "
+                          f"(FINDINGS §15, §25); this server fronts {backend.name}, which they "
+                          "were never fitted on. Use /v1/decide with your own questions")
         engine = getattr(backend, "engine", None)
         if engine is not None:
             prompt = engine.clip(prompt)
