@@ -130,11 +130,16 @@ class DecideRequest(BaseModel):
         return self
 
 
+#: `truncated` is set (true) on every answer of a call whose state was cut to the token budget, and
+#: left out otherwise, so the output of a call that cut nothing is what it always was. It is a
+#: verdict extension (drenskiCorp RFC 0006 section 12): `/v1/systemone` leaves it out, since Jev's
+#: answer types are strict.
 class ChoiceAnswer(BaseModel):
     type: Literal["choice"] = "choice"
     choice: str
     probabilities: dict[str, float]
     confidence: float
+    truncated: Optional[bool] = None
 
 
 class ScoreAnswer(BaseModel):
@@ -145,6 +150,7 @@ class ScoreAnswer(BaseModel):
     legend: dict[str, Union[str, dict[str, Any], list[Any]]]
     probabilities: dict[str, float]
     confidence: float
+    truncated: Optional[bool] = None
 
 
 class NoulAnswer(BaseModel):
@@ -152,6 +158,7 @@ class NoulAnswer(BaseModel):
     noul: float
     #: Laya reports max(p, 1-p); Jev does not report this field. Never synthesize it on proxying.
     confidence: Optional[float] = None
+    truncated: Optional[bool] = None
 
 
 Answer = Annotated[Union[ChoiceAnswer, ScoreAnswer, NoulAnswer], Field(discriminator="type")]

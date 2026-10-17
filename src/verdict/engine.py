@@ -130,6 +130,9 @@ class Engine:
 
         `decide` never clipped, and on 600-character commands that cost about 380 ms a call
         against 65 ms (FINDINGS §29). A falsy budget turns clipping off.
+
+        It returns the very object it was given when nothing was cut, so `clipped is not state`
+        is how a caller tells that the model will read only part of it (the `truncated` mark).
         """
         if not budget:
             return state

@@ -61,7 +61,11 @@ def _answer(state, questions: dict, url: str, model_path: str, model: str | None
             _ENGINES[key] = load(model_path, bits=bits) if bits != 16 else load(model_path)
         eng = _ENGINES[key]
         # Clip as the server does, so the two paths never answer the same call differently.
-        payload = {"model": eng.name, "answers": eng.predict(eng.clip_state(state, budget), laya)}
+        clipped = eng.clip_state(state, budget)
+        answers = eng.predict(clipped, laya)
+        if clipped is not state:
+            answers = {qid: {**a, "truncated": True} for qid, a in answers.items()}
+        payload = {"model": eng.name, "answers": answers}
         source = "in-process"
     ms = (time.perf_counter() - t) * 1000
     return {**payload, "latency_ms": round(ms, 1), "source": source}

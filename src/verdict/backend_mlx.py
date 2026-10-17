@@ -93,7 +93,9 @@ class MlxBackend:
     def decide(self, request: DecideRequest) -> DecideResponse:
         questions = laya_questions(request.questions)
         engine = self.engine_for(request.model)
-        result = engine.run(engine.clip_state(request.state, self.budget), questions)
+        state = engine.clip_state(request.state, self.budget)
+        truncated = state is not request.state
+        result = engine.run(state, questions)
         raw = result["answers"]
         answers: dict[str, Any] = {}
         for qid, a in raw.items():
@@ -110,6 +112,8 @@ class MlxBackend:
                 )
             else:
                 answers[qid] = NoulAnswer(noul=a["noul"], confidence=a["confidence"])
+        if truncated:
+            answers = {qid: a.model_copy(update={"truncated": True}) for qid, a in answers.items()}
         usage = result.get("usage") or {}
         return DecideResponse(model=engine.name, answers=answers,
                               usage=Usage(input_tokens=int(usage.get("input_tokens", 0))))

@@ -171,7 +171,9 @@ def create_app(backend: Backend | None = None) -> FastAPI:
             # has no way to ask for the opt-out and its SDKs expect an answer.
             out = _prepared(to_decide_request(request, backend), allow_unmeasured=True,
                             yesno=False)
-        return SystemOneResponse(model=out.model, answers=out.answers,
+        # `truncated` is verdict's own; Jev's strict answer types do not have it.
+        answers = {qid: a.model_copy(update={"truncated": None}) for qid, a in out.answers.items()}
+        return SystemOneResponse(model=out.model, answers=answers,
                                  usage=out.usage or Usage(input_tokens=0))
 
     @app.get("/v1/models", response_model=ModelList)

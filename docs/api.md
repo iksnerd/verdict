@@ -33,6 +33,9 @@ Plus `model`, the checkpoint that answered.
 - Each state is clipped to the server's token budget (128 by default; `verdict serve --budget 0`
   disables this preprocessing cap, but the checkpoint still has a finite context). A state within
   budget passes through still structured. These are local Laya settings, not upstream Jev limits.
+  When a state is cut, every answer of that call carries `"truncated": true`, so a caller can tell
+  an answer about the whole text from one about its start. The key is absent when nothing was cut,
+  and `/v1/systemone` never carries it (Jev's answer types have no such field).
 - Optional `"model": "multilingual"` answers from Laya's multilingual checkpoint, loaded on first
   use. It is named as in Laya's `Router.predict(model=...)`. A server without one configured returns
   400.

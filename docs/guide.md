@@ -158,7 +158,7 @@ Run a secret scan before using transcripts: one in 2,348 prompts held a live cre
 | sorting into several categories, or anything needing world knowledge or a maintainer's judgment | a small LLM, if the data may leave the machine | Haiku 0.67 vs verdict 0.44 to 0.48 on 7 commit types (§32, §41); GitHub bug vs support question 0.59, most questions read as bugs, not fixed by two rounds of fine-tuning (§41, §45) |
 | matching a text to one of many topical labels (intents, topics) | an embedding model; `verdict classify` if you want no second model | on Banking77 (77 intents) the nearest label by `embeddinggemma:300m` scored 0.89, Jev 0.78, Laya 0.38 flat and 0.55 with a tree; Laya added nothing on top (§50, §53) |
 | more than 20 options that are not topical | a tree (`verdict classify`), or Jev | options share one token budget; 77 options scored 0.43 (§41). verdict refuses past 20 |
-| long documents | an LLM, or split the text | only the first 128 tokens are read; verdict warns when a state is far past that |
+| long documents | an LLM, or split the text | only the first 128 tokens are read; verdict warns when a state is far past that, and each answer of a cut call carries `"truncated": true` |
 | consequences, difficulty, counting, dates, pulling out values | an LLM | nothing on the page answers them; the first two score at chance (§25, §29) |
 | a fixed pattern (a file name, a flag) | a regex | exact, instant, and a floor for the others to beat |
 
