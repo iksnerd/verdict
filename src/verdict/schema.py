@@ -132,8 +132,7 @@ class DecideRequest(BaseModel):
 
 #: `truncated` is set (true) on every answer of a call whose state was cut to the token budget, and
 #: left out otherwise, so the output of a call that cut nothing is what it always was. It is a
-#: verdict extension (drenskiCorp RFC 0006 section 12): `/v1/systemone` leaves it out, since Jev's
-#: answer types are strict.
+#: verdict extension: `/v1/systemone` leaves it out, since Jev's answer types are strict.
 class ChoiceAnswer(BaseModel):
     type: Literal["choice"] = "choice"
     choice: str

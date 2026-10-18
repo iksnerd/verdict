@@ -1,5 +1,5 @@
 """A state longer than the token budget is read only in part, and the answer says so: `truncated:
-true` on each answer of that call (drenskiCorp RFC 0006 section 12). The field is absent when
+true` on each answer of that call. The field is absent when
 nothing was cut, so an unclipped call's output is what it always was, and `/v1/systemone`, whose
 answer models are strict, never carries it. A fake tokenizer, one token per word; no model."""
 from __future__ import annotations
