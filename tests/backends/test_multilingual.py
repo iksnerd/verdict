@@ -82,20 +82,37 @@ def test_auto_is_silent_on_english(monkeypatch, capsys):
     assert "--lang" not in capsys.readouterr().err
 
 
+class MisreadsLatinAsForeign:
+    """A guesser that reads every Latin-script text as non-English. laya's word-frequency guesser
+    read shell that way (as French), so verdict decides, from the share of code punctuation, that
+    such a text is English."""
+
+    def __init__(self, real):
+        self._real = real
+
+    def analyse(self, text):
+        return {**self._real.analyse(text), "script": "latin", "is_english": False}
+
+    def state_text(self, state):
+        return self._real.state_text(state)
+
+
 @pytest.mark.parametrize("command", [
     'ls -la .config/ 2>/dev/null && echo "--- plugins ---" && ls -la .config',
     'ls -la src/ && echo "--- tests ---" && ls -la tests',
     'ls -la build/ 2>/dev/null && echo "--- assets ---" && ls -la build',
 ])
 def test_shell_commands_do_not_trip_the_language_warning(monkeypatch, capsys, command):
-    """Shell that laya's word-frequency guesser reads as French, the shape real commands took (41 of
-    3,000 were flagged, §29). The first assert keeps the test honest: if the guesser stops misreading
-    them, there is nothing left for the filter to catch and this would pass for the wrong reason."""
+    """41 of 3,000 real commands were flagged as foreign by laya's guesser (§29). laya-mlx 0.3.0
+    stopped misreading these three, but on 3,000 real commands the guesser still flagged 88 and
+    verdict's code filter cleared every one (2026-10-25), so the filter stays. A guesser that does
+    misread is stood in, which keeps this test from depending on a bug upstream may fix."""
     pytest.importorskip("laya_mlx")
     from verdict import inputs
 
     inputs.language("warm up")
-    assert not inputs._lang.analyse(command)["is_english"], "the guesser no longer misreads this"
+    monkeypatch.setattr(inputs, "_lang", MisreadsLatinAsForeign(inputs._lang))
+    assert not inputs._lang.analyse(command)["is_english"]
     fake_server(monkeypatch)
     # A question about what the command shows: a consequence-shaped one ("risky?") is refused
     # before the language check runs, which is how this test once passed without testing anything.
