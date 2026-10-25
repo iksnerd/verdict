@@ -672,8 +672,9 @@ def main(argv: list[str] | None = None) -> int:
     dc = command("docs", "read the README, guide, API notes, FINDINGS and more",
                  DOCS_HELP, DOCS_EPILOG)
     dc.add_argument("topic", nargs="?", default="readme", choices=list(docs_cmd.TOPIC_NAMES),
-                    help="readme (default), guide, api, findings, pipeline, routing, patterns, "
-                         "rough-edges or models")
+                    metavar="TOPIC",
+                    help="readme (default), concepts, guide, api, findings, pipeline, routing, "
+                         "patterns, rough-edges or models")
     dc.add_argument("section", nargs="?", type=int, help="with findings: one section, by number")
     dc.set_defaults(fn=docs_cmd._docs_cmd)
 

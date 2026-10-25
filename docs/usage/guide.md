@@ -21,7 +21,8 @@ where each claim here comes from, [FINDINGS.md](../research/FINDINGS.md). For ru
 11. [Configuration reference](#configuration-reference)
 12. [Scripts and agents](#scripts-and-agents)
 
-Three companion pages, in the shape of TypeSafe's docs: `verdict docs patterns` (fan-out,
+[Concepts](concepts.md) (`verdict docs concepts`) says what a state, a question, an answer and a
+bank are. Three companion pages, in the shape of TypeSafe's docs: `verdict docs patterns` (fan-out,
 confidence routing, composite scoring, intent routing), `verdict docs rough-edges` (where Laya
 fails, with the measurement behind each) and `verdict docs models` (which checkpoint, or Jev, for
 what).

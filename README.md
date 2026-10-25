@@ -125,8 +125,8 @@ chance. verdict refuses those questions and more than
   (77 intents) it took base Laya from 0.38 flat to 0.55 ([FINDINGS §50](docs/research/FINDINGS.md)); the tree
   is `examples/banking-tree/tree.json`. For topical labels an embedding model does better still
   (0.89 on the same items, FINDINGS §53); Laya is a judge of typed facts, not a retriever.
-- **The docs ship with the tool:** `verdict docs`, `verdict docs guide`, `verdict docs findings N`,
-  and three short pages in the shape of TypeSafe's: [patterns](docs/usage/patterns.md) (fan-out,
+- **The docs ship with the tool:** `verdict docs`, `verdict docs concepts`, `verdict docs guide`,
+  `verdict docs findings N`, and three short pages in the shape of TypeSafe's: [patterns](docs/usage/patterns.md) (fan-out,
   confidence routing, composite scoring, intent routing), [rough edges](docs/usage/rough-edges.md) (where
   Laya fails, with the measurement) and [models](docs/usage/models.md) (which checkpoint, or Jev, for what).
 
@@ -212,6 +212,7 @@ claude plugin install verdict@verdict
 
 Using verdict (`docs/usage/`):
 
+- [concepts.md](docs/usage/concepts.md): what a state, a question, an answer and a bank are.
 - [guide.md](docs/usage/guide.md): writing questions, bulk runs, calibration, recipes,
   troubleshooting, and the command reference.
 - [api.md](docs/usage/api.md): the HTTP API, the Python client and the backends.

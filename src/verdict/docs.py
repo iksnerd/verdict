@@ -11,6 +11,7 @@ from pathlib import Path
 #: Topic -> path in the repository. The wheel packs each at `verdict/_docs/<file name>`.
 TOPICS = {
     "readme": "README.md",
+    "concepts": "docs/usage/concepts.md",
     "guide": "docs/usage/guide.md",
     "api": "docs/usage/api.md",
     "findings": "docs/research/FINDINGS.md",
