@@ -71,7 +71,9 @@ verdict classify "my transfer never arrived" --tree examples/banking-tree/tree.j
 Groups first, then options inside the best few. 77 Banking77 intents went from 0.38 flat to 0.55
 with `--beam 2` (§50). The joint probability is low when the tree lost the item, which makes a
 good review queue. The tree has to be written by someone who knows the labels: one clustered
-mechanically scored 0.34 (§53). **For topical labels, an embedding model beats this**: the nearest
+mechanically scored 0.34 (§53). It is not always better than one flat choice: on CLINC150's 150
+distinct intents flat scored 0.56, a hand tree 0.47 and a mechanical one 0.31 (§58), so compare on a
+labelled sample first. **For topical labels, an embedding model beats this**: the nearest
 label by `embeddinggemma:300m` scored 0.89 on the same items, and Laya added nothing on top. Reach
 for `classify` when you want no second model, or when the labels are not self-describing.
 

@@ -123,7 +123,9 @@ chance. verdict refuses those questions and more than
   Every escalated text leaves the machine ([FINDINGS §52, §54, §55](docs/research/FINDINGS.md)).
 - **More than 20 options:** `verdict classify TEXT --tree FILE` walks a two-level tree. On Banking77
   (77 intents) it took base Laya from 0.38 flat to 0.55 ([FINDINGS §50](docs/research/FINDINGS.md)); the tree
-  is `examples/banking-tree/tree.json`. For topical labels an embedding model does better still
+  is `examples/banking-tree/tree.json`. It does not always help: on CLINC150 (150 distinct intents)
+  one flat choice scored 0.56 and the trees 0.31 to 0.47 ([§58](docs/research/FINDINGS.md)), so compare
+  on a labelled sample. For topical labels an embedding model does better still
   (0.89 on the same items, FINDINGS §53); Laya is a judge of typed facts, not a retriever.
 - **The docs ship with the tool:** `verdict docs`, `verdict docs concepts`, `verdict docs guide`,
   `verdict docs findings N`, and three short pages in the shape of TypeSafe's: [patterns](docs/usage/patterns.md) (fan-out,

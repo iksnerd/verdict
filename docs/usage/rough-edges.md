@@ -18,8 +18,11 @@ measured no better (§47).
 
 Options share one token budget. Banking77, 77 options: 0.38 here, 0.43 in Laya's README, against
 Jev's 0.78 on the same items (§41, §50, §53). **verdict refuses a choice with more than 20
-options.** `verdict classify` walks a two-level tree instead: 0.38 to 0.55 with `--beam 2`. For
-topical labels an embedding model does better than either (below).
+options.** `verdict classify` walks a two-level tree instead: 0.38 to 0.55 with `--beam 2` on
+Banking77. It does not always help: on CLINC150's 150 distinct intents one flat choice scored 0.56
+and the trees 0.31 to 0.47 (§58). Near-neighbour options hurt a flat choice and distinct ones may
+not, so compare the flat choice with the tree on a labelled sample before choosing. For topical
+labels an embedding model does better than either (below).
 
 ## Laya is a judge, not a retriever
 

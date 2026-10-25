@@ -106,7 +106,9 @@ Classify one text into one leaf of a two-level tree, for more options than one c
 laya's options share one token budget, so past 20 an exclusive choice degrades (77 options: 0.43,
 FINDINGS §41) and `ask` and `decide` refuse it. A tree asks which of at most 20 groups, then which
 of at most 20 options inside the best few groups, and ranks leaves by P(group) * P(option | group).
-On Banking77 (77 labels, base laya) that took 0.38 to 0.55 with --beam 2 (FINDINGS §50). For
+On Banking77 (77 labels, base laya) that took 0.38 to 0.55 with --beam 2 (FINDINGS §50). It is not
+always the better choice: on CLINC150 (150 distinct intents) one flat choice beat both trees tried
+(0.56 against 0.47 and 0.31, §58), so compare the two on your own labelled sample. For
 topical labels an embedding model does better still (0.89, §53); this is the option that needs no
 second model. A model with its own limit, such as Jev, can take a flat bank of 255.
 

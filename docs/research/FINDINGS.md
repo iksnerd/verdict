@@ -2123,3 +2123,58 @@ tasks, so §57's conclusion does not change. The text-only `570m` build gave bit
 seven suites and the same Banking77 numbers: the builds differ in their vision and audio towers, not in how
 text is embedded, so the model size is not a lever. Not tried: any unquantized weights (Ollama serves `nvfp4`),
 so this says nothing about v2 as released, only about the build Ollama serves.
+
+
+## 58. The tree does not generalise: on CLINC150 one flat 150-way choice beats it (2026-10-25)
+
+§50's tree took Banking77 from 0.38 to 0.55, with two caveats: one dataset, and a tree drawn by
+someone who knew the labels. This is the check, on a second many-class public set, with a tree
+written blind and a tree built mechanically. CLINC150 (`clinc/clinc_oos`, "plus" test split, the 150
+in-scope intents, CC BY 3.0), 300 items (2 per intent, seed 0), base Laya on laya-mlx 0.5.0, the
+128-token clip, the same `hierarchy.classify` as §50 (`scripts/eval_hierarchy_clinc150.py`). The
+reading rule is in the script header, committed before any model ran on this data: the tree
+"generalises" if its beam-2 interval is disjoint from flat's, and a stranger's tree "gets most of the
+gain" if it gets at least half of the hand tree's gain, with an interval disjoint from flat's.
+
+The **hand tree** has 12 groups of 6 to 19 options, written from the 150 label names alone (banking,
+cards and credit, travel, car, food, restaurants, planning, devices, assistant settings, the
+assistant itself, replies, lookups). The **mechanical tree** embeds the label names alone with
+`embeddinggemma:300m`, runs k-means with k = 12, and splits any group over 20 options in two (the
+first plain k-means left a 32-option group, which the cap refuses; that rule was fixed before any
+model ran here), giving 15 groups of 3 to 20. The flat arm is one 150-way choice, the shape verdict
+refuses, asked through the engine directly.
+
+| | accuracy | passes per item |
+|---|---|---|
+| flat, one 150-way choice | **0.557** [0.503, 0.617] | 1 |
+| hand tree, beam 1 | 0.417 [0.360, 0.477] | 2 |
+| hand tree, beam 2 | 0.463 [0.407, 0.520] | 3 |
+| hand tree, beam 3 | 0.473 [0.417, 0.530] | 4 |
+| mechanical tree, beam 1 | 0.280 [0.227, 0.330] | 2 |
+| mechanical tree, beam 2 | 0.307 [0.257, 0.357] | 3 |
+| mechanical tree, beam 3 | 0.313 [0.260, 0.367] | 4 |
+
+**Neither condition of the rule holds, and the direction is the opposite one.** The hand tree at beam
+2 is about 0.09 below flat (the intervals overlap only between 0.503 and 0.520; no paired interval,
+since per-item results were not saved), and the mechanical tree at beam 3 is 0.24 below it with
+disjoint intervals. §50's gain does not carry over: a tree here costs two to four passes and loses
+accuracy. The mechanical tree also reproduces §50's other warning, that a tree nobody drew by hand is
+worse (§53 saw 0.34 on Banking77).
+
+**What it says about the 20-option limit.** One flat choice among 150 options scored 0.557, against a
+chance of 0.007, with no collapse like Banking77's 0.38 at 77 options (§50). The number of options is
+not what breaks a flat choice. The likely difference is how confusable the options are: Banking77's
+intents are near neighbours (several kinds of card payment, several kinds of top-up), CLINC150's
+fall into well-separated domains. That is a hypothesis, not a measurement. A tree adds a first stage
+that can lose the item before the second stage sees it, and where a flat choice already works that
+costs more than the narrowing gains.
+
+**Caveats.** One dataset on each side, 300 items, base Laya only, one hand tree and one mechanical
+one. The stage-one (group) accuracy was not recorded, so that the loss comes from group errors is
+untested. A tree built from the dataset's own ten domains was not tried, nor a wider beam than 3.
+
+**What changed.** No code. verdict still refuses a flat choice past 20 options: that rests on §41's
+77 options at 0.43, and this section shows the limit is a safe default, not a cliff measured at 20.
+The docs and `classify --help` now say a tree is not always better than one flat choice and to compare
+the two on a labelled sample before choosing. Whether the refusal should become a warning, or take a
+measured exception, is a decision left open.
