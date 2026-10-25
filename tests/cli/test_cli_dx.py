@@ -7,6 +7,7 @@ import pytest
 from verdict import cli, client, config
 from verdict.cli import inference
 from conftest import typed
+from fakes import noul
 
 
 @pytest.fixture(autouse=True)
@@ -53,7 +54,7 @@ def test_bad_bank_fails_before_network_or_lint(monkeypatch, capsys, bank):
 def test_server_only_success_keeps_answer_shape(monkeypatch, capsys):
     monkeypatch.setattr(client, "decide", lambda state, questions, *a, **k: {
         "model": "fake", "answers": typed(
-            questions, lambda q: {"type": "noul", "noul": 0.7, "confidence": 0.7})})
+            questions, lambda q: noul(0.7))})
     assert cli.main(["ask", "hello", "Is this a greeting?", "--server-only", "--json",
                      "--lang", "en"]) == 0
     assert json.loads(capsys.readouterr().out)["answers"]["q"]["noul"] == 0.7

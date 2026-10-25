@@ -7,9 +7,12 @@ shadowed the user file. No config file and no VERDICT_* variable reaches a test 
 from __future__ import annotations
 
 import os
+import sys
+import types
 
 import pytest
 
+from fakes import FakeLayaAgent, typed  # noqa: F401  (tests import `typed` from here)
 from verdict import config
 
 
@@ -19,20 +22,6 @@ def _no_machine_config(monkeypatch):
     for name in [n for n in os.environ if n.startswith("VERDICT_")]:
         monkeypatch.delenv(name)
 
-
-def typed(questions, noul_answer):
-    """A fake server's answers, typed as a real server types them. `noul_answer(qid)` is the
-    yes/no answer the fake would give; a question the CLI rewrote as a no/yes choice gets the
-    same number back as a choice, so fakes written for yes/no keep their meaning."""
-    out = {}
-    for qid, q in questions.items():
-        a = noul_answer(qid)
-        if q.get("type") == "choice" and list(q.get("criteria") or {}) == ["no", "yes"]:
-            p = a["noul"]
-            a = {"type": "choice", "choice": "yes" if p >= 0.5 else "no", "confidence": a["confidence"],
-                 "probabilities": {"no": 1 - p, "yes": p}}
-        out[qid] = a
-    return out
 
 
 @pytest.fixture(autouse=True)
@@ -48,3 +37,15 @@ def _no_real_server(monkeypatch):
         raise urllib.error.URLError("no server in tests")
 
     monkeypatch.setattr(client.urllib.request, "urlopen", refuse)
+
+
+@pytest.fixture
+def fake_laya(monkeypatch):
+    """A stand-in `laya_mlx` module. Returns `{model_id: agent}` of every checkpoint the code
+    under test loaded, so a test can assert which were (and were not) loaded and how often each
+    was asked."""
+    loaded = {}
+    module = types.ModuleType("laya_mlx")
+    module.load = lambda model_id, **kw: loaded.setdefault(model_id, FakeLayaAgent(model_id))
+    monkeypatch.setitem(sys.modules, "laya_mlx", module)
+    return loaded

@@ -28,7 +28,7 @@ decide_many = routing.decide_many
 DEFAULT_MODEL = routing.DEFAULT_MODEL
 TOPIC_NAMES = docs_cmd.TOPIC_NAMES
 
-#: Re-exported because tests/test_help_text.py scans `dir(cli)` for every *_HELP/*_EPILOG/
+#: Re-exported because tests/project/test_help_text.py scans `dir(cli)` for every *_HELP/*_EPILOG/
 #: DESCRIPTION constant, and other code may still reach for `cli.DECIDE_EPILOG` etc.
 DESCRIPTION = parser.DESCRIPTION
 EPILOG = parser.EPILOG

@@ -5,6 +5,7 @@ import pytest
 
 from verdict import cli, client
 from conftest import typed
+from fakes import noul
 
 
 def fake_server(monkeypatch, answer):
@@ -18,7 +19,7 @@ def fake_server(monkeypatch, answer):
     return sent
 
 
-NOUL = {"type": "noul", "noul": 0.72, "confidence": 0.72}
+NOUL = noul(0.72)
 #: laya's `confidence` for a choice is 1 - H(p)/log(k), not the top probability: 0.25 here.
 CHOICE = {"type": "choice", "choice": "refund", "confidence": 0.25,
           "probabilities": {"refund": 0.61, "info": 0.3, "other": 0.09}}

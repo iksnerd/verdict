@@ -12,6 +12,7 @@ import json
 import pytest
 
 from verdict import cli, client
+from fakes import noul
 
 
 @pytest.fixture
@@ -110,7 +111,7 @@ def test_a_server_that_dies_mid_run_does_not_leave_its_rules_on_the_local_fallba
 
     def answer(state, questions, *a, **k):
         return {"model": "m", "source": next(sources),
-                "answers": {"q": {"type": "noul", "noul": 0.8, "confidence": 0.6}}}
+                "answers": {"q": noul(0.8, 0.6)}}
 
     monkeypatch.setattr(inference, "_answer", answer)
     asker = inference._Asker(argparse.Namespace(url=None, model=None, lang="en", server_only=False))

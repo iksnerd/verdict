@@ -4,14 +4,14 @@ inputs lack. No model loads; this checks shape, not answers."""
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 import pytest
 
 from verdict import inputs
 from verdict.schema import DecideRequest
+from fakes import REPO_ROOT
 
-EXAMPLES = Path(__file__).resolve().parents[1] / "examples"
+EXAMPLES = REPO_ROOT / "examples"
 BANKS = sorted(EXAMPLES.glob("*/bank.json"))
 
 

@@ -9,6 +9,7 @@ import pytest
 from verdict import cli, client, config
 from verdict.cli import inference, parser, setup
 from conftest import typed
+from fakes import noul
 
 BANK = '{"q": {"type": "noul", "instructions": "Is `message` about money?"}}'
 
@@ -112,7 +113,7 @@ def api(questions_seen):
             return DecideResponse(model="recording", answers={
                 qid: ({"type": "choice", "choice": "yes", "confidence": 0.5,
                        "probabilities": {"no": 0.2, "yes": 0.8}} if q.type == "choice"
-                      else {"type": "noul", "noul": 0.3, "confidence": 0.7})
+                      else noul(0.3, 0.7))
                 for qid, q in request.questions.items()})
 
     return TestClient(create_app(Recording()))
@@ -123,7 +124,7 @@ def test_the_api_asks_a_new_yes_no_as_a_choice_like_the_cli():
     body = api(seen).post("/v1/decide", json={"state": {"message": "refund"},
                                               "questions": json.loads(BANK)}).json()
     assert seen[-1]["q"]["type"] == "choice"
-    assert body["answers"]["q"] == {"type": "noul", "noul": 0.8, "confidence": 0.8}
+    assert body["answers"]["q"] == noul(0.8)
 
 
 def test_the_api_yesno_param_sends_a_plain_yes_no():

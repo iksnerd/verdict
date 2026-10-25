@@ -11,6 +11,7 @@ import pytest
 from verdict import cli, client
 from verdict.cli import inference
 from conftest import typed
+from fakes import noul
 
 OFF_PAGE = {"q": {"type": "noul", "instructions": "How hard is `request` for a language model?"}}
 ABSENCE = {"q": {"type": "noul", "instructions": "Is `text` an ordinary message?"}}
@@ -24,7 +25,7 @@ def server(monkeypatch):
     def fake_decide(state, questions, url=None, model=None, **kw):
         calls.append((state, questions))
         return {"model": "fake", "answers": typed(
-            questions, lambda k: {"type": "noul", "noul": 0.5, "confidence": 0.5})}
+            questions, lambda k: noul(0.5))}
 
     monkeypatch.setattr(client, "decide", fake_decide)
     monkeypatch.setattr(inference, "load", lambda *a, **k: pytest.fail("loaded a model"))

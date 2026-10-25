@@ -12,6 +12,7 @@ from fastapi.testclient import TestClient
 from verdict.api import create_app
 from verdict.backends.systemone import SystemOneBackend
 from verdict.schema import DecideRequest
+from fakes import noul
 
 Q = {
     "dept": {"type": "choice", "instructions": "Which team?", "criteria": {"billing": "refunds", "tech": "bugs"}},
@@ -39,7 +40,7 @@ def test_choice_and_score_pass_through_confidence_unchanged():
         "dept": {"type": "choice", "choice": "billing", "probabilities": {"billing": 0.9, "tech": 0.1}, "confidence": 0.8},
         "urgency": {"type": "score", "score": 1.2, "legend": {"0": "low", "1": "mid", "2": "high"},
                    "probabilities": {"0": 0.1, "1": 0.6, "2": 0.3}, "confidence": 0.5},
-        "spam": {"type": "noul", "noul": 0.2, "confidence": 0.6},
+        "spam": noul(0.2, 0.6),
     }))
     r = backend.decide(request())
     assert r.answers["dept"].choice == "billing" and r.answers["dept"].confidence == 0.8
@@ -64,7 +65,7 @@ def test_the_reported_model_is_the_upstream_checkpoint_not_our_own_name():
         "dept": {"type": "choice", "choice": "billing", "probabilities": {"billing": 1.0, "tech": 0.0}, "confidence": 1.0},
         "urgency": {"type": "score", "score": 0.0, "legend": {"0": "low", "1": "mid", "2": "high"},
                    "probabilities": {"0": 1.0, "1": 0.0, "2": 0.0}, "confidence": 1.0},
-        "spam": {"type": "noul", "noul": 0.9, "confidence": 0.8},
+        "spam": noul(0.9, 0.8),
     }, model="kev-0.8b@r15"))
     r = backend.decide(request())
     assert r.model == "kev-0.8b@r15"
@@ -75,7 +76,7 @@ def test_usage_passes_through():
         "dept": {"type": "choice", "choice": "billing", "probabilities": {"billing": 1.0, "tech": 0.0}, "confidence": 1.0},
         "urgency": {"type": "score", "score": 0.0, "legend": {"0": "low", "1": "mid", "2": "high"},
                    "probabilities": {"0": 1.0, "1": 0.0, "2": 0.0}, "confidence": 1.0},
-        "spam": {"type": "noul", "noul": 0.9, "confidence": 0.8},
+        "spam": noul(0.9, 0.8),
     }, usage={"input_tokens": 47, "output_tokens": 0}))
     r = backend.decide(request())
     assert r.usage.input_tokens == 47
@@ -88,7 +89,7 @@ def test_the_questions_sent_upstream_are_plain_wire_dicts():
         calls.append(json.loads(req.content))
         return httpx.Response(200, json={
             "model": "kev-0.8b", "usage": {"input_tokens": 1, "output_tokens": 0},
-            "answers": {"spam": {"type": "noul", "noul": 0.5, "confidence": 0.0}}})
+            "answers": {"spam": noul(0.5, 0.0)}})
 
     backend = SystemOneBackend("https://kev.example", "kev-latest", "k",
                                transport=httpx.MockTransport(handler))

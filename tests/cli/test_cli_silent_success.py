@@ -10,18 +10,9 @@ import pytest
 from verdict import cli, client
 from verdict.cli import inference
 from conftest import typed
+from fakes import FakeEngine, noul
 
 BANK = '{"q": {"type": "noul", "instructions": "Is `message` about money?"}}'
-
-
-class FakeEngine:
-    name = "fake-local"
-
-    def clip_state(self, state, budget):
-        return state
-
-    def predict(self, state, questions):
-        return typed(questions, lambda k: {"type": "noul", "noul": 0.7, "confidence": 0.7})
 
 
 @pytest.fixture(autouse=True)
@@ -36,7 +27,7 @@ def served(monkeypatch):
     def fake_decide(state, questions, url=None, model=None, **flags):
         sent.append(state)
         return {"model": "served", "answers": typed(
-            questions, lambda k: {"type": "noul", "noul": 0.6, "confidence": 0.6})}
+            questions, lambda k: noul(0.6))}
 
     monkeypatch.setattr(client, "decide", fake_decide)
     return sent
@@ -84,7 +75,7 @@ def test_falling_back_to_a_local_load_says_so_once(monkeypatch, capsys):
         raise client.NoServer("no verdict server at http://127.0.0.1:8799 (refused)")
 
     monkeypatch.setattr(client, "decide", offline)
-    monkeypatch.setattr(inference, "load", lambda *a, **k: FakeEngine())
+    monkeypatch.setattr(inference, "load", lambda *a, **k: FakeEngine(p=0.7))
     monkeypatch.setattr("sys.stdin", io.StringIO('{"message": "a"}\n{"message": "b"}\n'))
     assert cli.main(["decide", "--jsonl", "-q", BANK, "--lang", "en", "--pause", "0"]) == 0
     err = capsys.readouterr().err

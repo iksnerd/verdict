@@ -6,8 +6,6 @@ from __future__ import annotations
 
 import io
 import json
-import sys
-import types
 
 import pytest
 from fastapi.testclient import TestClient
@@ -16,27 +14,9 @@ from verdict import cli, client
 from conftest import typed
 from verdict.api import create_app
 from verdict.backends.mlx import MlxBackend
+from fakes import noul
 
 Q = {"urgent": {"type": "noul", "instructions": "?"}}
-
-
-class Agent:
-    def __init__(self, tag):
-        self.tag, self.calls = tag, 0
-
-    def predict(self, state, questions):
-        self.calls += 1
-        return {"answers": typed(
-            questions, lambda k: {"type": "noul", "noul": 0.6, "confidence": 0.6})}
-
-
-@pytest.fixture
-def fake_laya(monkeypatch):
-    loaded = {}
-    fake = types.ModuleType("laya_mlx")
-    fake.load = lambda model_id, **kw: loaded.setdefault(model_id, Agent(model_id))
-    monkeypatch.setitem(sys.modules, "laya_mlx", fake)
-    return loaded
 
 
 def test_default_request_uses_the_main_checkpoint_and_never_loads_the_other(fake_laya):
@@ -75,7 +55,7 @@ def fake_server(monkeypatch):
     def fake_decide(state, questions, url=None, model=None, **flags):
         sent.append(model)
         return {"model": "fake", "answers": typed(
-            questions, lambda k: {"type": "noul", "noul": 0.5, "confidence": 0.5})}
+            questions, lambda k: noul(0.5))}
 
     monkeypatch.setattr(client, "decide", fake_decide)
     return sent

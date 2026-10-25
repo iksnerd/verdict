@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import json
-import pathlib
 
 import pytest
 
@@ -19,8 +18,9 @@ from verdict.judge.router import (
     route,
 )
 from verdict.schema import DecideRequest
+from fakes import REPO_ROOT
 
-EVALS = pathlib.Path(__file__).resolve().parents[1] / "evals" / "router_prompts.jsonl"
+EVALS = REPO_ROOT / "evals" / "router_prompts.jsonl"
 
 
 def answers(difficulty=0.5, sensitive=0.1):

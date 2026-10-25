@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import json
 import re
-from pathlib import Path
 
 import pytest
 
@@ -13,8 +12,10 @@ from verdict.evaluation import bench
 from verdict import cli, client
 from verdict.cli import examples_cmd, inference
 from conftest import typed
+from fakes import REPO_ROOT
+from fakes import noul
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = REPO_ROOT
 
 
 def fake_server(monkeypatch):
@@ -23,7 +24,7 @@ def fake_server(monkeypatch):
     def fake_decide(state, questions, url=None, model=None, **flags):
         calls.append((state, questions))
         return {"model": "fake", "answers": typed(
-            questions, lambda k: {"type": "noul", "noul": 0.5, "confidence": 0.5})}
+            questions, lambda k: noul(0.5))}
 
     monkeypatch.setattr(client, "decide", fake_decide)
     return calls
@@ -35,7 +36,7 @@ def jev_transport(calls):
     def handler(request: httpx.Request) -> httpx.Response:
         calls.append(json.loads(request.content))
         body = json.loads(request.content)
-        answers = {qid: {"type": "noul", "noul": 0.42, "confidence": 0.1} if q["type"] == "noul"
+        answers = {qid: noul(0.42, 0.1) if q["type"] == "noul"
                    else {"type": "choice", "choice": next(iter(q["criteria"])),
                         "probabilities": {k: 1 / len(q["criteria"]) for k in q["criteria"]},
                         "confidence": 0.5} if q["type"] == "choice"
@@ -126,7 +127,7 @@ def test_scores_against_expected_labels_when_present(monkeypatch, tmp_path, caps
     monkeypatch.setattr(examples_cmd, "_examples_root", lambda: root)
     monkeypatch.setattr(client, "decide", lambda state, questions, url=None, model=None, **flags: {
         "model": "fake", "answers": typed(
-            questions, lambda k: {"type": "noul", "noul": 0.9, "confidence": 0.5})})
+            questions, lambda k: noul(0.9, 0.5))})
     assert cli.main(["examples", "toy"]) == 0
     assert "toy: 1/2 match the recorded expectation" in capsys.readouterr().out
 
@@ -136,7 +137,7 @@ def test_no_score_line_when_nothing_carries_an_expectation(monkeypatch, tmp_path
     monkeypatch.setattr(examples_cmd, "_examples_root", lambda: root)
     monkeypatch.setattr(client, "decide", lambda state, questions, url=None, model=None, **flags: {
         "model": "fake", "answers": typed(
-            questions, lambda k: {"type": "noul", "noul": 0.9, "confidence": 0.5})})
+            questions, lambda k: noul(0.9, 0.5))})
     assert cli.main(["examples", "toy"]) == 0
     assert "match the recorded expectation" not in capsys.readouterr().out
 
@@ -155,7 +156,7 @@ def test_pause_between_calls_is_not_counted_as_latency(monkeypatch, tmp_path, ca
     monkeypatch.setattr(examples_cmd, "_examples_root", lambda: root)
     monkeypatch.setattr(client, "decide", lambda state, questions, url=None, model=None, **flags: {
         "model": "fake", "answers": typed(
-            questions, lambda k: {"type": "noul", "noul": 0.5, "confidence": 0.5})})
+            questions, lambda k: noul(0.5))})
     assert cli.main(["examples", "toy", "--pause", "0.2"]) == 0
     out = capsys.readouterr().out
     ms = int(re.search(r"toy: (\d+) ms/call", out).group(1))
@@ -164,7 +165,7 @@ def test_pause_between_calls_is_not_counted_as_latency(monkeypatch, tmp_path, ca
 
 def test_examples_is_packed_into_the_wheel():
     """A directory read in a checkout but missing from the wheel works in tests and fails on
-    every install (docs.py's own topics have the same guard, tests/test_docs_cmd.py)."""
+    every install (docs.py's own topics have the same guard, tests/project/test_docs_cmd.py)."""
     import tomllib
 
     config = tomllib.loads((ROOT / "pyproject.toml").read_text())

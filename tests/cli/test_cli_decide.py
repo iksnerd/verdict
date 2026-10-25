@@ -10,6 +10,7 @@ import pytest
 from verdict import cli, client
 from verdict.cli import inference
 from conftest import typed
+from fakes import FakeEngine, noul
 
 BANK = {"urgent": {"type": "noul", "instructions": "Is `body` urgent?"}}
 
@@ -20,7 +21,7 @@ def fake_server(monkeypatch):
     def fake_decide(state, questions, url=None, model=None, **flags):
         calls.append((state, questions))
         return {"model": "fake", "answers": typed(
-            questions, lambda k: {"type": "noul", "noul": 0.5, "confidence": 0.5})}
+            questions, lambda k: noul(0.5))}
 
     monkeypatch.setattr(client, "decide", fake_decide)
     return calls
@@ -133,30 +134,12 @@ def test_no_spread_report_for_a_handful_of_states(monkeypatch, capsys):
     assert "spread" not in capsys.readouterr().err
 
 
-class FakeEngine:
-    """Raises like laya-mlx does on a question with no `instructions` key."""
-    name = "fake-local"
-
-    def __init__(self):
-        self.seen = []
-
-    def clip_state(self, state, budget):
-        return state
-
-    def predict(self, state, questions):
-        for q in questions.values():
-            if "instructions" not in q:
-                raise ValueError("Question is missing instructions")
-        self.seen.append(questions)
-        return typed(questions, lambda k: {"type": "noul", "noul": 0.5, "confidence": 0.5})
-
-
 def no_server(monkeypatch):
     def refuse(*a, **k):
         raise client.NoServer("nothing listening")
 
     monkeypatch.setattr(client, "decide", refuse)
-    engine = FakeEngine()
+    engine = FakeEngine(strict=True)
     monkeypatch.setattr(inference, "_ENGINES", {})
     monkeypatch.setattr(inference, "load", lambda *a, **k: engine)
     return engine

@@ -5,16 +5,16 @@ from __future__ import annotations
 
 import json
 import re
-from pathlib import Path
 
 import pytest
 
 from verdict.evaluation import bench
 from verdict import cli, inputs, library
 from verdict.schema import DecideRequest
+from fakes import REPO_ROOT
 
 ENTRIES = library.load()
-SCORECARDS = Path(__file__).resolve().parents[1] / "bench" / "scorecards"
+SCORECARDS = REPO_ROOT / "bench" / "scorecards"
 
 
 def test_there_is_a_library():

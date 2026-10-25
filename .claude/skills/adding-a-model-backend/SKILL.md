@@ -92,8 +92,8 @@ do, because that is the point of the exercise for their authors too.
 TDD, at the `Backend`'s own seam (`create_app(backend)` via `TestClient`, or `backend.decide()`
 directly), mocked first:
 
-- Reuse `httpx.MockTransport` the way `tests/test_bench.py`'s `jev_transport` and
-  `tests/test_systemone_backend.py` already do — a fake server that returns the raw JSON shape,
+- Reuse `httpx.MockTransport` the way `tests/evaluation/test_bench.py`'s `jev_transport` and
+  `tests/backends/test_systemone_backend.py` already do — a fake server that returns the raw JSON shape,
   not a fake model.
 - Cover the adaptation logic specifically: confidence synthesis, `usage` passthrough, which
   server name gets reported (`raw.get("model", ...)`, so the caller sees the real upstream
@@ -125,7 +125,7 @@ inputs in `examples/*/bank.json` + `*.jsonl` against any `/v1/systemone` backend
 inputs `examples/README.md`'s own Laya numbers came from, and reports ms/call. Use it instead of
 one-off ad hoc questions — a handful of hand-picked questions can't tell you where a new model's
 actual weaknesses are; the existing example banks were built (and are checked by
-`tests/test_examples.py`) precisely to cover several different question shapes at once.
+`tests/project/test_examples.py`) precisely to cover several different question shapes at once.
 
 Where a row carries an `expected` label (most banks do; `examples/README.md` gives each one's
 documented count), it prints how many answers match it — grade against that, not

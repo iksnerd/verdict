@@ -10,8 +10,9 @@ from pathlib import Path
 import pytest
 
 from verdict import cli, docs
+from fakes import REPO_ROOT
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = REPO_ROOT
 
 
 def show(capsys, *argv):

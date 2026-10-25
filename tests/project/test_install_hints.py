@@ -6,15 +6,15 @@ from __future__ import annotations
 
 import re
 import sys
-from pathlib import Path
 
 import pytest
 import uvicorn
 
 import verdict.backends.mlx as backend_mlx
 from verdict import cli, config
+from fakes import REPO_ROOT
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = REPO_ROOT
 SCANNED = [*ROOT.glob("*.md"), *ROOT.glob("docs/*.md"), *ROOT.glob("examples/**/*.md"),
            *ROOT.glob("plugins/**/*.md"), *(ROOT / "src").rglob("*.py")]
 #: An install command that names `verdict` (optionally with extras) and not a source after it.

@@ -43,7 +43,7 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/verdict"]
 
-# `verdict docs` reads these from an installed tool; tests/test_docs_cmd.py keeps the list whole.
+# `verdict docs` reads these from an installed tool; tests/project/test_docs_cmd.py keeps the list whole.
 [tool.hatch.build.targets.wheel.force-include]
 "README.md" = "verdict/_docs/README.md"
 "docs/guide.md" = "verdict/_docs/guide.md"

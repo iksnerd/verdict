@@ -2,7 +2,7 @@
 
 The seam is the Backend's `decide()` and the HTTP API over it, with the SDK's own mock transport
 standing in for api.typesafe.ai. Answer shapes follow the SDK's wire models (the same source as
-tests/test_systemone.py); no network is touched.
+tests/serving/test_systemone.py); no network is touched.
 """
 from __future__ import annotations
 

@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 from verdict.api import create_app
 from verdict.backends.mlx import MlxBackend
 from verdict.backends.engine import Engine
+from fakes import noul
 
 
 class WordTokenizer:
@@ -53,7 +54,7 @@ class Agent:
 
     def predict(self, state, questions):
         self.seen = state
-        return {"answers": {k: {"type": "noul", "noul": 0.5, "confidence": 0.5} for k in questions}}
+        return {"answers": {k: noul(0.5) for k in questions}}
 
 
 def test_the_server_clips_decide_states_to_its_budget():

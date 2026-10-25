@@ -11,6 +11,7 @@ import pytest
 
 from verdict import cli, client, config
 from conftest import typed
+from fakes import noul
 
 
 @pytest.fixture
@@ -53,7 +54,7 @@ def asked_model(monkeypatch, argv):
     def fake_decide(state, questions, url=None, model=None, **flags):
         seen["model"] = model
         return {"model": "fake", "answers": typed(
-            questions, lambda k: {"type": "noul", "noul": 0.5, "confidence": 0.5})}
+            questions, lambda k: noul(0.5))}
     monkeypatch.setattr(client, "decide", fake_decide)
     assert cli.main(argv) == 0
     return seen["model"]

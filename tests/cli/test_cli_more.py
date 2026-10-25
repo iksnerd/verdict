@@ -10,6 +10,7 @@ import pytest
 
 from verdict import cli, client
 from conftest import typed
+from fakes import noul
 
 
 def fake_server(monkeypatch, answer_for):
@@ -63,7 +64,7 @@ def test_levels_make_a_score_and_print_expectation_and_top_level(monkeypatch, ca
 
 
 def test_true_false_describe_the_sides(monkeypatch):
-    sent = fake_server(monkeypatch, lambda s, k, q: {"type": "noul", "noul": 0.5, "confidence": 0.5})
+    sent = fake_server(monkeypatch, lambda s, k, q: noul(0.5))
     cli.main(["ask", "x", "safe?", "--true", "read-only", "--false", "writes", "--yesno"])
     assert sent[0][1]["q"]["criteria"] == {"true": "read-only", "false": "writes"}
 
@@ -110,7 +111,7 @@ def test_calibrate_fits_a_cut_and_writes_a_file_decide_applies(monkeypatch, tmp_
 
 
 def test_calibrate_limit_caps_the_calls(monkeypatch, tmp_path):
-    sent = fake_server(monkeypatch, lambda s, k, q: {"type": "noul", "noul": 0.5, "confidence": 0.5})
+    sent = fake_server(monkeypatch, lambda s, k, q: noul(0.5))
     data = tmp_path / "l.jsonl"
     data.write_text("\n".join(json.dumps({"state": str(i), "label": i % 2 == 0}) for i in range(50)))
     cli.main(["calibrate", str(data), "--questions", '{"q": {"type": "noul", "instructions": "?"}}',
@@ -119,7 +120,7 @@ def test_calibrate_limit_caps_the_calls(monkeypatch, tmp_path):
 
 
 def test_ask_cut_from_a_calibration_file(monkeypatch, tmp_path, capsys):
-    fake_server(monkeypatch, lambda s, k, q: {"type": "noul", "noul": 0.45, "confidence": 0.45})
+    fake_server(monkeypatch, lambda s, k, q: noul(0.45))
     f = tmp_path / "fit.json"
     f.write_text(json.dumps({"questions": {"q": {"type": "noul", "cut": 0.4}}}))
     assert cli.main(["ask", "x", "q?", "--cut", str(f)]) == 0

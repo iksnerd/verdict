@@ -15,7 +15,7 @@ default. The mechanism underneath is not the obvious exclusive choice over {"sma
 calibrated cut on a `score` question, because that is what measured better.
 
 The definitions are copied here rather than imported so that importing this module, and the whole
-test suite, needs neither `laya` nor torch. `tests/test_router.py::test_bank_matches_upstream`
+test suite, needs neither `laya` nor torch. `tests/judge/test_router.py::test_bank_matches_upstream`
 asserts the copy still matches `laya.router_questions()` whenever `laya` is installed, so it cannot
 drift silently.
 """

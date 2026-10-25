@@ -12,6 +12,7 @@ import pytest
 
 from verdict import cli, client
 from verdict.cli import inference
+from fakes import noul
 
 NEW = {"q": {"type": "noul", "instructions": "Does `text` mention a deadline?"}}
 
@@ -28,7 +29,7 @@ def server(monkeypatch):
                 answers[k] = {"type": "choice", "choice": "yes", "confidence": 0.4,
                               "probabilities": {"no": 0.2, "yes": 0.8}}
             else:
-                answers[k] = {"type": "noul", "noul": 0.3, "confidence": 0.7}
+                answers[k] = noul(0.3, 0.7)
         return {"model": "fake", "answers": answers}
 
     monkeypatch.setattr(client, "decide", fake_decide)

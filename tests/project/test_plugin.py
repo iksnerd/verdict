@@ -6,11 +6,11 @@ from __future__ import annotations
 import json
 import re
 import tomllib
-from pathlib import Path
 
 import pytest
+from fakes import REPO_ROOT
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = REPO_ROOT
 PLUGIN = ROOT / "plugins" / "verdict"
 SKILL = PLUGIN / "skills" / "verdict"
 

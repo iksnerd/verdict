@@ -12,6 +12,7 @@ import sys
 import pytest
 
 from verdict import client as http
+from fakes import noul
 
 
 def test_importing_verdict_stays_light():
@@ -96,7 +97,7 @@ def test_a_server_url_is_the_default_transport(monkeypatch):
 
     def fake(state, questions, url=None, model=None, **flags):
         seen.update(state=state, url=url, model=model, flags=flags)
-        return {"model": "served", "answers": {"q": {"type": "noul", "noul": 0.9, "confidence": 0.9}}}
+        return {"model": "served", "answers": {"q": noul(0.9)}}
 
     monkeypatch.setattr(http, "decide", fake)
     r = Verdict(url="http://127.0.0.1:9999", allow_unmeasured=True).decide(

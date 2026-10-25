@@ -10,6 +10,7 @@ import pytest
 from verdict import cli, client, config
 from verdict.cli import inference
 from conftest import typed
+from fakes import noul
 
 BANK = '{"q": {"type": "noul", "instructions": "Is `message` about money?"}}'
 
@@ -22,7 +23,7 @@ def no_inference(monkeypatch):
 def served(monkeypatch, model="served"):
     def fake_decide(state, questions, url=None, model_=None, **k):
         return {"model": model, "answers": typed(
-            questions, lambda q: {"type": "noul", "noul": 0.6, "confidence": 0.6})}
+            questions, lambda q: noul(0.6))}
 
     monkeypatch.setattr(client, "decide", lambda s, q, url=None, model=None: fake_decide(s, q))
 

@@ -6,6 +6,7 @@ import math
 import pytest
 
 from verdict.judge import calibrate as cal
+from fakes import noul
 
 
 def test_auc_perfect_inverted_and_tied():
@@ -60,10 +61,10 @@ def test_as_bool_rejects_nonsense():
 
 def test_apply_adds_without_overwriting():
     answers = {
-        "urgent": {"type": "noul", "noul": 0.44, "confidence": 0.44},
+        "urgent": noul(0.44),
         "intent": {"type": "choice", "choice": "a", "probabilities": {"a": 0.6, "b": 0.4},
                    "confidence": 0.12},
-        "other": {"type": "noul", "noul": 0.9, "confidence": 0.9},
+        "other": noul(0.9),
     }
     fits = {"urgent": {"type": "noul", "cut": 0.41}, "intent": {"type": "choice", "temperature": 2.0}}
     out = cal.apply(answers, fits)

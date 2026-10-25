@@ -2,7 +2,7 @@
 
 Fifteen runnable banks, a tree for `verdict classify` (`banking-tree/`) and a Python script
 (`python-api/`). Every input is invented, and no real data is in this folder.
-`tests/test_examples.py` checks that each bank still validates, that its inputs have the fields
+`tests/project/test_examples.py` checks that each bank still validates, that its inputs have the fields
 the questions name, and that the Python script runs.
 
 Run any of them with a server up (`verdict serve`, then stop it when you're done). The paths

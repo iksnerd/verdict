@@ -13,7 +13,7 @@ import pytest
 from verdict import cli, config
 from verdict.backends import engine
 from verdict.cli import inference, support
-from conftest import typed
+from fakes import FakeEngine
 
 
 def test_bits_default_to_full_precision(monkeypatch):
@@ -139,15 +139,6 @@ def test_the_in_process_fallback_loads_with_bits(monkeypatch):
     monkeypatch.setattr(client, "decide", lambda *a, **k: (_ for _ in ()).throw(client.NoServer("x")))
     monkeypatch.setattr(inference, "_ENGINES", {})
     seen = {}
-
-    class FakeEngine:
-        name = "fake q8"
-
-        def clip_state(self, s, b):
-            return s
-
-        def predict(self, s, q):
-            return typed(q, lambda k: {"type": "noul", "noul": 0.5, "confidence": 0.5})
 
     monkeypatch.setattr(inference, "load", lambda path, **kw: seen.update(kw) or FakeEngine())
     assert cli.main(["ask", "x", "q?", "--lang", "en", "--model", "/tmp/any"]) == 0

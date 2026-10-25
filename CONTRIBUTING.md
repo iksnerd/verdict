@@ -29,8 +29,8 @@ private-repo scripts).
 ## Tests
 
 Tests first. `uv run pytest` needs no network and no model: the CLI and wire-shape tests run
-against a `uniform` fake backend. `tests/test_examples.py` checks every bank under `examples/`
-still validates. `tests/test_public_repo.py` fails on a home path or a private tool name anywhere
+against a `uniform` fake backend. `tests/project/test_examples.py` checks every bank under `examples/`
+still validates. `tests/project/test_public_repo.py` fails on a home path or a private tool name anywhere
 the package or plugin ships.
 
 ## Docs

@@ -26,10 +26,11 @@ from verdict.answers import (
     top,
 )
 from verdict.schema import ChoiceAnswer, NoulAnswer, ScoreAnswer
+from fakes import noul
 
 CHOICE = {"type": "choice", "choice": "b", "probabilities": {"a": 0.3, "b": 0.7}, "confidence": 0.7}
 SCORE = {"type": "score", "score": 1.4, "legend": {}, "probabilities": {"0": 0.1, "1": 0.6, "2": 0.3}, "confidence": 0.6}
-NOUL = {"type": "noul", "noul": 0.8, "confidence": 0.8}
+NOUL = noul(0.8)
 
 
 def test_field_reads_dicts_and_models_alike():
@@ -55,12 +56,12 @@ def test_top_is_the_argmax_and_the_side_of_one_half():
     assert top(CHOICE) == "b"
     assert top(SCORE) == "1"
     assert top(NOUL) == TRUE
-    assert top({"type": "noul", "noul": 0.2, "confidence": 0.8}) == FALSE
+    assert top(noul(0.2, 0.8)) == FALSE
 
 
 def test_top_treats_exactly_one_half_as_true():
     """Pinning the boundary, because `parity.py` used `>= 0.5` and a scorer could have differed."""
-    assert top({"type": "noul", "noul": 0.5, "confidence": 0.5}) == TRUE
+    assert top(noul(0.5)) == TRUE
 
 
 def test_point_is_the_shape_the_teachers_label_in():
@@ -79,7 +80,7 @@ def test_point_and_gold_point_agree_so_a_scorer_can_compare_them():
 
 
 def test_is_flat_detects_an_answer_with_nothing_behind_it():
-    assert is_flat({"type": "noul", "noul": 0.5, "confidence": 0.5})
+    assert is_flat(noul(0.5))
     assert is_flat({"type": "choice", "choice": "a", "probabilities": {"a": 0.5, "b": 0.5}, "confidence": 0.0})
     assert not is_flat(NOUL)
     assert not is_flat(CHOICE)

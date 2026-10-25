@@ -11,8 +11,9 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from fakes import REPO_ROOT
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = REPO_ROOT
 
 #: Directories that are gitignored or not ours; the pre-commit hook tests an export of the index,
 #: which has none of them, so this matches what would be committed.

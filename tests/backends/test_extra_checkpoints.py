@@ -4,36 +4,13 @@ config key or lang-detection behaviour behind these: they are plain alternates a
 by name, loaded on first use and cached, never at startup."""
 from __future__ import annotations
 
-import sys
-import types
 
-import pytest
 from fastapi.testclient import TestClient
 
-from conftest import typed
 from verdict.api import create_app
 from verdict.backends.mlx import MlxBackend
 
 Q = {"urgent": {"type": "noul", "instructions": "?"}}
-
-
-class Agent:
-    def __init__(self, tag):
-        self.tag, self.calls = tag, 0
-
-    def predict(self, state, questions):
-        self.calls += 1
-        return {"answers": typed(
-            questions, lambda k: {"type": "noul", "noul": 0.6, "confidence": 0.6})}
-
-
-@pytest.fixture
-def fake_laya(monkeypatch):
-    loaded = {}
-    fake = types.ModuleType("laya_mlx")
-    fake.load = lambda model_id, **kw: loaded.setdefault(model_id, Agent(model_id))
-    monkeypatch.setitem(sys.modules, "laya_mlx", fake)
-    return loaded
 
 
 def test_default_request_never_loads_an_extra_checkpoint(fake_laya):
