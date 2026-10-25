@@ -137,6 +137,61 @@ MLX. `verdict serve` loads it once; without a server, each command loads it itse
 costs one pass over the state, so a bank should hold only the questions you need. The scores are
 uncalibrated: trust their order, and fit a cut before gating anything on one.
 
+What asks what, from the three surfaces down to the model ([source](docs/design/architecture.mmd)):
+
+```mermaid
+%%{init: {'theme':'base','themeVariables':{'lineColor':'#64748b','clusterBkg':'#0b1220','clusterBorder':'#1e293b','fontFamily':'sans-serif','titleColor':'#e2e8f0','clusterTextColor':'#e2e8f0'}}}%%
+flowchart TB
+    subgraph SURFACES["SURFACES · one wire format, schema.py"]
+        direction LR
+        CLI(["CLI<br/>cli/"])
+        PY(["Python client<br/>sdk.py"])
+        HTTP(["HTTP API on localhost<br/>api.py · verdict serve"])
+    end
+
+    subgraph JUDGE["JUDGE · judge/ · built on any backend"]
+        direction LR
+        CAL["calibrate<br/>cut or temperature"]
+        CAS["cascade<br/>ask the second only when unsure"]
+        HIE["hierarchy<br/>classify, over 20 options"]
+        SW["switch · router · rank"]
+    end
+
+    subgraph BACKENDS["BACKENDS · backends/ · anything with decide()"]
+        direction LR
+        MLX["MlxBackend<br/>Laya, local, MLX"]
+        S1["SystemOneBackend<br/>any /v1/systemone server"]
+        JEV["JevBackend<br/>TypeSafe SDK"]
+        UNI["UniformBackend<br/>no model"]
+    end
+
+    LAYA[("Laya checkpoint<br/>runs on this machine")]
+    REMOTE{{"Jev or another server<br/>sees the text sent to it"}}
+
+    CLI ==> HTTP
+    PY ==> HTTP
+    CLI -.->|"no server: load in-process"| BACKENDS
+    HTTP ==> BACKENDS
+    CLI --> JUDGE
+    JUDGE --> BACKENDS
+    CAS -. "escalates the unsure" .-> REMOTE
+    MLX ==> LAYA
+    S1 --> REMOTE
+    JEV --> REMOTE
+
+    classDef surface fill:#0c4a6e,stroke:#38bdf8,color:#e0f2fe;
+    classDef judge fill:#3b0764,stroke:#c084fc,color:#f3e8ff;
+    classDef backend fill:#052e2b,stroke:#34d399,color:#d1fae5;
+    classDef model fill:#1e1b4b,stroke:#a78bfa,color:#ede9fe;
+    classDef out fill:#431407,stroke:#fb923c,color:#ffedd5;
+    class CLI,PY,HTTP surface;
+    class CAL,CAS,HIE,SW judge;
+    class MLX,S1,JEV,UNI backend;
+    class LAYA model;
+    class REMOTE out;
+    linkStyle default stroke:#64748b,stroke-width:1.5px;
+```
+
 Laya judges typed facts about a text. It is not a retriever: matching a text to one of many topical
 labels is better done by an embedding model (FINDINGS §53). The surfaces are one core: the CLI, a
 localhost HTTP API that also speaks TypeSafe's Jev protocol, and the Python client. A backend is
