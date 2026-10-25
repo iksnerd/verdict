@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 import uvicorn
 
-import verdict.backend_mlx as backend_mlx
+import verdict.backends.mlx as backend_mlx
 from verdict import cli, config
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -60,7 +60,7 @@ def test_serve_without_the_sdk_prints_a_command_that_installs_this_project(monke
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(config, "CONFIG_PATHS", ())
     monkeypatch.setenv("TYPESAFE_API_KEY", "sk-test")
-    monkeypatch.setitem(sys.modules, "verdict.backend_jev", None)         # the import raises
+    monkeypatch.setitem(sys.modules, "verdict.backends.jev", None)         # the import raises
     monkeypatch.setattr(backend_mlx, "MlxBackend", lambda *a, **k: pytest.fail("no local model"))
     monkeypatch.setattr(uvicorn, "run", lambda *a, **k: pytest.fail("must not serve"))
     assert cli.main(["serve", "--port", "0", "--systemone", "https://api.typesafe.ai"]) == 2
@@ -71,8 +71,8 @@ def test_serve_without_the_sdk_prints_a_command_that_installs_this_project(monke
 
 def test_the_library_import_error_installs_the_sdk_not_the_wrong_project(monkeypatch):
     monkeypatch.setitem(sys.modules, "typesafe_sdk", None)
-    monkeypatch.delitem(sys.modules, "verdict.backend_jev", raising=False)
+    monkeypatch.delitem(sys.modules, "verdict.backends.jev", raising=False)
     with pytest.raises(ImportError) as info:
-        import verdict.backend_jev  # noqa: F401
+        import verdict.backends.jev  # noqa: F401
     text = str(info.value)
     assert "pip install typesafe-sdk" in text and "verdict[" not in text

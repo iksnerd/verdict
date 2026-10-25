@@ -9,7 +9,8 @@ from pathlib import Path
 
 import pytest
 
-from verdict import bench, cli, client
+from verdict.evaluation import bench
+from verdict import cli, client
 from verdict.cli import examples_cmd, inference
 from conftest import typed
 

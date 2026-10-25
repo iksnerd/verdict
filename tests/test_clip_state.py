@@ -7,8 +7,8 @@ import json
 from fastapi.testclient import TestClient
 
 from verdict.api import create_app
-from verdict.backend_mlx import MlxBackend
-from verdict.engine import Engine
+from verdict.backends.mlx import MlxBackend
+from verdict.backends.engine import Engine
 
 
 class WordTokenizer:

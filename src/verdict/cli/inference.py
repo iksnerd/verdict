@@ -13,7 +13,7 @@ import sys
 import time
 
 from .. import client
-from ..engine import load
+from ..backends.engine import load
 from ..errors import QuestionError
 
 #: What `/v1/capabilities` reports for a server fronting something other than laya.

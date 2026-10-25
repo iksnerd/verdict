@@ -6,7 +6,7 @@ import json
 
 import pytest
 
-from verdict import bench
+from verdict.evaluation import bench
 
 
 def suite(**over):

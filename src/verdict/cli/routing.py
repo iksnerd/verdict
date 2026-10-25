@@ -14,9 +14,9 @@ import time
 
 from . import inference, support
 from .. import client
-from ..engine import DEFAULT_MODEL as ENGINE_DEFAULT_MODEL, PROMPT_TOKEN_BUDGET
-from ..router import BIG_SMALL, ROUTER_BANK, SMALL
-from ..switch import Branch
+from ..backends.engine import DEFAULT_MODEL as ENGINE_DEFAULT_MODEL, PROMPT_TOKEN_BUDGET
+from ..judge.router import BIG_SMALL, ROUTER_BANK, SMALL
+from ..judge.switch import Branch
 
 #: Fallback for library callers that import `decide`/`decide_many` directly: base Laya, the
 #: public default. The CLI resolves `verdict.toml` first and passes the result in.

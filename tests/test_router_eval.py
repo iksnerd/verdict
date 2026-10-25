@@ -5,8 +5,8 @@ from __future__ import annotations
 
 import pytest
 
-from verdict.router import BIG, SMALL, T_DIFFICULTY, T_SENSITIVE
-from verdict.router_eval import COST_RATIO, as_answers, cost, evaluate, fit, load_prompts, score
+from verdict.judge.router import BIG, SMALL, T_DIFFICULTY, T_SENSITIVE
+from verdict.evaluation.router_eval import COST_RATIO, as_answers, cost, evaluate, fit, load_prompts, score
 
 
 def rows_and_probs():
@@ -55,7 +55,7 @@ def test_cost_weights_the_expensive_mistake_more():
 def test_as_answers_is_never_mistaken_for_a_uniform_backend():
     """A flat placeholder here would make every replayed prompt read as 'no model behind this',
     which the router turns into BIG, silently scoring the cache instead of the model."""
-    from verdict.router import is_uniform
+    from verdict.judge.router import is_uniform
 
     assert not is_uniform(as_answers({"difficulty": 1.5, "is_sensitive": 0.5}))
 
@@ -112,10 +112,10 @@ def test_an_empty_eval_file_is_an_error_not_a_score_of_zero(tmp_path):
 
 
 def test_the_refit_runs_as_a_module(capsys):
-    """`python -m verdict.router_eval --refit` is how the router's thresholds are refitted."""
+    """`python -m verdict.evaluation.router_eval --refit` is how the router's thresholds are refitted."""
     import pytest
 
-    from verdict import router_eval
+    from verdict.evaluation import router_eval
 
     with pytest.raises(SystemExit) as exit_:
         router_eval.main(["--help"])

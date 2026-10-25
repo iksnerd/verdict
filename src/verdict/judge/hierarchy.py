@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from typing import Any, Callable
 
-from .errors import QuestionError
+from ..errors import QuestionError
 
 #: laya's measured limit for one exclusive choice; the same constant `library.lint` refuses at.
 MAX_LEVEL = 20

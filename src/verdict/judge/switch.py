@@ -38,7 +38,7 @@ from __future__ import annotations
 
 from typing import Any, Callable, Mapping
 
-from .answers import field as answer_field, is_flat, probs as answer_probs
+from ..answers import field as answer_field, is_flat, probs as answer_probs
 
 
 class Branch:

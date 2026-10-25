@@ -199,7 +199,7 @@ def test_init_does_not_offer_the_uniform_backend(monkeypatch, tmp_path, capsys):
 def test_the_bench_hint_covers_a_tool_install(monkeypatch):
     import builtins
 
-    from verdict import bench
+    from verdict.evaluation import bench
 
     real = builtins.__import__
     monkeypatch.setattr(builtins, "__import__", lambda name, *a, **k: (
@@ -234,7 +234,7 @@ def test_validate_names_an_empty_stdin(monkeypatch, capsys):
 
 def test_route_json_exits_zero_on_success(monkeypatch, capsys):
     from verdict.cli import routing
-    from verdict.switch import Branch
+    from verdict.judge.switch import Branch
 
     monkeypatch.setattr(routing, "decide", lambda *a, **k: (Branch("big", "r", {}), 1.0, "server"))
     assert cli.main(["route", "hard prompt", "--json"]) == 0
@@ -258,7 +258,7 @@ def test_a_plain_text_refusal_is_one_sentence_for_the_whole_bank(monkeypatch, ca
 def test_library_routing_defaults_to_the_public_model(monkeypatch):
     import importlib
 
-    from verdict import engine
+    from verdict.backends import engine
     from verdict.cli import routing
 
     monkeypatch.delenv("VERDICT_MODEL", raising=False)

@@ -7,7 +7,7 @@ Copyright Convai Innovations and Laya contributors. Licensed under Apache-2.0.
 
 Derived from Laya:
 - cloud/laya_train.py and src/verdict/train/items.py adapt the RLCD fine-tune notebook.
-- src/verdict/router.py vendors the question bank of laya.router_questions().
+- src/verdict/judge/router.py vendors the question bank of laya.router_questions().
 
 verdict runs Laya checkpoints through laya-mlx (https://github.com/mizorewww/laya-mlx,
 Apache-2.0), an independent MLX port. The base checkpoints are downloaded from Hugging Face

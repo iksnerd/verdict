@@ -18,7 +18,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Optional
 
-from . import calibrate, inputs
+from ..judge import calibrate
+from .. import inputs
 from .metrics import bootstrap_ci
 
 SUITES_FILE = Path(__file__).with_name("bench_suites.json")
@@ -208,11 +209,11 @@ def systemone_asker(base_url: str, model: str, key: str, *, attempts: int = 5,
     `verdict serve --systemone` uses; any other server, or no SDK, gets the plain client."""
     from urllib.parse import urlsplit
 
-    from .systemone import SystemOneClient
+    from ..systemone import SystemOneClient
 
     if (urlsplit(base_url).hostname or "") == "api.typesafe.ai":
         try:
-            from .backend_jev import JevAsker
+            from ..backends.jev import JevAsker
         except ImportError:
             pass
         else:

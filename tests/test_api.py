@@ -3,7 +3,7 @@ import math
 from fastapi.testclient import TestClient
 
 from verdict.api import create_app
-from verdict.backend import UniformBackend
+from verdict.backends.base import UniformBackend
 
 BODY = {
     "state": {"message": "I was charged twice"},
@@ -52,7 +52,7 @@ def test_invalid_request_is_422():
 
 def test_route_endpoint_uses_the_default_branch_when_there_is_no_model():
     """The safety property, end to end over HTTP: a uniform backend cannot pick `small`."""
-    from verdict.router import BIG
+    from verdict.judge.router import BIG
 
     client = TestClient(create_app())
     r = client.post("/v1/route", json={"prompt": "what does chmod 755 mean"})
@@ -70,7 +70,7 @@ def test_route_endpoint_rejects_a_missing_prompt():
 
 
 def test_batch_route_preserves_order_and_indexes_results():
-    from verdict.router import BIG
+    from verdict.judge.router import BIG
 
     client = TestClient(create_app())
     prompts = ["one", "two", "three"]

@@ -8,7 +8,7 @@ import time
 from pathlib import Path
 
 from . import inference, support
-from ..engine import maybe_truncated
+from ..backends.engine import maybe_truncated
 
 
 def _read_fits(path: str | None) -> dict:
@@ -20,7 +20,8 @@ def _read_fits(path: str | None) -> dict:
 
 def _decide_cmd(args: argparse.Namespace) -> int:
     """State plus a bank of typed questions in, one answer per question out, in one pass."""
-    from .. import calibrate, inputs
+    from ..judge import calibrate
+    from .. import inputs
     from ..schema import laya_questions
 
     if args.jsonl and not args.questions:
@@ -146,7 +147,8 @@ def _spread_report(seen: dict[str, tuple[int, float, float]]) -> list[str]:
 
 def _ask_cmd(args: argparse.Namespace) -> int:
     """One question, inline. Prints one line; `--json` for everything."""
-    from .. import calibrate, inputs
+    from ..judge import calibrate
+    from .. import inputs
 
     try:
         question = inputs.inline_question(args.question, args.options, args.levels,
@@ -211,7 +213,8 @@ def _ask_cmd(args: argparse.Namespace) -> int:
 
 def _classify_cmd(args: argparse.Namespace) -> int:
     """A text into one leaf of a two-level tree: the way past laya's 20-option limit."""
-    from .. import hierarchy, inputs
+    from ..judge import hierarchy
+    from .. import inputs
 
     try:
         tree = json.loads(Path(args.tree).read_text())
@@ -234,7 +237,8 @@ def _cascade_cmd(args: argparse.Namespace) -> int:
 
     The second server sees only the escalated questions of the escalated states, and the summary says
     how many that was. `--check` measures, on labelled examples, whether that helps for this task."""
-    from .. import calibrate, cascade, client, config, inputs
+    from ..judge import calibrate, cascade
+    from .. import client, config, inputs
     from ..schema import laya_questions
 
     if args.share is not None and args.below is not None:

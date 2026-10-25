@@ -9,7 +9,8 @@ from pathlib import Path
 
 import pytest
 
-from verdict import bench, cli, inputs, library
+from verdict.evaluation import bench
+from verdict import cli, inputs, library
 from verdict.schema import DecideRequest
 
 ENTRIES = library.load()

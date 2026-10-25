@@ -11,7 +11,7 @@
 ## The idea: declare a decision as a switch
 
 Write down the branches you are willing to take and which one to fall back to, and a branch
-comes back. The mechanism that picks it is separate from the declaration (`src/verdict/switch.py`),
+comes back. The mechanism that picks it is separate from the declaration (`src/verdict/judge/switch.py`),
 so it can be measured and swapped without touching a call site. The separation matters: the obvious
 mechanism, one exclusive choice question over the branch names, was the *worst* one available on
 this project's data (§3, §9, §14). A switch always has a default branch, taken whenever the model is
@@ -60,5 +60,5 @@ Two things about the 70.8% still hold as method:
 - The questions are upstream's, not invented here. Phrased the way the checkpoint was trained,
   they scored AUC 0.88 against 0.81 for invented ones (§14).
 
-Reproduce with `uv run python -m verdict.router_eval --refit`, or gate it with
+Reproduce with `uv run python -m verdict.evaluation.router_eval --refit`, or gate it with
 `apol validate --all --no-run`.

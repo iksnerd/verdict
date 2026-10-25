@@ -37,7 +37,7 @@ class Entry:
 
 
 def load(path: Path = LIBRARY_FILE) -> list[Entry]:
-    from . import bench
+    from .evaluation import bench
 
     suites = {s.name: s for s in bench.load_suites()}
     out = []

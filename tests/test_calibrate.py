@@ -5,7 +5,7 @@ import math
 
 import pytest
 
-from verdict import calibrate as cal
+from verdict.judge import calibrate as cal
 
 
 def test_auc_perfect_inverted_and_tied():

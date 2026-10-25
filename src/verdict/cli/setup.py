@@ -56,7 +56,7 @@ def _serve_cmd(args: argparse.Namespace) -> int:
     if remote:
         return _serve_remote(args, settings, remote, key, create_app, uvicorn)
 
-    from ..backend_mlx import MlxBackend
+    from ..backends.mlx import MlxBackend
 
     budget = args.budget if args.budget is not None else settings.prompt_token_budget
     bits = args.bits or settings.bits
@@ -83,7 +83,7 @@ def _serve_remote(args, settings, url, key, create_app, uvicorn) -> int:
     """
     from urllib.parse import urlsplit
 
-    from ..backend_systemone import SystemOneBackend
+    from ..backends.systemone import SystemOneBackend
     from ..config import LOOPBACK, ConfigError
 
     if (urlsplit(url).hostname or "") not in LOOPBACK and args.host not in LOOPBACK:
@@ -94,7 +94,7 @@ def _serve_remote(args, settings, url, key, create_app, uvicorn) -> int:
         # Hosted Jev goes through TypeSafe's own SDK (retries, request ids); anything else
         # speaking the protocol (Kev, another verdict) keeps the dependency-free client.
         try:
-            from ..backend_jev import JevBackend
+            from ..backends.jev import JevBackend
         except ImportError as exc:
             from . import update
 

@@ -41,7 +41,7 @@ def test_a_question_that_cannot_be_asked_fails_at_construction():
 @pytest.fixture
 def uniform():
     from verdict import Verdict
-    from verdict.backend import UniformBackend
+    from verdict.backends.base import UniformBackend
     return Verdict(backend=UniformBackend())
 
 
@@ -79,7 +79,7 @@ def test_a_question_measured_at_chance_is_refused_with_a_status_and_code(uniform
 
 def test_the_opt_out_asks_anyway():
     from verdict import Noul, Verdict
-    from verdict.backend import UniformBackend
+    from verdict.backends.base import UniformBackend
     v = Verdict(backend=UniformBackend(), allow_unmeasured=True)
     assert "p" in v.decide({"message": "hi"}, {"p": Noul(instructions="How dangerous is this?")}).nouls
 

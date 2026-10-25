@@ -6,8 +6,8 @@ import pathlib
 
 import pytest
 
-from verdict.backend import UniformBackend
-from verdict.router import (
+from verdict.backends.base import UniformBackend
+from verdict.judge.router import (
     BIG,
     BIG_SMALL,
     CASES,
@@ -111,7 +111,7 @@ def test_bank_matches_upstream():
 
 def test_nothing_here_dispatches():
     """verdict answers; the caller acts. There is no table of commands to run."""
-    import verdict.router as router
+    import verdict.judge.router as router
 
     assert not hasattr(router, "CLIS")
 

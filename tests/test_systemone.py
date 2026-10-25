@@ -10,8 +10,8 @@ from fastapi.testclient import TestClient
 
 from verdict import inputs, library
 from verdict.api import create_app, to_decide_request
-from verdict.backend import UniformBackend
-from verdict.backend_mlx import MlxBackend
+from verdict.backends.base import UniformBackend
+from verdict.backends.mlx import MlxBackend
 
 from test_mlx_backend import BODY as MLX_BODY, FakeAgent
 

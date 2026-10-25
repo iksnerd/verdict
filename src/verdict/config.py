@@ -404,7 +404,7 @@ lang = {_toml_str(s.lang)}
 # There is deliberately no [thresholds] table. The cuts are applied by the switch inside the
 # server process, so a value here would be read and ignored on the server path, and a config key
 # that silently does nothing is worse than no key. They are a measured artifact anyway: refit with
-# `python -m verdict.router_eval --refit`, which prints the two lines to paste into router.py.
+# `python -m verdict.evaluation.router_eval --refit`, which prints the two lines to paste into router.py.
 """
 
 

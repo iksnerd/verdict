@@ -75,7 +75,7 @@ def _correct(answer: dict, expected) -> bool:
 def _systemone_ask(args: argparse.Namespace):
     from urllib.parse import urlparse
 
-    from .. import bench
+    from ..evaluation import bench
 
     from .. import config
 

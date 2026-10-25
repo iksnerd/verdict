@@ -3,9 +3,9 @@ from __future__ import annotations
 
 import pytest
 
-from verdict.backend import UniformBackend
+from verdict.backends.base import UniformBackend
 from verdict.schema import DecideRequest
-from verdict.switch import Branch, Switch, choice_switch
+from verdict.judge.switch import Branch, Switch, choice_switch
 
 CASES = {"a": "the first thing", "b": "the second thing"}
 

@@ -18,7 +18,7 @@ import math
 from typing import Any, Callable, Sequence
 
 from . import calibrate
-from .errors import QuestionError
+from ..errors import QuestionError
 
 Ask = Callable[[Any, dict], dict]
 

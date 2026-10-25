@@ -10,7 +10,7 @@ import httpx
 from fastapi.testclient import TestClient
 
 from verdict.api import create_app
-from verdict.backend_systemone import SystemOneBackend
+from verdict.backends.systemone import SystemOneBackend
 from verdict.schema import DecideRequest
 
 Q = {

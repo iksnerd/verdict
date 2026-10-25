@@ -83,7 +83,7 @@ def test_the_python_example_runs_against_any_client(capsys):
     import importlib.util
 
     from verdict import Verdict
-    from verdict.backend import UniformBackend
+    from verdict.backends.base import UniformBackend
 
     spec = importlib.util.spec_from_file_location("demo", EXAMPLES / "python-api" / "demo.py")
     demo = importlib.util.module_from_spec(spec)

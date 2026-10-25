@@ -26,8 +26,8 @@ from pydantic import ValidationError
 
 from . import client as _http
 from . import library
-from .backend import UnknownModel
-from .capabilities import Capabilities
+from .backends.base import UnknownModel
+from .backends.capabilities import Capabilities
 from .errors import QuestionError
 from .systemone import UpstreamError
 from .schema import (
@@ -175,7 +175,7 @@ class Verdict:
         """Classify `state` into one leaf of a two-level `tree`: the way past laya's 20-option limit
         (`verdict classify`, FINDINGS §50). Returns a `hierarchy.Classification`: `.label`, `.path`,
         `.probability`, `.candidates`, `.passes`. A level past 20 raises `VerdictError` (`refused`)."""
-        from . import hierarchy
+        from .judge import hierarchy
 
         def ask(st: Any, questions: dict) -> dict:
             answers = self.decide(st, questions, model=model).answers

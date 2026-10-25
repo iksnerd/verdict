@@ -9,7 +9,7 @@ import pytest
 import uvicorn
 from fastapi.testclient import TestClient
 
-import verdict.backend_mlx as backend_mlx
+import verdict.backends.mlx as backend_mlx
 from verdict import cli, config
 from verdict.cli import support
 

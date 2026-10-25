@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import pytest
 
-from verdict import cascade
+from verdict.judge import cascade
 from verdict.errors import QuestionError
 
 BANK = {
@@ -143,7 +143,7 @@ def test_check_asks_the_secondary_about_every_labelled_row_once():
 
 
 def test_a_share_sends_exactly_that_many_even_when_confidences_tie():
-    from verdict import cascade as c
+    from verdict.judge import cascade as c
     assert c.select([0.5, 0.5, 0.5, 0.9], share=0.5) == {0, 1}
     assert c.select([0.9, 0.9, 0.9, 0.9], share=0.25) == {0}
     assert c.select([0.3, 0.9], share=0.0) == set()

@@ -12,7 +12,7 @@ import pytest
 
 from verdict import cli, config
 from verdict.cli import inference, support
-from verdict.engine import DEFAULT_MODEL
+from verdict.backends.engine import DEFAULT_MODEL
 
 
 def test_an_existing_checkpoint_is_used_as_is(tmp_path):
@@ -69,7 +69,7 @@ def test_serve_falls_back_instead_of_failing(monkeypatch, capsys, tmp_path):
 
     import uvicorn
 
-    import verdict.backend_mlx as backend_mlx
+    import verdict.backends.mlx as backend_mlx
     monkeypatch.setattr(backend_mlx, "MlxBackend", FakeBackend)
     monkeypatch.setattr(uvicorn, "run", lambda *a, **k: None)
     assert cli.main(["serve", "--port", "0"]) == 0

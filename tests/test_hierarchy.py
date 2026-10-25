@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from verdict import hierarchy
+from verdict.judge import hierarchy
 from verdict.errors import QuestionError
 
 TREE = {

@@ -9,8 +9,8 @@ from typing import Literal
 
 from pydantic import BaseModel
 
-from .errors import QuestionError
-from .schema import ChoiceQuestion, DecideRequest, ScoreQuestion
+from ..errors import QuestionError
+from ..schema import ChoiceQuestion, DecideRequest, ScoreQuestion
 
 
 class Capabilities(BaseModel):

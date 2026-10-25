@@ -7,7 +7,7 @@ import json
 import sys
 
 from . import inference, support
-from ..engine import maybe_truncated
+from ..backends.engine import maybe_truncated
 from ..errors import QuestionError
 
 #: What this project has measured about a preset, shown where the preset is listed.

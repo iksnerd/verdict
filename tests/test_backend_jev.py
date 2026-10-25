@@ -16,7 +16,7 @@ typesafe_sdk = pytest.importorskip("typesafe_sdk")
 from fastapi.testclient import TestClient  # noqa: E402
 
 from verdict.api import create_app  # noqa: E402
-from verdict.backend_jev import JevBackend  # noqa: E402
+from verdict.backends.jev import JevBackend  # noqa: E402
 from verdict.errors import QuestionError  # noqa: E402
 from verdict.schema import DecideRequest  # noqa: E402
 from verdict.systemone import UpstreamError  # noqa: E402
@@ -164,13 +164,13 @@ def test_the_name_says_it_is_hosted_jev():
 # bench and examples reach hosted Jev through the SDK too (bench.systemone_asker).
 
 def hosted_asker(handler, **kw):
-    from verdict import bench
+    from verdict.evaluation import bench
     return bench.systemone_asker("https://api.typesafe.ai", "jev-latest", "sk-test", backoff=0,
                                  transport=httpx2.MockTransport(handler), **kw)
 
 
 def test_the_bench_asker_for_hosted_jev_is_the_sdk_backend():
-    from verdict.backend_jev import JevAsker
+    from verdict.backends.jev import JevAsker
     asker = hosted_asker(ok({"spam": ANSWERS["spam"]}))
     assert isinstance(asker, JevAsker)
     raw = asker({"text": "win a prize"}, {"spam": Q["spam"]})
@@ -191,7 +191,7 @@ def test_the_bench_asker_retries_overload_through_the_sdk_then_names_the_status(
 
 
 def test_another_server_keeps_the_dependency_free_client():
-    from verdict import bench
+    from verdict.evaluation import bench
     from verdict.systemone import SystemOneClient
     asker = bench.systemone_asker("https://kev.example", "kev-latest", "k")
     assert isinstance(asker, SystemOneClient)
@@ -200,9 +200,9 @@ def test_another_server_keeps_the_dependency_free_client():
 
 def test_without_the_sdk_hosted_jev_falls_back_to_the_plain_client(monkeypatch):
     import sys
-    from verdict import bench
+    from verdict.evaluation import bench
     from verdict.systemone import SystemOneClient
-    monkeypatch.setitem(sys.modules, "verdict.backend_jev", None)  # import raises ImportError
+    monkeypatch.setitem(sys.modules, "verdict.backends.jev", None)  # import raises ImportError
     asker = bench.systemone_asker("https://api.typesafe.ai", "jev-latest", "k")
     assert isinstance(asker, SystemOneClient)
     asker.close()

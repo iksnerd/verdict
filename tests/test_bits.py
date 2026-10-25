@@ -10,7 +10,8 @@ import types
 
 import pytest
 
-from verdict import cli, config, engine
+from verdict import cli, config
+from verdict.backends import engine
 from verdict.cli import inference, support
 from conftest import typed
 
@@ -112,7 +113,7 @@ def test_quantize_is_what_section_36_measured():
 def test_serve_passes_bits_to_the_backend(monkeypatch):
     import uvicorn
 
-    import verdict.backend_mlx as backend_mlx
+    import verdict.backends.mlx as backend_mlx
 
     s = config.load()
     s.bits = 8

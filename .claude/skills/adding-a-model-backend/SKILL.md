@@ -12,7 +12,7 @@ description: >-
 
 # Adding a model backend
 
-A `Backend` is anything with `name` and `decide()` (`src/verdict/backend.py`). Two ship today:
+A `Backend` is anything with `name` and `decide()` (`src/verdict/backends/base.py`). Two ship today:
 `UniformBackend` (no model, for tests) and `MlxBackend` (laya). This skill is for adding a third
 kind — a different architecture entirely, not a different laya checkpoint. `[model.extra]` in
 `verdict.toml` already covers "another laya checkpoint"; reach for this skill only when the model
@@ -74,7 +74,7 @@ Check whether the model's own server already speaks TypeSafe's `/v1/systemone` c
 do, because that is the point of the exercise for their authors too.
 
 - **If it already speaks `/v1/systemone`**: no translation layer is needed. Run its own server
-  locally and point `SystemOneBackend` (`src/verdict/backend_systemone.py`) at it —
+  locally and point `SystemOneBackend` (`src/verdict/backends/systemone.py`) at it —
   `SystemOneBackend(base_url, model=..., key=...)` reuses `bench.py`'s already-tested
   `systemone_asker` for the HTTP (auth, retries) and only adds typed-answer construction. Check
   whether its `noul` answer omits `confidence` the way Jev's real contract does (ours requires
@@ -84,7 +84,7 @@ do, because that is the point of the exercise for their authors too.
   prefers `backend.models()` over the laya-specific default cards when the backend has one).
 - **If it does not** (a raw scoring library, a different wire shape, something that returns
   logits instead of a typed JSON answer): that is a real, separate integration project — writing
-  a new `Backend` with its own state/questions translation, the way `backend_mlx.py` translates
+  a new `Backend` with its own state/questions translation, the way `backends/mlx.py` translates
   for laya. Scope and confirm that separately; it is not a smaller version of the same task.
 
 ## 4. Test before you run anything real

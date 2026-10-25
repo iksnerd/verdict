@@ -12,7 +12,7 @@ from urllib.parse import urlsplit
 import httpx
 from pydantic import ValidationError
 
-from .capabilities import Capabilities, jev_capabilities
+from .backends.capabilities import Capabilities, jev_capabilities
 from .schema import DecideRequest, DecideResponse
 
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from verdict.metrics import auc, bootstrap_ci, distance, macro_f1, mean_ci
+from verdict.evaluation.metrics import auc, bootstrap_ci, distance, macro_f1, mean_ci
 
 
 def test_auc_perfect_and_inverted_and_random():

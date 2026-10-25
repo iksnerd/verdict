@@ -23,8 +23,8 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
-from .answers import field, is_flat
-from .engine import PROMPT_TOKEN_BUDGET, load
+from ..answers import field, is_flat
+from ..backends.engine import PROMPT_TOKEN_BUDGET, load
 from .switch import Branch, Switch
 
 SMALL = "small"
@@ -50,7 +50,7 @@ ROUTER_BANK: dict[str, dict[str, Any]] = {
 }
 
 #: Fitted on the training split of `evals/router_prompts.jsonl` and reported on a held-out split it
-#: never saw. `python -m verdict.router_eval --refit` reproduces both numbers and refits these. The fit minimises
+#: never saw. `python -m verdict.evaluation.router_eval --refit` reproduces both numbers and refits these. The fit minimises
 #: expected *cost*, not accuracy: a hard prompt sent to the small model counts 3x an easy one sent
 #: to the big model. Fitting on accuracy instead scored 4 points higher and was a worse router
 #: (FINDINGS §15).

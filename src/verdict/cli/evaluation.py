@@ -16,7 +16,7 @@ def _bench_cmd(args: argparse.Namespace) -> int:
     """Score the pinned public suites, or with --verify compare a scorecard with the previous one."""
     from importlib.metadata import version
 
-    from .. import bench
+    from ..evaluation import bench
 
     # A suite is scored exactly as pinned: `sst2-yesno` exists to track the plain yes/no that the
     # everyday rewrite works around, so rewriting it here would hide the thing it measures.
@@ -156,7 +156,7 @@ def _timing(spent: list[float], tokens: dict) -> dict:
 
 def _rank_cmd(args: argparse.Namespace) -> int:
     """Rank a `decide --jsonl` run by a weighted sum of its named, rescaled answers."""
-    from .. import rank
+    from ..judge import rank
 
     if args.k < 0:
         return support._fail(f"-k {args.k}: give a count, or 0 for all")
@@ -178,7 +178,8 @@ def _rank_cmd(args: argparse.Namespace) -> int:
 
 def _calibrate_cmd(args: argparse.Namespace) -> int:
     """Ask a bank of every labelled state, fit a cut or temperature per question, report held-out."""
-    from .. import calibrate, inputs
+    from ..judge import calibrate
+    from .. import inputs
     from ..schema import laya_questions
 
     try:

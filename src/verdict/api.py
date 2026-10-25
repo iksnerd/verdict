@@ -7,10 +7,10 @@ from fastapi.responses import JSONResponse
 
 from pydantic import BaseModel, field_validator
 
-from .backend import Backend, UniformBackend, UnknownModel
-from .capabilities import Capabilities
+from .backends.base import Backend, UniformBackend, UnknownModel
+from .backends.capabilities import Capabilities
 from .errors import QuestionError
-from .router import BIG_SMALL
+from .judge.router import BIG_SMALL
 from .schema import (
     DecideRequest,
     DecideResponse,

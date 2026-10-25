@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Any, Iterable, Sequence
 
 from .metrics import auc, bootstrap_ci
-from .router import BIG, ROUTER_BANK, SMALL, T_DIFFICULTY, T_SENSITIVE, route
+from ..judge.router import BIG, ROUTER_BANK, SMALL, T_DIFFICULTY, T_SENSITIVE, route
 
 EVALS = Path("evals/router_prompts.jsonl")
 #: Model outputs, keyed by model then prompt id. Derived and gitignored: the eval file is the
@@ -56,7 +56,7 @@ def measure(rows: Sequence[dict], model: str = DEFAULT_MODEL, cache: Path = CACH
     if todo:
         import time
 
-        from .engine import load
+        from ..backends.engine import load
 
         eng = load(model)
         for r in todo:
@@ -147,12 +147,12 @@ def evaluate(rows: Sequence[dict], probs: dict, td: float = T_DIFFICULTY, ts: fl
 
 
 def main(argv: Sequence[str] | None = None) -> None:
-    """`python -m verdict.router_eval [--refit] [--json FILE]`: score the switch on the held-out
+    """`python -m verdict.evaluation.router_eval [--refit] [--json FILE]`: score the switch on the held-out
     split, and with --refit print thresholds to paste into router.py."""
     import argparse
     import statistics as st
 
-    ap = argparse.ArgumentParser(prog="python -m verdict.router_eval")
+    ap = argparse.ArgumentParser(prog="python -m verdict.evaluation.router_eval")
     ap.add_argument("--model", default=DEFAULT_MODEL)
     ap.add_argument("--refit", action="store_true")
     ap.add_argument("--json", dest="json_out")

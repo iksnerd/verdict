@@ -10,9 +10,9 @@ from fastapi.testclient import TestClient
 
 from verdict import cli, client
 from verdict.api import create_app
-from verdict.backend_mlx import MlxBackend
+from verdict.backends.mlx import MlxBackend
 from verdict.cli import inference
-from verdict.engine import Engine
+from verdict.backends.engine import Engine
 
 from test_clip_state import Agent, WordTokenizer
 

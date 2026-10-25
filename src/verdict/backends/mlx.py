@@ -17,9 +17,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from .backend import UnknownModel
+from .base import UnknownModel
 from .engine import DEFAULT_MODEL, Engine, load
-from .schema import (ChoiceAnswer, DecideRequest, DecideResponse, NoulAnswer, ScoreAnswer, Usage,
+from ..schema import (ChoiceAnswer, DecideRequest, DecideResponse, NoulAnswer, ScoreAnswer, Usage,
                      laya_questions)
 
 
@@ -58,7 +58,7 @@ class MlxBackend:
     def capabilities(self, model: str | None = None):
         from .capabilities import Capabilities
         from .engine import OPTION_TOKEN_CAP
-        from .library import MAX_OPTIONS
+        from ..library import MAX_OPTIONS
 
         engine = self.engine_for(model)  # constructs a lazy Engine; does not load weights
         cfg = getattr(engine._agent, "cfg", {})

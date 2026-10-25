@@ -9,7 +9,7 @@ from io import BytesIO
 import pytest
 
 from verdict import client
-from verdict.router import BIG, SMALL
+from verdict.judge.router import BIG, SMALL
 
 PAYLOAD = {
     "model": "laya-mlx:models/verdict-v1-mlx",
