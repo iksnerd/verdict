@@ -20,7 +20,7 @@ from verdict.judge.router import (
 from verdict.schema import DecideRequest
 from fakes import REPO_ROOT
 
-EVALS = REPO_ROOT / "evals" / "router_prompts.jsonl"
+EVALS = REPO_ROOT / "bench" / "router_prompts.jsonl"
 
 
 def answers(difficulty=0.5, sensitive=0.1):

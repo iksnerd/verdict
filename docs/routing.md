@@ -38,7 +38,7 @@ scores     difficulty=1.46  sensitive=0.25
 
 ## How well it routes
 
-On 72 hand-written prompts in `evals/router_prompts.jsonl`, fitted on 48 and reported on the 24 the
+On 72 hand-written prompts in `bench/router_prompts.jsonl`, fitted on 48 and reported on the 24 the
 fit never saw:
 
 | | train | held-out |

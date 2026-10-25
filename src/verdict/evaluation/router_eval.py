@@ -1,4 +1,4 @@
-"""Scoring the big-vs-small switch against `evals/router_prompts.jsonl`.
+"""Scoring the big-vs-small switch against `bench/router_prompts.jsonl`.
 
 This lives in the package so every caller (the refit command below, tests, any scorecard) runs the same
 code: a score script imports the project's metric and never reimplements it, so a scorecard and
@@ -22,7 +22,7 @@ from typing import Any, Iterable, Sequence
 from .metrics import auc, bootstrap_ci
 from ..judge.router import BIG, ROUTER_BANK, SMALL, T_DIFFICULTY, T_SENSITIVE, route
 
-EVALS = Path("evals/router_prompts.jsonl")
+EVALS = Path("bench/router_prompts.jsonl")
 #: Model outputs, keyed by model then prompt id. Derived and gitignored: the eval file is the
 #: input, this is a replay cache so a threshold sweep or a scorecard rerun costs nothing and
 #: returns the same numbers. Delete it to re-measure.

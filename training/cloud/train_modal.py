@@ -4,9 +4,9 @@ Patterns carried over from an earlier Modal project: pip layers before `add_loca
 stale), data and checkpoints on a persistent Volume, a hard function timeout as a cost ceiling,
 and `modal app stop <id> --yes` for a run that crash-loops. A run that fails does not stop itself.
 
-    uv run --extra cloud modal run cloud/train_modal.py::probe_main           # the probe (~minutes, pennies)
-    uv run --extra cloud --extra laya modal run cloud/train_modal.py::upload --run v1   # build items, put on the volume
-    uv run --extra cloud modal run cloud/train_modal.py::train --run v1       # the real run (~hours, dollars)
+    uv run --extra cloud modal run training/cloud/train_modal.py::probe_main           # the probe (~minutes, pennies)
+    uv run --extra cloud --extra laya modal run training/cloud/train_modal.py::upload --run v1   # build items, put on the volume
+    uv run --extra cloud modal run training/cloud/train_modal.py::train --run v1       # the real run (~hours, dollars)
 
 `probe` times 30 micro-batches per precision arm and reports ms/step and peak memory, so the real
 run is budgeted from a measurement instead of a guess (an earlier project measured TF32 up and
@@ -25,7 +25,7 @@ image = (
     modal.Image.debian_slim(python_version="3.11")
     .pip_install("torch==2.12.1", "transformers==5.17.0", "laya==0.3.4", "safetensors", "huggingface_hub", "numpy")
     .env({"HF_HOME": "/data/hf"})
-    .add_local_file("cloud/laya_train.py", "/root/laya_train.py")
+    .add_local_file("training/cloud/laya_train.py", "/root/laya_train.py")
 )
 
 BASE = "convaiinnovations/laya"

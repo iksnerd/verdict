@@ -25,8 +25,8 @@ gen ──> label ──> split ──> export ──> train ──> convert ─
 | convert | `laya-mlx convert`, then a torch-vs-MLX agreement check on the test split | laya-mlx | built; parity 160/160 (§13) |
 | eval | student accuracy, macro-F1, ECE against the teacher ceiling | `verdict bench`, `verdict calibrate` | built except ECE |
 
-Run: `uv run python -m verdict.pipeline --config configs/v1.json --run-dir runs/v1 --stage all`
-(`configs/dev.json` is the smaller, cheaper one).
+Run: `uv run python -m verdict.pipeline --config training/configs/v1.json --run-dir runs/v1 --stage all`
+(`training/configs/dev.json` is the smaller, cheaper one).
 
 `uv run python -m verdict.pipeline.compile runs/v1 runs/issues_pilot ... --out data/compiled/synthetic.jsonl`
 gathers runs into one file: a row per state per run, with its split and every teacher's raw
