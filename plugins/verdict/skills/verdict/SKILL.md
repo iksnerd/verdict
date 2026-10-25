@@ -21,7 +21,7 @@ right, so don't gate on a raw score.
 
 It is a CLI on Apple Silicon (`uv tool install --python 3.11 'verdict[mlx,laya] @
 git+https://github.com/iksnerd/verdict.git@vX.Y.Z'`). `verdict --help` and `verdict COMMAND
---help` have the full reference; the repo's `docs/guide.md` is the human guide and `examples/`
+--help` have the full reference; the repo's `docs/usage/guide.md` is the human guide and `examples/`
 has real runs.
 - verdict runs **base Laya** by default. A plain yes/no is at chance on it (SST-2 0.50), but
   verdict asks every new yes/no as a no/yes choice, where base Laya is within noise of the
@@ -225,4 +225,4 @@ The repo's `examples/secret-commands/` is this procedure with real output.
 If you measured something (a question that worked or failed on a real task, a new failure mode),
 it belongs where the next agent will find it: a row in `references/questions.md` (task, labels
 or "read", question, result), an issue on the verdict repo for a tool problem, or a
-`docs/FINDINGS.md` section for a result worth keeping, with its numbers.
+`docs/research/FINDINGS.md` section for a result worth keeping, with its numbers.

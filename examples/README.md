@@ -30,7 +30,7 @@ knowing what it gets wrong is the point.
 answers without needing per-example commands; `--systemone URL` points it at a different backend
 (another `verdict serve`, a local [Kev](https://github.com/jaredpalmer/kev) server, a real hosted
 Jev) instead of the served checkpoint, for checking a new one against the numbers below rather
-than one-off questions (`docs/api.md`).
+than one-off questions (`docs/usage/api.md`).
 
 | example | question types | what it shows |
 |---|---|---|
@@ -161,7 +161,7 @@ One bank, a 15-way choice standing in for the last step of an emoji-search pipel
 first pass (an embedding model, a keyword filter) has already narrowed a large catalog down to a
 short, bounded candidate list, and this picks the best one from it. The shape, not the catalog, is
 the point: a Choice question over a bounded set is what verdict is built for, unlike ranking all
-of a large catalog directly (`docs/api.md` — laya degrades past about 20 options).
+of a large catalog directly (`docs/usage/api.md` — laya degrades past about 20 options).
 
 ```
 0.98  lgtm                         -> white_check_mark
@@ -470,7 +470,7 @@ backend  laya, 3 model name(s) offered
 The `refused` line is the library declining a question about a consequence ("how dangerous is
 this message") because those score at chance (FINDINGS §25); pass `allow_unmeasured=True` to the
 client to ask anyway. Use `Verdict(backend=...)` instead of `Verdict()` to answer in the same
-process, or `Verdict(url=...)` for another server. See `docs/api.md`.
+process, or `Verdict(url=...)` for another server. See `docs/usage/api.md`.
 
 ## turn-intent/
 
@@ -503,4 +503,4 @@ When comparing Laya and Jev, pin the upstream model with `--systemone-model jev-
 `--systemone` sends the original banks and states without Laya's CLI rewriting or clipping, so
 record those preprocessing differences alongside accuracy and latency. Confidence thresholds
 are backend-specific; Jev Noul responses need not contain confidence. See the
-[SDK capability and migration guide](../docs/api.md#discovering-backend-differences).
+[SDK capability and migration guide](../docs/usage/api.md#discovering-backend-differences).

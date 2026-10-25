@@ -10,8 +10,8 @@ tickets, messages, agent turns) and a person or an LLM should read only what it 
 
 Laya runs on your machine and sends nothing out. When a task needs a stronger model, TypeSafe's Jev
 can answer instead (`verdict serve --systemone`), or only for the answers Laya is least sure of
-(`verdict cascade`); both say what they send. [What each is good at](docs/models.md), and
-[where Laya is rough](docs/rough-edges.md), are measured, not asserted.
+(`verdict cascade`); both say what they send. [What each is good at](docs/usage/models.md), and
+[where Laya is rough](docs/usage/rough-edges.md), are measured, not asserted.
 
 ## Quick start
 
@@ -37,7 +37,7 @@ Apache-2.0), downloads itself on first use. `verdict update` moves to the newest
 A yes/no comes back as P(yes), and 0.5 is not the line between yes and no: Laya's scores are shifted,
 and a cut fitted on your own labelled examples (`verdict calibrate labelled.jsonl -q bank.json --out
 fit.json`, then `--cut fit.json`) took accuracy from 0.81 to 0.86 on five public suites
-([FINDINGS §55](docs/FINDINGS.md)).
+([FINDINGS §55](docs/research/FINDINGS.md)).
 
 The same thing from Python, with typed questions and a result grouped by type:
 
@@ -67,15 +67,15 @@ It fits a task with many items, short texts, a question about what the text show
 few named options, and a need for a number to rank or cut on, or for data to stay on the machine.
 On public labelled sets the default model ranks sentiment at 0.97, spam at 0.98 and prompt
 injection at 0.93 AUC (the 0.7.0 release scorecard, 200 items each; method in
-[FINDINGS §40](docs/FINDINGS.md)).
+[FINDINGS §40](docs/research/FINDINGS.md)).
 
 It is the wrong tool for categories that need world knowledge (seven commit types: 0.44 accuracy,
 where an LLM does better) or a maintainer's judgment (bug report or support question: 0.59, and two
-rounds of fine-tuning did not fix it; [FINDINGS §41, §45](docs/FINDINGS.md)). It is also wrong for
+rounds of fine-tuning did not fix it; [FINDINGS §41, §45](docs/research/FINDINGS.md)). It is also wrong for
 more than 20 options in one flat choice (a tree takes more: `verdict classify`), for long
 documents (it reads the first 128 tokens), for comparing numbers
 (which of four decks has the highest mean: chance, where "is this one negative" is perfect;
-[§46](docs/FINDINGS.md)), and for questions about consequences or difficulty, which score at
+[§46](docs/research/FINDINGS.md)), and for questions about consequences or difficulty, which score at
 chance. verdict refuses those questions and more than
 20 options rather than answer them badly, and warns when a text runs past what it reads.
 
@@ -99,15 +99,15 @@ chance. verdict refuses those questions and more than
 - **Search by named answers:** `rank` orders a `decide --jsonl` run by a weighted sum of its
   answers and shows what each one contributed.
 - **Other languages:** `--lang multi` switches to Laya's multilingual checkpoint.
-- **An HTTP API** on localhost ([docs/api.md](docs/api.md)) that answers as the CLI does, with
+- **An HTTP API** on localhost ([docs/usage/api.md](docs/usage/api.md)) that answers as the CLI does, with
   the same refusals and the same numbers (a refusal is a 422 carrying `error.code` `refused`),
   including TypeSafe Jev's `/v1/systemone` protocol, so Jev's SDKs work against it.
 - **Backend capabilities:** `GET /v1/capabilities` reports Laya/Jev limits and confidence
-  semantics separately from the shared protocol ([SDK guide](docs/api.md#discovering-backend-differences)).
+  semantics separately from the shared protocol ([SDK guide](docs/usage/api.md#discovering-backend-differences)).
 - **A Python API shaped like TypeSafe's SDK:** `from verdict import Verdict, Noul, Choice, Score`.
   Typed questions, a result with `.nouls`, `.choices` and `.scores`, a sync `with` client and one
   error type with a `.status`; the same refusals as the CLI and the HTTP API
-  ([docs/api.md](docs/api.md#the-python-client-verdict)).
+  ([docs/usage/api.md](docs/usage/api.md#the-python-client-verdict)).
 - **Swap the backend:** `[model.extra]` names further local laya checkpoints;
   `verdict serve --systemone URL` (or `[systemone]` in the config) answers with any other
   `/v1/systemone` server instead, TypeSafe's Jev included (key in `$TYPESAFE_API_KEY`; every state
@@ -120,15 +120,15 @@ chance. verdict refuses those questions and more than
   sending 30% matched Jev alone (0.845 against Laya's 0.805); `--check` tells you per task whether
   it helps, and says so when it would not (AG News). Fitting the yes/no cut (`--fit`, `--calibration`)
   lifts Laya alone from 0.81 to 0.86 on five bench suites and makes the cascade pick better.
-  Every escalated text leaves the machine ([FINDINGS §52, §54, §55](docs/FINDINGS.md)).
+  Every escalated text leaves the machine ([FINDINGS §52, §54, §55](docs/research/FINDINGS.md)).
 - **More than 20 options:** `verdict classify TEXT --tree FILE` walks a two-level tree. On Banking77
-  (77 intents) it took base Laya from 0.38 flat to 0.55 ([FINDINGS §50](docs/FINDINGS.md)); the tree
+  (77 intents) it took base Laya from 0.38 flat to 0.55 ([FINDINGS §50](docs/research/FINDINGS.md)); the tree
   is `examples/banking-tree/tree.json`. For topical labels an embedding model does better still
   (0.89 on the same items, FINDINGS §53); Laya is a judge of typed facts, not a retriever.
 - **The docs ship with the tool:** `verdict docs`, `verdict docs guide`, `verdict docs findings N`,
-  and three short pages in the shape of TypeSafe's: [patterns](docs/patterns.md) (fan-out,
-  confidence routing, composite scoring, intent routing), [rough edges](docs/rough-edges.md) (where
-  Laya fails, with the measurement) and [models](docs/models.md) (which checkpoint, or Jev, for what).
+  and three short pages in the shape of TypeSafe's: [patterns](docs/usage/patterns.md) (fan-out,
+  confidence routing, composite scoring, intent routing), [rough edges](docs/usage/rough-edges.md) (where
+  Laya fails, with the measurement) and [models](docs/usage/models.md) (which checkpoint, or Jev, for what).
 
 ## How it works
 
@@ -155,19 +155,27 @@ claude plugin install verdict@verdict
 
 ## Documentation
 
-- [docs/guide.md](docs/guide.md): writing questions, bulk runs, calibration, recipes,
+Using verdict (`docs/usage/`):
+
+- [guide.md](docs/usage/guide.md): writing questions, bulk runs, calibration, recipes,
   troubleshooting, and the command reference.
-- [docs/patterns.md](docs/patterns.md), [docs/rough-edges.md](docs/rough-edges.md) and
-  [docs/models.md](docs/models.md): what to build with typed answers, where Laya fails, and which
+- [api.md](docs/usage/api.md): the HTTP API, the Python client and the backends.
+- [patterns.md](docs/usage/patterns.md), [rough-edges.md](docs/usage/rough-edges.md) and
+  [models.md](docs/usage/models.md): what to build with typed answers, where Laya fails, and which
   model for what. `verdict docs patterns | rough-edges | models` prints them.
 - [examples/](examples/README.md): fifteen runnable banks, a tree for `classify` and a Python
   script, with invented inputs and their real measured output, including what each one gets wrong.
-- [docs/api.md](docs/api.md): the HTTP API, the Python client and the backends.
-- [docs/FINDINGS.md](docs/FINDINGS.md): every measurement behind these docs, with sample sizes
-  and intervals.
-- [docs/pipeline.md](docs/pipeline.md): building a checkpoint.
-- [docs/routing.md](docs/routing.md): the big-or-small model switch, kept as a worked example of
+
+How it is built (`docs/design/`):
+
+- [pipeline.md](docs/design/pipeline.md): building a checkpoint.
+- [routing.md](docs/design/routing.md): the big-or-small model switch, kept as a worked example of
   why a routing question can sit at chance.
+
+Evidence:
+
+- [FINDINGS.md](docs/research/FINDINGS.md): every measurement behind these docs, with sample sizes
+  and intervals.
 
 ## Developing
 

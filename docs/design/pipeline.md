@@ -1,6 +1,6 @@
 # Pipeline
 
-← [Back to the README](../README.md)
+← [Back to the README](../../README.md)
 
 Goal: a small, fast, calibrated decision model for one domain at a time, trained on synthetic
 data that we generate and label ourselves. Today's domain is the engineering-room ledger

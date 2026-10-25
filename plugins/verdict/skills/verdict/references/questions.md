@@ -9,7 +9,7 @@ them. This file keeps everything, failures included.
 
 Metric key: AUC for yes/no against real labels; held-out accuracy for choice (with chance);
 "read" means hand-checked by the reviewing agent, with no labels. The FINDINGS section is in
-the verdict repo's `docs/FINDINGS.md`.
+the verdict repo's `docs/research/FINDINGS.md`.
 
 ## Works
 

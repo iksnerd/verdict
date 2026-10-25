@@ -72,7 +72,7 @@ def test_the_documented_install_line_names_the_current_version():
 
     root = EXAMPLES.parent
     version = tomllib.loads((root / "pyproject.toml").read_text())["project"]["version"]
-    for doc in ("README.md", "docs/guide.md"):
+    for doc in ("README.md", "docs/usage/guide.md"):
         text = (root / doc).read_text()
         pins = set(__import__("re").findall(r"verdict\.git@v(\d+\.\d+\.\d+)", text))
         assert pins == {version}, f"{doc} installs {sorted(pins)}, pyproject says {version}"

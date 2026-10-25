@@ -1,7 +1,7 @@
 """verdict is not on PyPI. The name `verdict` there belongs to an unrelated project (Haize Labs' LLM
 evaluation library), so `pip install verdict` or `uv tool install --reinstall 'verdict[jev]'` installs
 or replaces it with the wrong software. Every install hint must name the GitHub source. 0.7.0 shipped
-such hints in four places (README, docs/api.md, the JevBackend import error, the serve error)."""
+such hints in four places (README, docs/usage/api.md, the JevBackend import error, the serve error)."""
 from __future__ import annotations
 
 import re

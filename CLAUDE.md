@@ -1,7 +1,7 @@
 # Project: verdict
 
 A typed decision API and the pipeline that trains its model. See `README.md` for what is built
-and `docs/FINDINGS.md` for what has actually been measured.
+and `docs/research/FINDINGS.md` for what has actually been measured.
 
 Public on GitHub as `iksnerd/verdict`, Apache-2.0. The fine-tuned weights are not: they stay in the private Hugging Face
 repo `iksnerd/verdict-v1-mlx` (trained on Gemini labels). Never attach them to a GitHub release.
@@ -43,7 +43,7 @@ tools the agent called after each turn.
 
 ## What has been ruled out
 
-Do not re-derive these. Each is measured, in `docs/FINDINGS.md`.
+Do not re-derive these. Each is measured, in `docs/research/FINDINGS.md`.
 
 - **Swapping to another Laya checkpoint** (§23). `laya-typed-decisions` and `laya-multilingual`
   both score at or below our own fine-tune on the real ledger task, and both have 1024-token
@@ -97,8 +97,8 @@ Do not re-derive these. Each is measured, in `docs/FINDINGS.md`.
   Scorecards come from the release machine's configured model, which is base Laya since 0.7.0
   (v0.1.0 to v0.6.3 measured the fine-tune; the gate compares a scorecard only with an earlier one
   of the same `model`, so the first base scorecard is a baseline, not a regression).
-- Docs: README (landing), `docs/guide.md` (usage), `docs/api.md`, `docs/routing.md`,
-  `docs/pipeline.md`, `docs/patterns.md`, `docs/rough-edges.md`, `docs/models.md` (the last three
+- Docs: README (landing), `docs/usage/guide.md` (usage), `docs/usage/api.md`, `docs/design/routing.md`,
+  `docs/design/pipeline.md`, `docs/usage/patterns.md`, `docs/usage/rough-edges.md`, `docs/usage/models.md` (the last three
   follow TypeSafe's docs; `verdict docs` serves them), and
   `examples/` (synthetic inputs, real outputs, checked by `tests/project/test_examples.py`). When a command
   or measured number changes, update the guide and the examples README in the same change.

@@ -1,4 +1,4 @@
-"""Documented import path, kept: the module is `verdict.backends.jev`."""
+"""Old import path, kept so existing code runs: the module is `verdict.backends.jev`."""
 import importlib
 import sys
 

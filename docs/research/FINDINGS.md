@@ -2,7 +2,7 @@
 
 The lab notebook behind verdict: dated, append-only experiments. It is here because every number
 the docs and the CLI cite comes from a section in it, and each section says its n. For how to use
-verdict, read the [guide](guide.md); for what is true now, read the latest sections, which
+verdict, read the [guide](../usage/guide.md); for what is true now, read the latest sections, which
 override earlier ones. The research scripts most sections name are not published; the
 public-dataset results can be rerun with `verdict bench`.
 
@@ -572,7 +572,7 @@ deferred to `--exec`, the CLI's fixed cost is 21.8 ms to 18.7 ms.
 header machinery. Not fixed, deliberately: the alternative is owning a hand-rolled HTTP client, with
 its status codes and chunked encoding, to save 10 ms. `httpx` is worse here at 48 ms to import.
 
-**Three docs were stale.** `docs/pipeline.md` told you to run the pipeline with a `pipeline.json`
+**Three docs were stale.** `docs/design/pipeline.md` told you to run the pipeline with a `pipeline.json`
 that does not exist (the configs are `configs/dev.json` and `configs/v1.json`). `CLAUDE.md` still
 recommended `uvicorn verdict.api:app`, which serves the `uniform` backend and is worse than no
 server. `skill/verdict/SKILL.md`, which is what a model reads, predated both `verdict serve` and the

@@ -2,7 +2,7 @@
 name: adding-a-model-backend
 description: >-
   Evaluate and wire in a new decision model as a verdict Backend — a genuinely different
-  architecture, not another laya checkpoint (for that, see [model.extra] in docs/api.md). Use
+  architecture, not another laya checkpoint (for that, see [model.extra] in docs/usage/api.md). Use
   when asked to add, try, compare, or benchmark an alternative model against verdict's own laya
   backend, especially one found via a blog post, a "Jev alternatives" list, or a link someone
   pasted in. Covers verifying the model is real before spending effort on it, sizing the resource
@@ -41,7 +41,7 @@ Do not trust a fetched summary. Check primary sources directly:
   citation or reference to where the idea came from, honest caveats about what got *worse* in a
   new version. Extremely detailed, self-critical model cards (confidence intervals, "this number
   is unexplained, not a skill") are a good sign, not a bad one — compare the tone to this repo's
-  own `docs/FINDINGS.md`.
+  own `docs/research/FINDINGS.md`.
 
 If it doesn't check out, say so and stop. Don't build anything on an unverified claim.
 
@@ -75,7 +75,7 @@ do, because that is the point of the exercise for their authors too.
 
 - **If it already speaks `/v1/systemone`**: no translation layer is needed. Run its own server
   locally and point `SystemOneBackend` (`src/verdict/backends/systemone.py`) at it —
-  `SystemOneBackend(base_url, model=..., key=...)` reuses `bench.py`'s already-tested
+  `SystemOneBackend(base_url, model=..., key=...)` reuses `evaluation/bench.py`'s already-tested
   `systemone_asker` for the HTTP (auth, retries) and only adds typed-answer construction. Check
   whether its `noul` answer omits `confidence` the way Jev's real contract does (ours requires
   one; `_answer()` synthesizes `abs(noul - 0.5) * 2` when it's missing — Kev's own documented
@@ -145,9 +145,9 @@ close-enough approximation, and worth saying so.
 
 ## 6. Update docs in the same change
 
-- `docs/api.md`: what the backend is, what it needs, what carries over and what doesn't (see the
+- `docs/usage/api.md`: what the backend is, what it needs, what carries over and what doesn't (see the
   "Swapping the backend to another /v1/systemone server" section as the template).
-- `docs/guide.md`'s "running it without cooking the laptop" list: the new process's own resource
+- `docs/usage/guide.md`'s "running it without cooking the laptop" list: the new process's own resource
   footprint, since it runs outside verdict's own memory but "one model at a time" still applies to
   it.
 - `examples/README.md`: a line pointing at `verdict examples --systemone` if that's how it was

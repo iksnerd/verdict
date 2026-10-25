@@ -1,10 +1,10 @@
 # Using verdict
 
-← [Back to the README](../README.md)
+← [Back to the README](../../README.md)
 
 A task-first guide. For the flags themselves, `verdict --help` and `verdict COMMAND --help`. For
-where each claim here comes from, [FINDINGS.md](FINDINGS.md). For runnable inputs,
-[examples/](../examples/README.md).
+where each claim here comes from, [FINDINGS.md](../research/FINDINGS.md). For runnable inputs,
+[examples/](../../examples/README.md).
 
 ## Contents
 
@@ -266,7 +266,7 @@ The rules that came out of doing it once:
 - **A genuinely different model, not another laya checkpoint:** `verdict serve --systemone URL`
   (or `[systemone]` in `verdict.toml`) forwards to any other `/v1/systemone` server instead of
   loading anything into this process, TypeSafe's Jev included (`$TYPESAFE_API_KEY`, never a config
-  key). Every state is sent there, and billed for a hosted server; `docs/api.md` has the details. A
+  key). Every state is sent there, and billed for a hosted server; `docs/usage/api.md` has the details. A
   local [Kev](https://github.com/jaredpalmer/kev) server is the other worked case. Either runs in
   its own process; Kev-0.8B holds about 1.8 GB of weights, so "one model at a time" still means
   checking what that other server is holding before you start it, the same as checking `ollama ps`
@@ -311,7 +311,7 @@ The rules that came out of doing it once:
 | `verdict update [--check]` | installs the newest release (or pulls, in a dev checkout) |
 | `verdict init` | writes the config from what the machine has |
 | `verdict config [--json]` | each resolved setting and where it came from: a flag, `$VAR`, a file or the default |
-| `verdict route PROMPT` | the big-or-small switch example; at chance on real traffic ([routing.md](routing.md)) |
+| `verdict route PROMPT` | the big-or-small switch example; at chance on real traffic ([routing.md](../design/routing.md)) |
 | `verdict cases` | prints that switch: its branches, default and questions |
 
 Exit status is 2 for a usage error everywhere, and 2 never means "no". `ask --cut` exits 0 for

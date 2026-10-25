@@ -11,14 +11,14 @@ from pathlib import Path
 #: Topic -> path in the repository. The wheel packs each at `verdict/_docs/<file name>`.
 TOPICS = {
     "readme": "README.md",
-    "guide": "docs/guide.md",
-    "api": "docs/api.md",
-    "findings": "docs/FINDINGS.md",
-    "pipeline": "docs/pipeline.md",
-    "routing": "docs/routing.md",
-    "patterns": "docs/patterns.md",
-    "rough-edges": "docs/rough-edges.md",
-    "models": "docs/models.md",
+    "guide": "docs/usage/guide.md",
+    "api": "docs/usage/api.md",
+    "findings": "docs/research/FINDINGS.md",
+    "pipeline": "docs/design/pipeline.md",
+    "routing": "docs/design/routing.md",
+    "patterns": "docs/usage/patterns.md",
+    "rough-edges": "docs/usage/rough-edges.md",
+    "models": "docs/usage/models.md",
 }
 
 _PACKED = Path(__file__).with_name("_docs")

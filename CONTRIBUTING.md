@@ -35,7 +35,7 @@ the package or plugin ships.
 
 ## Docs
 
-When a command or a measured number changes, update `docs/guide.md` and `examples/README.md` in
+When a command or a measured number changes, update `docs/usage/guide.md` and `examples/README.md` in
 the same change (`CLAUDE.md`'s Commands section says why).
 
 ## Commit messages

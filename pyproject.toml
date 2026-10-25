@@ -46,14 +46,14 @@ packages = ["src/verdict"]
 # `verdict docs` reads these from an installed tool; tests/project/test_docs_cmd.py keeps the list whole.
 [tool.hatch.build.targets.wheel.force-include]
 "README.md" = "verdict/_docs/README.md"
-"docs/guide.md" = "verdict/_docs/guide.md"
-"docs/api.md" = "verdict/_docs/api.md"
-"docs/FINDINGS.md" = "verdict/_docs/FINDINGS.md"
-"docs/pipeline.md" = "verdict/_docs/pipeline.md"
-"docs/routing.md" = "verdict/_docs/routing.md"
-"docs/patterns.md" = "verdict/_docs/patterns.md"
-"docs/rough-edges.md" = "verdict/_docs/rough-edges.md"
-"docs/models.md" = "verdict/_docs/models.md"
+"docs/usage/guide.md" = "verdict/_docs/guide.md"
+"docs/usage/api.md" = "verdict/_docs/api.md"
+"docs/research/FINDINGS.md" = "verdict/_docs/FINDINGS.md"
+"docs/design/pipeline.md" = "verdict/_docs/pipeline.md"
+"docs/design/routing.md" = "verdict/_docs/routing.md"
+"docs/usage/patterns.md" = "verdict/_docs/patterns.md"
+"docs/usage/rough-edges.md" = "verdict/_docs/rough-edges.md"
+"docs/usage/models.md" = "verdict/_docs/models.md"
 # `verdict examples` reads these from an installed tool the same way.
 "examples" = "verdict/_examples"
 

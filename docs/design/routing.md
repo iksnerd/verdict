@@ -1,10 +1,10 @@
 # The switch, and the router built on it
 
-← [Back to the README](../README.md)
+← [Back to the README](../../README.md)
 
 > **The router is at chance on real agent traffic** (AUC 0.478 on 2,312 real turns, FINDINGS
 > §25). It is kept as the worked example of a switch, not as something to put in front of real
-> traffic. For real bulk questions, see the [guide](guide.md); for intent routing that is measured
+> traffic. For real bulk questions, see the [guide](../usage/guide.md); for intent routing that is measured
 > (a choice over your own handlers, a tree past 20 options, a cascade from Laya to Jev for the
 > unsure), see `verdict docs patterns`.
 

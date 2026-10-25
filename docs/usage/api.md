@@ -1,6 +1,6 @@
 # HTTP API
 
-← [Back to the README](../README.md)
+← [Back to the README](../../README.md)
 
 `verdict serve` exposes the same decisions over HTTP on `127.0.0.1:8799`. It binds to localhost and
 has no auth, so do not expose it beyond the machine. The wire format mirrors Laya's
@@ -166,7 +166,7 @@ per server, so a cascade is two `verdict serve` processes and a client that merg
 
 ## Hosted Jev through TypeSafe's SDK
 
-`JevBackend` (`backend_jev.py`, the `jev` extra: `typesafe-sdk`) is a `Backend` on the official
+`JevBackend` (`backends/jev.py`, the `jev` extra: `typesafe-sdk`) is a `Backend` on the official
 `typesafe-sdk`. The SDK owns the transport (authentication, retries with backoff and `Retry-After`,
 timeouts, request ids); the backend translates verdict's questions into the SDK's typed ones and its
 answers back, validates them with the same checks as `SystemOneBackend`, and maps the SDK's
@@ -177,7 +177,7 @@ request is sent. `verdict serve --systemone https://api.typesafe.ai` uses it; an
 `SystemOneBackend`, which needs no SDK.
 
 ```python
-from verdict.backend_jev import JevBackend
+from verdict.backends.jev import JevBackend
 
 with JevBackend("jev-latest") as backend:        # $TYPESAFE_API_KEY, or api_key=
     print(backend.models())
@@ -185,7 +185,7 @@ with JevBackend("jev-latest") as backend:        # $TYPESAFE_API_KEY, or api_key
 
 ## Swapping the backend to another /v1/systemone server
 
-`SystemOneBackend` (`backend_systemone.py`, no SDK needed) is a `Backend` that forwards `decide()` to any other
+`SystemOneBackend` (`backends/systemone.py`, no SDK needed) is a `Backend` that forwards `decide()` to any other
 `/v1/systemone`-compatible server instead of running a local checkpoint: another `verdict serve`,
 a real hosted Jev, or an independent open model whose server speaks the same contract (validated
 against [Kev](https://github.com/jaredpalmer/kev), a real Qwen3.5-based decision model with its
@@ -212,7 +212,7 @@ The same thing from Python:
 import uvicorn
 
 from verdict.api import create_app
-from verdict.backend_systemone import SystemOneBackend
+from verdict.backends.systemone import SystemOneBackend
 
 with SystemOneBackend("http://127.0.0.1:8009", model="kev-latest", key="local") as backend:
     uvicorn.run(create_app(backend), host="127.0.0.1", port=8799)
@@ -223,7 +223,7 @@ Use the backend directly as a typed Python SDK, with a context manager to close 
 ```python
 import os
 
-from verdict.backend_systemone import SystemOneBackend
+from verdict.backends.systemone import SystemOneBackend
 from verdict.schema import DecideRequest
 from verdict.answers import max_probability
 
@@ -319,7 +319,7 @@ one-off question and an eyeballed guess at whether it's "close enough".
 | endpoint | does |
 |---|---|
 | `GET /healthz` | `{"status": "ok", "backend": "laya-mlx:..."}`. A backend of `uniform` means no model: treat it as absent, never as "unsure" |
-| `POST /v1/route` | `{"prompt": ...}` in, the big-or-small branch out ([routing.md](routing.md)) |
+| `POST /v1/route` | `{"prompt": ...}` in, the big-or-small branch out ([routing.md](../design/routing.md)) |
 | `POST /v1/route/batch` | `{"prompts": [...]}` in, one result per prompt with its `index`; at most 512 |
 
 `uvicorn verdict.api:app` serves the `uniform` backend, not the model. Use `verdict serve`.

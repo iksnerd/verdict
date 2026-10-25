@@ -9,4 +9,4 @@ labels: enhancement
 
 **What you've tried instead**
 
-**Where it would fit** (a new flag, a CLI command, the HTTP API, `docs/routing.md`'s switch, ...)
+**Where it would fit** (a new flag, a CLI command, the HTTP API, `docs/design/routing.md`'s switch, ...)
