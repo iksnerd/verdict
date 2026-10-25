@@ -15,12 +15,12 @@ History is pushed, so do not rewrite it without asking.
 - The wire format in `src/verdict/schema.py` mirrors laya's `predict(state, questions)`.
   Change it only if laya's changes; the dataset, teachers, model and API share it. laya's in turn
   mirrors TypeSafe's Jev, and `POST /v1/systemone` + `GET /v1/models` serve Jev's protocol so its
-  SDKs work via `TYPESAFE_BASE_URL`. `tests/test_systemone.py` pins that shape (read from
+  SDKs work via `TYPESAFE_BASE_URL`. `tests/serving/test_systemone.py` pins that shape (read from
   `typesafe-sdk` 0.7.1's wire models, whose answer types are strict: floats must be floats).
 - Every backend implements `Backend` (`name`, `decide`). Anything new plugs in there.
 - verdict is not on PyPI, and the name `verdict` there is an unrelated project (Haize Labs). Every
   install hint, in docs and in error messages, names the GitHub source (`'verdict[extras] @
-  git+https://github.com/iksnerd/verdict.git@vX.Y.Z'`); `tests/test_install_hints.py` fails on a bare
+  git+https://github.com/iksnerd/verdict.git@vX.Y.Z'`); `tests/project/test_install_hints.py` fails on a bare
   `pip install verdict` or `uv tool install 'verdict[...]'`.
 - verdict is a System 1 (Kahneman): fast typed judgments for a System 2, a person or an agent,
   to act on. It answers and never acts on an answer: no dispatch, no routing of work between
@@ -36,7 +36,7 @@ History is pushed, so do not rewrite it without asking.
 
 The shipped router (`difficulty` + `is_sensitive`) is **at chance on real agent traffic**, AUC 0.478,
 against 70.8% on the 72 hand-written prompts it was tuned on (§25). The diagnosis is not the model
-and not the model: the same checkpoint scores **0.753** (the private fine-tune; base Laya, what a
+and not the fine-tune: the same checkpoint scores **0.753** (the private fine-tune; base Laya, what a
 public install runs, scores **0.65**, §49) on the same turns asked `is_instruction` instead (§26). Ask about what is on the page, not about how hard a task would be
 for a different model. Real outcome labels are free in agent transcripts: each one records which
 tools the agent called after each turn.
@@ -72,7 +72,7 @@ Do not re-derive these. Each is measured, in `docs/FINDINGS.md`.
   are not obvious: `runs/` holds large binary `.pt` items, and `experiments/` holds scripts that
   read private data.
 - The repository is public. Machine-specific notes go in `CLAUDE.local.md` (gitignored), and
-  `tests/test_public_repo.py` fails on home paths and private tool names in anything that ships.
+  `tests/project/test_public_repo.py` fails on home paths and private tool names in anything that ships.
 - Keep the API bound to localhost.
 - Commit and push only when asked.
 
@@ -85,7 +85,7 @@ Do not re-derive these. Each is measured, in `docs/FINDINGS.md`.
   never-commit paths below, runs gitleaks on the staged diff, and runs the suite against an export
   of the index (not the working tree, and without stashing, so peers are undisturbed). About 4 s.
 - The agent skill ships from this repo as a plugin: `.claude-plugin/marketplace.json` and
-  `plugins/verdict/skills/verdict/`. `tests/test_plugin.py` ties the plugin version to
+  `plugins/verdict/skills/verdict/`. `tests/project/test_plugin.py` ties the plugin version to
   the package version and refuses private paths in what ships.
 - Releases: a `vX.Y.Z` tag with a committed scorecard (`bench/scorecards/vX.Y.Z.json`, run at
   normal priority); `.github/workflows/release.yml` runs the suite on macOS arm64 on tags only
@@ -100,7 +100,7 @@ Do not re-derive these. Each is measured, in `docs/FINDINGS.md`.
 - Docs: README (landing), `docs/guide.md` (usage), `docs/api.md`, `docs/routing.md`,
   `docs/pipeline.md`, `docs/patterns.md`, `docs/rough-edges.md`, `docs/models.md` (the last three
   follow TypeSafe's docs; `verdict docs` serves them), and
-  `examples/` (synthetic inputs, real outputs, checked by `tests/test_examples.py`). When a command
+  `examples/` (synthetic inputs, real outputs, checked by `tests/project/test_examples.py`). When a command
   or measured number changes, update the guide and the examples README in the same change.
 - `verdict update` fast-forwards this checkout and re-syncs with both extras, refusing on
   uncommitted changes; `verdict update --check` only reports (exit 1 when behind). Prefer it to a hand-typed `uv sync`,
@@ -128,8 +128,8 @@ Do not re-derive these. Each is measured, in `docs/FINDINGS.md`.
   `verdict calibrate`, `verdict bench [--verify CARD]`, `verdict examples [NAME...] [--systemone URL]`
   (scores `examples/` banks with a backend, real or `--systemone`, for comparing one against another),
   `verdict classify TEXT --tree FILE` (a two-level tree for more than 20 options, `--beam`),
-  `verdict cascade -q BANK --escalate URL` (`--share`/`--below`, `--check LABELLED.jsonl`: Laya
-  first, a second server for the unsure), `verdict serve --systemone URL` (a remote backend, key in
+  `verdict cascade -q BANK --escalate URL` (`--share`/`--below`, `--check LABELLED.jsonl [--fit [--out FIT]]`,
+  `--calibration FIT`: Laya first, a second server for the unsure, deciding at a fitted cut), `verdict serve --systemone URL` (a remote backend, key in
   `$TYPESAFE_API_KEY`), `verdict rank`, `verdict docs` (also `patterns`, `rough-edges`, `models`),
   `verdict config` (each setting and its source). Errors under
   `--json`/`--jsonl` also print `{"error": {"code", "message"}}` on stdout, and
