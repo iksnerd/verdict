@@ -38,7 +38,7 @@ def server(monkeypatch):
 
 
 def run(capsys, *argv):
-    assert cli.main(["decide", '{"text": "due friday", "command": "ls"}', *argv]) == 0
+    assert cli.main(["decide", '{"text": "due friday", "latest": "shipped"}', *argv]) == 0
     return json.loads(capsys.readouterr().out)["answers"]
 
 
@@ -66,8 +66,8 @@ def test_a_measured_library_yes_no_is_asked_as_measured(server, capsys, tmp_path
     test does not depend on this machine having the weights (pre-commit and CI do not)."""
     finetune = tmp_path / "verdict-v1-mlx"
     finetune.mkdir()
-    a = run(capsys, "-q", "touches_secret", "--model", str(finetune))["touches_secret"]
-    assert server[0]["touches_secret"]["type"] == "noul"
+    a = run(capsys, "-q", "work_finished", "--model", str(finetune))["work_finished"]
+    assert server[0]["work_finished"]["type"] == "noul"
     assert a["noul"] == 0.3 and "asked_as" not in a
 
 
@@ -93,5 +93,5 @@ def test_confidence_means_what_it_means_for_a_yes_no(server, capsys):
 def test_on_base_laya_a_library_yes_no_is_asked_as_a_choice_too(server, capsys):
     """The library's yes/no questions were measured as plain yes/no on the fine-tune. On base
     Laya the plain form is the one that collapses (SST-2 0.51 against 0.94 as a choice, §40)."""
-    run(capsys, "-q", "touches_secret", "--model", "aac6fef/laya-mlx")
-    assert server[0]["touches_secret"]["type"] == "choice"
+    run(capsys, "-q", "work_finished", "--model", "aac6fef/laya-mlx")
+    assert server[0]["work_finished"]["type"] == "choice"

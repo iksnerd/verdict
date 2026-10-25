@@ -14,8 +14,9 @@ the verdict repo's `docs/research/FINDINGS.md`.
 Older real-task rows below used the private fine-tune. Current base measurements (§60) supersede
 them for a public install: `is_approval` AUC 0.52 [0.45, 0.60] against skill calls;
 `touches_secret` 0.52 [0.35, 0.69] on held-out command rejections; `work_finished` 0.70 [0.63, 0.77]
-against resolved room status. The first two do not establish useful outcome prediction, and none
-of these proxy labels establishes semantic accuracy. Use `verdict questions` for current values.
+against resolved room status. The first two do not establish useful outcome prediction, so they are
+no longer in `verdict questions`; the bank in `examples/secret-commands/` is a starting point to
+check on your own labels. None of these proxy labels establishes semantic accuracy.
 
 ## Works
 

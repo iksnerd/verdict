@@ -49,7 +49,7 @@ Examples:
   verdict ask "$TICKET" "How urgent?" -l "not urgent" -l soon -l critical
   verdict questions                                                 # measured questions, by name
   verdict validate -q bank.json --json                              # check without inference
-  verdict decide '{"command": "cat .env"}' --questions touches_secret
+  verdict decide '{"latest": "shipped and deployed"}' --questions work_finished
   verdict decide '{"post": "buy followers now!!"}' --questions moderation
   verdict decide --jsonl --questions bank.json < states.jsonl > answers.jsonl
   verdict classify "my transfer never arrived" --tree tree.json     # over 20 options (examples/banking-tree)
@@ -204,11 +204,11 @@ Examples:
   verdict decide @ticket.json --questions bank.json --calibration fit.json
   echo '{"command": "git push --force"}' | verdict decide - --questions flags.json
   verdict decide --jsonl --questions moderation < posts.jsonl
-  verdict decide --jsonl --questions is_instruction,is_approval < turns.jsonl
+  verdict decide --jsonl --questions is_instruction,work_finished < turns.jsonl
 
 --questions takes a preset (triage, moderation, email; guard and router ask about consequences
 and difficulty, so they need --allow-unmeasured), measured questions by name
-(`verdict questions`, comma-separated: is_instruction,touches_secret), inline JSON, or a file.
+(`verdict questions`, comma-separated: is_instruction,work_finished), inline JSON, or a file.
 A bank looks like:
   {"urgent": {"type": "noul",   "instructions": "Is `message` urgent?"},
    "intent": {"type": "choice", "instructions": "What does `message` want?",
@@ -247,9 +247,9 @@ Each line of EXAMPLES is {"state": ..., "label": ...} for a one-question bank, o
 
 CALIBRATE_EPILOG = """\
 Examples:
-  verdict calibrate blocked.jsonl --questions touches_secret --out secret.fit.json
-  verdict decide '{"command": "vercel env rm KEY production"}' --questions touches_secret --calibration secret.fit.json
-  verdict ask "$CMD" "Does this read, print or change a secret?" --cut secret.fit.json
+  verdict calibrate done.jsonl --questions work_finished --out done.fit.json
+  verdict decide '{"latest": "released to production"}' --questions work_finished --calibration done.fit.json
+  verdict ask "$UPDATE" "Does this say the work is finished?" --cut done.fit.json
 
 It asks the model once per example, with a pause between calls, and stops at --limit (400 by
 default): a few hundred labels settle most questions, and a sweep of thousands holds the GPU
@@ -369,9 +369,9 @@ fits before writing your own; its number holds for the state it was measured on.
 QUESTIONS_EPILOG = """\
 Examples:
   verdict questions                             # every question, its state and result
-  verdict questions touches_secret              # one, as a JSON bank to edit
+  verdict questions work_finished               # one, as a JSON bank to edit
   verdict questions --json                      # all of them, for a script
-  verdict decide '{"command": "cat .env"}' -q touches_secret,is_instruction
+  verdict decide '{"latest": "shipped"}' -q work_finished,is_instruction
 
 Exit status: 0, or 2 for an unknown name.
 """

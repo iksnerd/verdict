@@ -1,5 +1,5 @@
 {
-  "about": "Questions with recorded measurements, usable as `-q NAME`. Outcomes and model matter: some real-label proxies have not shown signal on base Laya. Bench-backed entries take their question from bench_suites.json and their number from the latest scorecard. Real-label entries cite FINDINGS and name the measured model; outcome proxies are not semantic gold labels. Failed question shapes are what library.lint warns about.",
+  "about": "Questions with recorded measurements, usable as `-q NAME`. Outcomes and model matter. Questions that showed no signal on base Laya against their outcome proxy (is_approval, touches_secret; FINDINGS §60) were removed. Bench-backed entries take their question from bench_suites.json and their number from the latest scorecard. Real-label entries cite FINDINGS and name the measured model; outcome proxies are not semantic gold labels. Failed question shapes are what library.lint warns about.",
   "questions": [
     {
       "name": "is_instruction",
@@ -10,26 +10,6 @@
       "state": "a user turn to an agent, as plain text",
       "measured": "AUC 0.65 (0.61 to 0.69) on 2,125 real agent turns, predicting that the agent used tools; base Laya, asked as the no/yes choice (0.68 plain). The private fine-tune scored 0.75",
       "source": "FINDINGS §26, §27, §49"
-    },
-    {
-      "name": "is_approval",
-      "question": {
-        "type": "noul",
-        "instructions": "Is this an approval (ok, yes, go ahead)?"
-      },
-      "state": "a user turn to an agent, as plain text",
-      "measured": "AUC 0.52 (0.45 to 0.60) on 400 real turns (53 followed by a skill call); base Laya, no/yes choice. This sample does not establish skill-use prediction; the private fine-tune previously scored 0.69 on a different cohort",
-      "source": "FINDINGS §28, §60"
-    },
-    {
-      "name": "touches_secret",
-      "question": {
-        "type": "noul",
-        "instructions": "Does `command` read, print or change a secret, key, token or credential?"
-      },
-      "state": "{\"command\": \"<a shell command>\"}",
-      "measured": "AUC 0.52 (0.35 to 0.69) on 120 held-out commands (11 rejected); base Laya, no/yes choice. Rejection is an outcome proxy, not a secret-access label; the private fine-tune previously scored 0.77 on a different cohort",
-      "source": "FINDINGS §29, §32, §60"
     },
     {
       "name": "work_finished",

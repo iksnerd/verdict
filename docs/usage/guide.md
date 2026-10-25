@@ -179,7 +179,7 @@ times out of three (§28).
 
 **Start from a question that has been measured.** `verdict questions` lists them, each with what it
 was measured on and how it did. Use them by name: `verdict decide STATE -q is_instruction` or
-`-q is_instruction,touches_secret`.
+`-q is_instruction,work_finished`.
 
 **`ask` and `decide` refuse the shapes that measured at chance** and exit 2 before asking: a
 question about a consequence, a difficulty or a risk ("could this cause harm", "how hard is this",

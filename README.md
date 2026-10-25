@@ -90,7 +90,7 @@ it reads.
 - **Calibration:** `calibrate` fits a cut or a temperature on your own labels and reports it on a
   held-out split.
 - **Measured questions by name:** `verdict questions` lists questions with their measured results;
-  `-q is_instruction,touches_secret` uses them.
+  `-q is_instruction,work_finished` uses them.
 - **Guard rails:** question shapes that measured at chance, choices of more than 20 options (a default,
   not a measured cliff), and questions about a field the
   state does not have, are refused (`--allow-unmeasured` asks anyway), and `validate` checks a bank

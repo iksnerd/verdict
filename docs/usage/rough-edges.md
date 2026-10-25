@@ -110,8 +110,8 @@ questions combined in code (`verdict rank`).
 ## The numbers on real traffic depend on the model
 
 `is_instruction` is AUC 0.65 on base Laya and 0.75 on the private fine-tune, measured on the same
-kind of real turns (§49). The remaining library questions now have base measurements (§60):
+kind of real turns (§49). The remaining library questions were re-measured on base (§60):
 `is_approval` and `touches_secret` did not establish skill-call or rejection prediction on the new
-sample. `work_finished` ranked resolved room status at AUC 0.70; that proxy does not establish
+sample (AUC 0.52 each), so the library no longer lists them. `work_finished` ranked resolved room status at AUC 0.70; that proxy does not establish
 semantic completion accuracy. The cohorts differ from the fine-tune's, so the gaps are not a paired
 model comparison. Wording changes did not establish improvements on the weak public suites (§61).

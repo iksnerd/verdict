@@ -84,7 +84,7 @@ consistent number to rank or gate on.
 ## Ask the question that is on the page
 
 **Start from a measured question.** `verdict questions` lists the ones shipped in the tool, with
-what each was measured on; use them by name (`-q is_instruction,touches_secret`). Then read
+what each was measured on; use them by name (`-q is_instruction,work_finished`). Then read
 `references/questions.md`: every question asked on a real task so far, including the ones that
 failed. Reuse a question that worked; don't retry one that failed for a reason that still holds.
 The repo's `examples/README.md` has banks for common agent tasks with labelled rows and their
@@ -131,7 +131,7 @@ verdict ask "<text>" "<question>" -l low -l mid -l high      # 1.30/2 high
 verdict validate -q bank.json --json                         # no model; exit 2 if invalid
 verdict decide --jsonl -q bank.json --server-only < items.jsonl > scored.jsonl
 verdict decide '{"message": "..."}' -q triage               # presets: verdict presets
-verdict decide STATE -q is_instruction,touches_secret         # measured: verdict questions
+verdict decide STATE -q is_instruction,work_finished          # measured: verdict questions
 verdict rank scored.jsonl about_money=1 says_leaving=0.5     # search by named answers, no model
 verdict docs findings 38                                     # read a section the help or an error cites
 verdict update --check                                       # exit 1 when a newer release exists
@@ -189,12 +189,12 @@ A user asks which of the 1,500 shell commands their agent ran last month touched
 1. Too many to read well, and each answer is on the page: a yes/no about what the command does.
    That's a job for verdict. Sorting the commands by which service they touch would be a small
    LLM's job instead (FINDINGS §32).
-2. `verdict questions` lists `touches_secret` (base Laya AUC 0.52 [0.35, 0.69] on 120 held-out
-   rejected commands, an outcome proxy, §60; the private fine-tune scored 0.77 on another cohort). Do not rely on it
-   to find secrets without checking it on your own labels. Use it by name, with states shaped as it says: `{"command": "..."}`.
+2. The library has no secret question: on base Laya the one it had scored AUC 0.52 [0.35, 0.69] on
+   120 held-out rejected commands, an outcome proxy (§60), so it was removed. `examples/secret-commands/bank.json`
+   is a starting bank; check it on your own labels. States are shaped `{"command": "..."}`.
 3. Check what is loaded, then start `verdict serve` in the background, or reuse one already
    answering on the port. Score a sample of 200 first:
-   `verdict decide --jsonl -q touches_secret --server-only < commands.jsonl > scored.jsonl`.
+   `verdict decide --jsonl -q examples/secret-commands/bank.json --server-only < commands.jsonl > scored.jsonl`.
 4. Sort by the answer and read the top 30 yourself. Then read a slice further down as well: a
    command that pulls secrets without naming one (`vercel env pull`) ranks low, because verdict
    reads the surface (`examples/secret-commands/`).

@@ -78,7 +78,7 @@ def _questions_cmd(args: argparse.Namespace) -> int:
         print(f"{'':17s} state {e.state}")
         print(f"{'':17s} {e.measured} ({e.source})")
         print()
-    print("Use one or several by name:  verdict decide STATE -q is_instruction,touches_secret")
+    print("Use one or several by name:  verdict decide STATE -q is_instruction,work_finished")
     print("Numbers are for the state they were measured on; on your own data, rank or run "
           "`verdict calibrate` before gating.")
     return 0

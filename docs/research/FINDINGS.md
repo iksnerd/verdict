@@ -2279,6 +2279,10 @@ measurements and explicitly names their outcome proxies. It retains the names fo
 and reuse, without presenting the older fine-tune results as guarantees on base. The library's
 introduction now says it records measurements, including unconfirmed proxies.
 
+A follow-up removed `is_approval` and `touches_secret` from the library: AUC 0.52 against their outcome
+proxies is no evidence they work on base Laya, and a library entry reads as a recommendation.
+`examples/secret-commands/` stays as a bank to check on your own labels.
+
 
 ## 61. Wording did not fix the weak suites; the injection choice dip was sample drift (2026-10-25)
 

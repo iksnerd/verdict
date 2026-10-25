@@ -75,7 +75,7 @@ A bank is a set of questions, keyed by an id of your choosing, asked of the same
 
 `verdict decide STATE -q bank.json` answers every question of the bank for one state;
 `decide --jsonl` streams the bank over many states. `verdict questions` lists the measured library,
-and `-q is_instruction,touches_secret` asks questions from it by name. `verdict validate -q bank.json`
+and `-q is_instruction,work_finished` asks questions from it by name. `verdict validate -q bank.json`
 checks a bank with no model loaded.
 
 ## Where the pieces run

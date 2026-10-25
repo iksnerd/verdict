@@ -62,8 +62,8 @@ def test_a_library_name_loads_as_a_bank():
 
 
 def test_several_names_load_as_one_bank():
-    bank = inputs.load_questions("is_instruction,touches_secret")
-    assert list(bank) == ["is_instruction", "touches_secret"]
+    bank = inputs.load_questions("is_instruction,work_finished")
+    assert list(bank) == ["is_instruction", "work_finished"]
 
 
 def test_an_unknown_name_in_a_list_is_an_error():
@@ -79,8 +79,8 @@ def test_questions_lists_every_entry(capsys):
 
 
 def test_questions_name_prints_the_bank(capsys):
-    assert cli.main(["questions", "touches_secret"]) == 0
-    assert json.loads(capsys.readouterr().out)["touches_secret"]["type"] == "noul"
+    assert cli.main(["questions", "work_finished"]) == 0
+    assert json.loads(capsys.readouterr().out)["work_finished"]["type"] == "noul"
 
 
 # ---- the linter: FINDINGS' failed questions, as a check ----------------------------------------
@@ -140,3 +140,10 @@ def test_large_choices_explain_the_default_without_claiming_a_universal_failure(
     prepared, _, warnings = library.prepare(
         "request", bank, model="base-laya", allow_unmeasured=True)
     assert prepared == bank and warnings
+
+
+@pytest.mark.parametrize("name", ["is_approval", "touches_secret"])
+def test_questions_that_showed_no_signal_on_base_laya_are_not_in_the_library(name):
+    """AUC 0.52 against their outcome proxies (FINDINGS §60); re-adding one needs a new measurement."""
+    with pytest.raises(ValueError, match=name):
+        inputs.load_questions(name)
