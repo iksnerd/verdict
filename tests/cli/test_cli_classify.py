@@ -66,6 +66,8 @@ def test_json_carries_the_candidates_and_the_pass_count(served, capsys):
     doc = json.loads(out.out)
     assert code == 0 and doc["label"] == "transfer failed" and doc["passes"] == 3
     assert doc["candidates"][0]["path"] == ["transfer", "transfer failed"]
+    assert set(doc["group_probabilities"]) == {"card", "transfer"}
+    assert len(doc["searched_groups"]) == 2
 
 
 def test_a_missing_tree_file_is_a_not_found_error(served, capsys):

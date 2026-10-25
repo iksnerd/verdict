@@ -26,7 +26,8 @@ def test_with_no_topic_it_prints_the_readme(capsys):
 
 @pytest.mark.parametrize("topic,path", [("guide", "docs/usage/guide.md"), ("api", "docs/usage/api.md"),
                                         ("findings", "docs/research/FINDINGS.md"),
-                                        ("concepts", "docs/usage/concepts.md")])
+                                        ("concepts", "docs/usage/concepts.md"),
+                                        ("defaults", "docs/design/defaults.md")])
 def test_each_topic_prints_its_document(capsys, topic, path):
     assert show(capsys, topic) == (ROOT / path).read_text()
 

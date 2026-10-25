@@ -8,10 +8,12 @@ scorecard against the previous release's with no model, which is what the releas
 run, since CI has no checkpoint.
 
 Suites are pinned (dataset, full revision sha, split, seed) and never vendored: several of these
-datasets carry no clear license, and a pinned revision reproduces the same sample anyway.
+datasets carry no clear license. Language-filtered release suites also pin eligible row indices,
+so a detector update cannot silently change their sample. Scorecards fingerprint the actual items.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import random
 from dataclasses import dataclass, field
@@ -48,6 +50,8 @@ class Suite:
     #: Drop rows laya's language detector says the English checkpoint cannot read. The injection
     #: set mixes in German, which would measure the language gap rather than the question.
     english_only: bool = False
+    #: Pinned row indices at `revision`, replacing a mutable language-detector filter.
+    eligible_rows: list[int] | None = None
     #: Dataset labels to skip, as strings: a neutral or mixed class in a positive-versus-negative
     #: suite. Any other label outside `classes` still fails.
     ignore: list = field(default_factory=list)
@@ -66,6 +70,13 @@ class Suite:
         return s
 
     def check(self) -> None:
+        if self.eligible_rows is not None:
+            rows = self.eligible_rows
+            if (not isinstance(rows, list) or not rows
+                    or any(type(i) is not int or i < 0 for i in rows)
+                    or len(set(rows)) != len(rows)):
+                raise ValueError(f"suite {self.name}: eligible_rows must be distinct non-negative "
+                                 "row indices, in a non-empty list")
         if self.lang not in (None, "en", "multi"):
             raise ValueError(f"suite {self.name}: lang is {self.lang!r}; it takes en or multi")
         kind = self.question.get("type")
@@ -100,13 +111,19 @@ def fetch(s: Suite) -> list[dict]:
 
 
 def sample(s: Suite, rows: list[dict]) -> list[tuple[str, str]]:
-    """`per_class` rows of each class, drawn with the suite's seed; blank text is skipped."""
+    """`per_class` rows per class, seeded. Pinned eligibility replaces dynamic language filtering."""
     by_class: dict[str, list[str]] = {c: [] for c in s.classes.values()}
-    for r in rows:
+    eligible = set(s.eligible_rows) if s.eligible_rows is not None else None
+    if eligible is not None and max(eligible) >= len(rows):
+        raise ValueError(f"suite {s.name}: eligible_rows references a missing dataset row")
+    for index, r in enumerate(rows):
+        if eligible is not None and index not in eligible:
+            continue
         text = (r[s.text] or "").strip()
         if not text:
             continue
-        if s.english_only and not (inputs.language({"text": text}) or {}).get("is_english", True):
+        if (eligible is None and s.english_only
+                and not (inputs.language({"text": text}) or {}).get("is_english", True)):
             continue
         key = str(r[s.label])
         if key in s.ignore:
@@ -127,6 +144,8 @@ def _auc(pairs):
 
 
 def score(s: Suite, items: list[tuple[str, str]], ask: Ask) -> dict[str, Any]:
+    sample_sha256 = hashlib.sha256(
+        json.dumps(items, ensure_ascii=False, separators=(",", ":")).encode()).hexdigest()
     answers = [ask({"text": text}, {"q": s.question})["answers"]["q"] for text, _ in items]
     truth = [c for _, c in items]
     if s.question["type"] == "noul":
@@ -137,6 +156,7 @@ def score(s: Suite, items: list[tuple[str, str]], ask: Ask) -> dict[str, Any]:
         return {
             "metric": "auc", "value": round(_auc(list(zip(scores, labels))), 4),
             "ci": [round(lo, 4), round(hi, 4)], "n": len(items),
+            "sample_sha256": sample_sha256,
             # The "leans no" symptom (FINDINGS §2, §33): how often the class a yes means clears
             # the naive 0.5 line. A good AUC with this near 0 means rank or fit a cut, never 0.5.
             "target_over_half": round(sum(p >= 0.5 for p in pos) / len(pos), 4) if pos else None,
@@ -148,6 +168,7 @@ def score(s: Suite, items: list[tuple[str, str]], ask: Ask) -> dict[str, Any]:
     out = {
         "metric": "accuracy", "value": round(sum(hits) / len(hits), 4),
         "ci": [round(lo, 4), round(hi, 4)], "n": len(items),
+        "sample_sha256": sample_sha256,
         "chance": round(1 / len(s.classes), 4), "fit": fit,
     }
     if len(s.classes) == 2:
@@ -168,6 +189,11 @@ def verify(current: dict, previous: Optional[dict]) -> list[str]:
         cur = current["suites"].get(name)
         if cur is None:
             problems.append(f"{name}: in the previous scorecard, missing from this one")
+            continue
+        if (cur.get("sample_sha256") and prev.get("sample_sha256")
+                and cur["sample_sha256"] != prev["sample_sha256"]):
+            problems.append(f"{name}: sample differs from the previous scorecard; rerun the "
+                            "baseline on the same items")
             continue
         if cur["value"] < prev["ci"][0]:
             problems.append(f"{name}: {cur['metric']} {cur['value']:.2f}, below the previous "

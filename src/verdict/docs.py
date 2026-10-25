@@ -20,6 +20,7 @@ TOPICS = {
     "patterns": "docs/usage/patterns.md",
     "rough-edges": "docs/usage/rough-edges.md",
     "models": "docs/usage/models.md",
+    "defaults": "docs/design/defaults.md",
 }
 
 _PACKED = Path(__file__).with_name("_docs")

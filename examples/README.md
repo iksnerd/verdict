@@ -26,6 +26,11 @@ with exit status 2 if the server is unavailable, instead of loading a local fall
 The output below is real, from the default model (base Laya), and includes the misses, because
 knowing what it gets wrong is the point.
 
+Invented examples do not validate real outcome prediction. On new local samples, approval and
+secret wording did not establish skill-call or command-rejection prediction; completion wording
+ranked resolved room status, an outcome proxy (FINDINGS §60). The library now reports those base
+measurements. Measure the property you need before using any example bank to make a decision.
+
 `verdict examples [NAME...]` runs the same real inputs against any backend and prints each row's
 answers without needing per-example commands; `--systemone URL` points it at a different backend
 (another `verdict serve`, a local [Kev](https://github.com/jaredpalmer/kev) server, a real hosted
@@ -429,7 +434,9 @@ you what the cascade is worth for your task, and says so when it is worth nothin
 
 ## banking-tree/
 
-Not a bank: a tree for `verdict classify`, the way past laya's 20-option limit. The 77 Banking77
+Not a bank: a tree for `verdict classify`, one way past verdict's conservative 20-option default.
+Use `--allow-unmeasured` to compare a flat choice on the same labelled items; a tree can lose
+accuracy on other datasets (FINDINGS §58). The 77 Banking77
 intents in ten groups of 2 to 12 options (`tree.json`), the one measured in FINDINGS §50. From an
 installed copy, `verdict examples --path banking-tree` prints the folder (it works for
 `python-api` too). Real output on base Laya, on messages written for this README:
@@ -449,6 +456,10 @@ The last is the useful kind of wrong: the joint probability, 0.11 against 0.94 f
 case, is low, so a threshold sends it to a person. On the 308 items measured, flat 77-way was 0.38
 and the tree 0.55 at `--beam 2`. A tree you write for your own labels will do better or worse than
 this one, which was written by someone who knew the 77.
+
+With `--json`, each result also includes `group_probabilities` and `searched_groups`. Save these
+beside the gold label to measure whether the correct group entered the beam, without another
+inference pass. Compare correctness with a flat arm on those same item IDs for a paired interval.
 
 ## python-api/
 

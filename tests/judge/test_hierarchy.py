@@ -83,6 +83,19 @@ def test_candidates_are_sorted_and_name_their_path():
     assert r.candidates[0]["path"] == ["transfer", "transfer_failed"]
 
 
+def test_group_diagnostics_include_unsearched_groups_without_extra_passes():
+    groups = {"card": 0.50, "transfer": 0.45, "account": 0.05}
+    ask = fake(groups, OPTION_P)
+    result = hierarchy.classify(ask, "x", TREE, beam=2)
+    assert result.group_probabilities == groups
+    assert result.searched_groups == ["card", "transfer"]
+    assert result.label == "transfer_failed"  # the winning leaf can be in the second group
+    assert result.passes == len(ask.seen) == 3
+    doc = result.as_dict()
+    assert doc["group_probabilities"] == groups
+    assert doc["searched_groups"] == ["card", "transfer"]
+
+
 def test_both_levels_get_the_instructions_and_the_descriptions():
     ask = fake({"card": 0.2, "transfer": 0.7, "account": 0.1}, OPTION_P)
     hierarchy.classify(ask, "x", TREE, beam=1)

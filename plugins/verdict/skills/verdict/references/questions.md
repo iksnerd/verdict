@@ -11,11 +11,17 @@ Metric key: AUC for yes/no against real labels; held-out accuracy for choice (wi
 "read" means hand-checked by the reviewing agent, with no labels. The FINDINGS section is in
 the verdict repo's `docs/research/FINDINGS.md`.
 
+Older real-task rows below used the private fine-tune. Current base measurements (§60) supersede
+them for a public install: `is_approval` AUC 0.52 [0.45, 0.60] against skill calls;
+`touches_secret` 0.52 [0.35, 0.69] on held-out command rejections; `work_finished` 0.70 [0.63, 0.77]
+against resolved room status. The first two do not establish useful outcome prediction, and none
+of these proxy labels establishes semantic accuracy. Use `verdict questions` for current values.
+
 ## Works
 
 | task (labels) | question | type | result | § |
 |---|---|---|---|---|
-| user turn: did the agent need tools? (transcripts) | Is this an instruction to perform an action, rather than a question? | noul | AUC 0.77 held-out, top 100 all needed tools | 26, 27 |
+| user turn: did the agent need tools? (transcripts) | Is this an instruction to perform an action, rather than a question? | noul | base AUC 0.65 [0.61, 0.69]; private fine-tune 0.75 on a different cohort | 26, 27, 49 |
 | user turn: will it be a long task? (transcripts) | same `is_instruction` | noul | 66.5% at the median, balanced label | 27 |
 | user turn: did a skill fire? (transcripts) | Is this an approval (ok, yes, go ahead)? | noul | AUC 0.69, beat the purpose-written question | 28 |
 | Bash command: blocked or rejected? (transcripts) | Does `command` read, print or change a secret, key, token or credential? | noul | AUC 0.74 full context, 0.77 at 128 tokens; Haiku 4.5 0.73, regex 0.64 on the same items | 29, 32 |

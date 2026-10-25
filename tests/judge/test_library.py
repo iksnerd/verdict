@@ -124,3 +124,19 @@ def test_ordinary_as_a_choice_option_is_fine():
 def test_refusal_names_the_opt_out_of_the_front_door():
     assert "--allow-unmeasured" in library.refusal(["q is bad"])
     assert "?allow_unmeasured=true" in library.refusal(["q is bad"], opt_out="?allow_unmeasured=true")
+
+
+def test_large_choices_explain_the_default_without_claiming_a_universal_failure():
+    from verdict.errors import QuestionError
+
+    bank = {"q": {"type": "choice", "instructions": "Which intent?",
+                  "criteria": {f"intent_{i}": "" for i in range(150)}}}
+    with pytest.raises(QuestionError) as error:
+        library.prepare("request", bank, model="base-laya")
+    message = str(error.value)
+    assert "conservative default" in message
+    assert "CLINC150" in message and "--allow-unmeasured" in message
+    assert "measured at chance" not in message
+    prepared, _, warnings = library.prepare(
+        "request", bank, model="base-laya", allow_unmeasured=True)
+    assert prepared == bank and warnings

@@ -151,14 +151,17 @@ Run a secret scan before using transcripts: one in 2,348 prompts held a live cre
 
 ## Which tool for which job
 
+`verdict docs defaults` records the choices behind the option cap, tree beam, read budget,
+yes/no rewrite, multilingual selection and fitted cuts.
+
 | the job | use | why |
 |---|---|---|
 | one item, or a few dozen | read them yourself | you're more accurate, and it fits in one read |
-| a yes/no about what the text shows, over hundreds of items | **verdict** | matched Claude Haiku 4.5 (0.77 vs 0.73 AUC on the private fine-tune; base Laya is not re-measured on it yet), free and local (§32) |
+| a yes/no about what the text shows, over hundreds of items | **verdict**, measured on your labels | free and local; the old Haiku comparison used the private fine-tune (§32). Base secret wording did not establish rejection prediction on the new sample (§60) |
 | anything that must stay on your machine | **verdict** | nothing leaves it |
 | sorting into several categories, or anything needing world knowledge or a maintainer's judgment | a small LLM, if the data may leave the machine | Haiku 0.67 vs verdict 0.44 to 0.48 on 7 commit types (§32, §41); GitHub bug vs support question 0.59, most questions read as bugs, not fixed by two rounds of fine-tuning (§41, §45) |
 | matching a text to one of many topical labels (intents, topics) | an embedding model; `verdict classify` if you want no second model | on Banking77 (77 intents) the nearest label by `embeddinggemma:300m` scored 0.89, Jev 0.78, Laya 0.38 flat and 0.55 with a tree; Laya added nothing on top (§50, §53) |
-| more than 20 options that are not topical | a tree (`verdict classify`), or Jev | options share one token budget; 77 options scored 0.43 (§41). verdict refuses past 20. A tree can be worse where options are distinct (§58): compare on a labelled sample |
+| more than 20 options that are not topical | compare flat and tree (`verdict classify`), or Jev | verdict refuses past 20 by default; `--allow-unmeasured` permits a flat comparison. A tree helped Banking77 but lost on CLINC150 (§50, §58): compare on the same labelled sample |
 | long documents | an LLM, or split the text | only the first 128 tokens are read; verdict warns when a state is far past that, and each answer of a cut call carries `"truncated": true` |
 | consequences, difficulty, counting, dates, pulling out values | an LLM | nothing on the page answers them; the first two score at chance (§25, §29) |
 | a fixed pattern (a file name, a flag) | a regex | exact, instant, and a floor for the others to beat |
@@ -210,10 +213,12 @@ property, which the text can't show. Ask for the property itself.
 
 1. Put each command in a state: `{"command": "..."}`, one per line.
 2. `verdict decide --jsonl -q examples/secret-commands/bank.json < commands.jsonl > scored.jsonl`
-3. Sort by `answers.secrets.noul` and read the top slice yourself. On 400 real commands this
-   question separated blocked ones at 0.77 AUC on the private fine-tune (base Laya not re-measured). It misses commands that write secrets without
-   naming them, such as `vercel env pull`.
-4. To gate automatically, label a few hundred and run `verdict calibrate` first.
+3. Sort by `answers.secrets.noul` and read the top slice yourself. The old private fine-tune
+   scored 0.77 AUC against rejection labels; base Laya scored 0.52 [0.35, 0.69] on a new 120-command
+   holdout (§60). Rejections are an outcome proxy, not secret-access labels. It can miss commands
+   that write secrets without naming them, such as `vercel env pull`.
+4. Before using a cut, label the property you actually need, run `verdict calibrate`, and require
+   useful held-out performance. Calibration cannot create a ranking that is absent.
 
 **Triage a backlog of status threads:** score each thread's latest human or agent message with
 `examples/room-triage/bank.json`, then read the top of each column. Filter out bot and linter posts
@@ -298,12 +303,12 @@ The rules that came out of doing it once:
 |---|---|
 | `verdict ask TEXT QUESTION` | one question inline: yes/no, `-o` choice, `-l` score; `--cut` sets the exit status |
 | `verdict cascade -q BANK --escalate URL` | Laya answers every state from stdin; a second server (Jev) re-asks the least-sure `--share` (default 0.3) or those under `--below`; rows say `primary` or `escalated`; `--check LABELLED.jsonl` measures whether it helps for the task, `--fit` (with `--out`) fits each yes/no cut on 70% and reports the held-out 30%, `--calibration FILE` uses a fitted cut to decide and to choose what to send (§52, §54, §55) |
-| `verdict classify TEXT --tree FILE` | one text into one leaf of a two-level tree, for more than 20 options: groups of at most 20, then the options of the best `--beam` groups (default 2); 77 options went from 0.38 flat to 0.55 (§50) |
+| `verdict classify TEXT --tree FILE` | one text into one leaf of a two-level tree, for more than 20 options: groups of at most 20, then the options of the best `--beam` groups (default 2); `--json` includes first-stage `group_probabilities` and `searched_groups` for diagnostics; 77 options went from 0.38 flat to 0.55 (§50) |
 | `verdict decide STATE -q BANK` | a bank of questions about one state, as JSON; `--jsonl` for many states |
 | `verdict calibrate LABELLED -q BANK` | fits a cut or temperature on labelled examples, reported held out |
 | `verdict rank SCORED NAME=WEIGHT ...` | ranks a `decide --jsonl` run by a weighted sum of its rescaled answers, with each dimension's share; no model |
 | `verdict docs [readme\|guide\|api\|findings\|pipeline\|routing] [N]` | prints a project document from the installed tool; `findings 38` prints one section |
-| `verdict questions [NAME] [--json]` | questions measured to work, each with its result; use by name with `-q` |
+| `verdict questions [NAME] [--json]` | questions with recorded measurements and limitations; use by name with `-q` |
 | `verdict presets [NAME] [--json]` | Laya's built-in banks |
 | `verdict validate -q BANK [--json]` | checks a bank with no server or model: structure, wording, truncation ([scripts and agents](#scripts-and-agents)) |
 | `verdict bench [--verify CARD]` | answer quality on pinned public datasets; the release gate; `--systemone URL` scores a Jev-compatible endpoint (hosted Jev through TypeSafe's SDK when `verdict[jev]` is installed). The scorecard also records `timing`: calls, median and p95 milliseconds, and the tokens a service reported; `--verify` ignores it |

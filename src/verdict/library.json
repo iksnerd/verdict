@@ -1,5 +1,5 @@
 {
-  "about": "Questions measured to work, usable as `-q NAME`. Real-label entries cite FINDINGS; bench-backed entries take their question from bench_suites.json and their number from the latest scorecard, which is base Laya, the model a public install runs. A real-label entry says which model it was measured on. Failed questions are not listed here; they are what library.lint warns about.",
+  "about": "Questions with recorded measurements, usable as `-q NAME`. Outcomes and model matter: some real-label proxies have not shown signal on base Laya. Bench-backed entries take their question from bench_suites.json and their number from the latest scorecard. Real-label entries cite FINDINGS and name the measured model; outcome proxies are not semantic gold labels. Failed question shapes are what library.lint warns about.",
   "questions": [
     {
       "name": "is_instruction",
@@ -18,8 +18,8 @@
         "instructions": "Is this an approval (ok, yes, go ahead)?"
       },
       "state": "a user turn to an agent, as plain text",
-      "measured": "AUC 0.69 on 700 real turns, predicting that a skill fired; measured on the private fine-tune, not yet on base Laya",
-      "source": "FINDINGS §28"
+      "measured": "AUC 0.52 (0.45 to 0.60) on 400 real turns (53 followed by a skill call); base Laya, no/yes choice. This sample does not establish skill-use prediction; the private fine-tune previously scored 0.69 on a different cohort",
+      "source": "FINDINGS §28, §60"
     },
     {
       "name": "touches_secret",
@@ -28,8 +28,8 @@
         "instructions": "Does `command` read, print or change a secret, key, token or credential?"
       },
       "state": "{\"command\": \"<a shell command>\"}",
-      "measured": "AUC 0.77 held out (Haiku 4.5 0.73, regex 0.64), predicting a blocked command; measured on the private fine-tune, not yet on base Laya",
-      "source": "FINDINGS §29, §32"
+      "measured": "AUC 0.52 (0.35 to 0.69) on 120 held-out commands (11 rejected); base Laya, no/yes choice. Rejection is an outcome proxy, not a secret-access label; the private fine-tune previously scored 0.77 on a different cohort",
+      "source": "FINDINGS §29, §32, §60"
     },
     {
       "name": "work_finished",
@@ -38,8 +38,8 @@
         "instructions": "Does `latest` say the work is finished, shipped or resolved?"
       },
       "state": "{\"latest\": \"<a status update>\"}",
-      "measured": "read, no labels: about 9 of the top 11 right; read on the private fine-tune, not yet on base Laya",
-      "source": "FINDINGS §30"
+      "measured": "AUC 0.70 (0.63 to 0.77) on 200 latest room messages, predicting resolved room status (100 resolved); base Laya, no/yes choice. Room status is an outcome proxy, not a semantic completion label",
+      "source": "FINDINGS §30, §60"
     },
     {
       "name": "sentiment",

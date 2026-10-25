@@ -1,7 +1,7 @@
 """Hierarchical classification: a coarse choice among groups, then a fine one inside the best few.
 
-Laya's options share one token budget, so past about 20 an exclusive choice degrades (Banking77,
-77 options: 0.43, FINDINGS §41) and `ask`/`decide` refuse it. Two levels of at most 20 reach up to
+`ask`/`decide` default to at most 20 options. A tree helps Banking77 but loses to a flat choice
+on CLINC150 (FINDINGS §50, §58); compare both on labelled examples. Two levels of at most 20 reach up to
 400 labels at the price of one pass for the groups and one per group tried. The best leaf is the
 one with the highest joint probability, P(group) * P(option | group), over the `beam` best groups:
 a wider beam recovers a leaf whose group was ranked second.
@@ -15,18 +15,22 @@ from typing import Any, Callable
 
 from ..errors import QuestionError
 
-#: laya's measured limit for one exclusive choice; the same constant `library.lint` refuses at.
+#: Conservative default for each level, matching `library.lint`; not a measured accuracy cliff.
 MAX_LEVEL = 20
 
 Ask = Callable[[Any, dict], dict]
 
 
 class Classification:
-    """The best leaf, the path to it, its joint probability and the runners-up."""
+    """The best leaf, runners-up, and the first-stage scores and groups searched."""
 
-    def __init__(self, candidates: list[dict], passes: int):
+    def __init__(self, candidates: list[dict], passes: int, *,
+                 group_probabilities: dict[str, float] | None = None,
+                 searched_groups: list[str] | None = None):
         self.candidates = candidates
         self.passes = passes
+        self.group_probabilities = dict(group_probabilities or {})
+        self.searched_groups = list(searched_groups or [])
 
     @property
     def label(self) -> str:
@@ -43,6 +47,8 @@ class Classification:
     def as_dict(self) -> dict:
         return {"label": self.label, "path": self.path, "probability": round(self.probability, 4),
                 "passes": self.passes,
+                "group_probabilities": dict(self.group_probabilities),
+                "searched_groups": list(self.searched_groups),
                 "candidates": [{**c, "probability": round(c["probability"], 4)}
                                for c in self.candidates]}
 
@@ -93,7 +99,8 @@ def classify(ask: Ask, state: Any, tree: dict, *, beam: int = 2) -> Classificati
     group_p = _choice(ask, state, instructions, _describe(groups), "group")
     passes = 1
     candidates = []
-    for name in sorted(groups, key=lambda g: group_p.get(g, 0.0), reverse=True)[:beam]:
+    searched_groups = sorted(groups, key=lambda g: group_p.get(g, 0.0), reverse=True)[:beam]
+    for name in searched_groups:
         options = groups[name]["options"]
         if len(options) == 1:
             (label,) = options
@@ -106,4 +113,5 @@ def classify(ask: Ask, state: Any, tree: dict, *, beam: int = 2) -> Classificati
             candidates.append({"label": label, "path": [name, label],
                                "probability": group_p.get(name, 0.0) * option_p.get(label, 0.0)})
     candidates.sort(key=lambda c: c["probability"], reverse=True)
-    return Classification(candidates[:5], passes)
+    return Classification(candidates[:5], passes, group_probabilities=group_p,
+                          searched_groups=searched_groups)

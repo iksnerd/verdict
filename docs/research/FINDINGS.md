@@ -2178,3 +2178,167 @@ untested. A tree built from the dataset's own ten domains was not tried, nor a w
 The docs and `classify --help` now say a tree is not always better than one flat choice and to compare
 the two on a labelled sample before choosing. Whether the refusal should become a warning, or take a
 measured exception, is a decision left open.
+
+
+## 59. The hand tree loses mainly at the group stage; the native domains do not rescue it (2026-10-25)
+
+The diagnostic left open in §58, on **exactly the same 300 items** (two per intent, seed 0,
+CLINC150 plus test split), base `aac6fef/laya-mlx`, revision
+`20aed815fc6acde75733882e7ec0e3f28aeb9717`, laya-mlx 0.5.0, 128-token clip. The hand tree is
+unchanged. A second tree uses the dataset authors' [ten domains](https://github.com/clinc/oos-eval/blob/master/data/domains.json),
+15 intents each, described by the domain names alone. No grouping was adjusted after scoring.
+Per-item results now save the item index, text hash, gold label, flat answer, group probabilities,
+gold-group rank, and tree answers. Text is not saved. The flat answer is the model's selected
+choice, rather than an argmax reconstructed from rounded probabilities; a separate check of the
+first 97 items found no difference from that reconstruction.
+
+| arm | accuracy | gold group in beam | difference from flat, paired 95% interval |
+|---|---|---|---|
+| flat, 150-way | **0.557** | — | — |
+| hand, beam 1 | 0.417 | 0.447 | −0.140 [−0.217, −0.063] |
+| hand, beam 2 | 0.463 | 0.590 | **−0.093 [−0.167, −0.020]** |
+| hand, beam 3 | 0.473 | 0.633 | −0.083 [−0.157, −0.010] |
+| native domains, beam 1 | 0.427 | 0.473 | −0.130 [−0.203, −0.053] |
+| native domains, beam 2 | 0.470 | 0.653 | −0.087 [−0.160, −0.010] |
+| native domains, beam 3 | 0.490 | 0.783 | −0.067 [−0.140, 0.007] |
+
+The flat and hand-tree figures reproduce §58. Intervals resample paired item differences,
+10,000 draws, seed 0. Since there are two items per intent, an additional bootstrap resamples
+whole intents: hand beam 2 is −0.093 [−0.180, −0.003], native beam 2 −0.087 [−0.177, 0.007]. The
+native tree's disadvantage is less certain under that clustering; neither analysis establishes
+that it improves flat classification. This is still one dataset and one fixed sample.
+
+**Group errors dominate, but are not the whole loss.** The hand tree at beam 2 makes 161 errors:
+
+| error source | hand, beam 2 | native, beam 2 |
+|---|---|---|
+| gold group outside the beam | **123** | **104** |
+| gold group searched, but wrong leaf inside it | 17 | 20 |
+| gold group searched and its best leaf correct, but another group wins the joint score | 21 | 35 |
+| total | 161 | 159 |
+
+Of the 80 items flat gets right and hand beam 2 loses, 62 are excluded at the group stage. The
+tree recovers 52 items flat misses, leaving 28 net losses. An oracle that supplies the gold group
+scores **0.863** for the hand tree and **0.877** for the native tree. Narrowing can help if the group
+is known; asking Laya to find that group is the main bottleneck. Increasing the native beam to 3
+raises group recall to 0.783, but 59 items then lose through joint ranking. The uncalibrated
+cross-group scores remain another source of error, so group recall alone is insufficient.
+
+**What changed.** `Classification` and `classify --json` now expose `group_probabilities` and
+`searched_groups`, without extra model calls. Per-item public results and their provenance are
+retained locally for paired analysis. The flat default stays at 20 with the existing explicit
+`--allow-unmeasured` override; its message now calls this a conservative default and points to
+both datasets, rather than claiming every larger choice measured at chance. See
+[decision defaults](../design/defaults.md).
+
+
+## 60. The remaining library questions, measured on base with local outcome labels (2026-10-25)
+
+Base Laya and the same revision, dependency and clip as §59, asked as the no/yes choice a public
+install uses. Real transcripts and room messages stay local and are never training data. Only
+aggregate counts, AUCs and intervals are saved; neither private text nor per-item private scores
+are exported. These are one developer's outcomes, not semantic gold labels.
+
+The turn sample is 400 UUID-deduplicated human turns from the 120 newest transcripts, seed 0:
+358 are followed by a tool call, 53 by a skill call. Commands are deduplicated, with 45 explicit
+classifier or user rejections and 355 successful commands; runtime tool errors are not negative
+examples. The 30% command holdout has 120 commands and 11 positives. The room sample is 200 latest
+non-system messages, balanced between 100 resolved rooms and 100 active or paused rooms; the
+current research rooms are excluded.
+
+| question and observed label | n, positives | base AUC, 95% interval |
+|---|---|---|
+| `is_approval`, a skill was called after the turn | 400, 53 | **0.524 [0.449, 0.602]** |
+| `touches_secret`, command rejected, held out | 120, 11 | **0.520 [0.346, 0.686]** |
+| `touches_secret`, same proxy, whole sample | 400, 45 | 0.554 [0.478, 0.633] |
+| `work_finished`, latest message predicts resolved room status | 200, 100 | **0.705 [0.632, 0.771]** |
+
+Intervals are item bootstraps, 1,000 draws, seed 0, conditional on this sample. Neither approval
+nor secret wording establishes prediction of its outcome proxy here. That does not establish
+semantic approval or secret-access accuracy: skill calls and rejections depend on context and
+policy. The completion result ranks resolved room status, not whether a sentence literally says
+that work is finished. Room status may itself be stale. The old fine-tune numbers used different
+cohorts, so this is **not a paired model comparison** and cannot attribute the gaps to the model.
+
+**The `is_instruction` wording sweep.** Split the same 400 turns into discovery and confirmation
+halves before selection (200 each, 180 and 178 tool-positive turns):
+
+| wording | discovery AUC | confirmation AUC |
+|---|---|---|
+| Is this an instruction to perform an action, rather than a question? | **0.592** | **0.771** |
+| Does the user ask the agent to do something? | 0.423 | 0.640 |
+| Does this message request an action or a change? | 0.528 | 0.647 |
+| Does this message tell the assistant what to do? | 0.522 | 0.724 |
+
+The original wins discovery and confirmation. No wording replacement is justified. The large
+swing between halves illustrates the uncertainty with only 20 to 22 negatives per half. Keep the
+larger §49 measurement as the library's baseline; do not replace it with the better-looking half.
+
+**What changed.** `library.json` replaces the three "not yet on base" claims with the new base
+measurements and explicitly names their outcome proxies. It retains the names for measurement
+and reuse, without presenting the older fine-tune results as guarantees on base. The library's
+introduction now says it records measurements, including unconfirmed proxies.
+
+
+## 61. Wording did not fix the weak suites; the injection choice dip was sample drift (2026-10-25)
+
+The public wording check uses the pinned samples and revisions of the release suites: emotion
+240 items; injection, Bulgarian and Russian 200 each. English tasks use base Laya, Cyrillic tasks
+`aac6fef/laya-multilingual-mlx`. Same dependencies and 128-token clip as §59. Each sample is split
+in half, seed 0; select the best wording on discovery, then report its paired difference on
+confirmation. These are familiar public benchmarks, not new unseen tasks. No alternative is
+promoted on the strength of the confirmation half alone.
+
+Candidates: shorter emotion labels or richer emotion synonyms; explicit override wording for
+injection; native-language sentiment instructions and descriptions for Bulgarian and Russian,
+or English wording about customer satisfaction. The original question remains a candidate.
+
+| task, metric | discovery selection | original on confirmation | selected on confirmation | paired difference, 95% interval |
+|---|---|---|---|---|
+| injection yes/no, AUC | explicit override wording | 0.940 | 0.956 | +0.016 [−0.015, 0.054] |
+| injection choice, accuracy | original | 0.830 | 0.830 | 0 |
+| emotion, accuracy | richer synonyms | 0.467 | 0.483 | +0.017 [−0.050, 0.083] |
+| Bulgarian choice, accuracy | original | 0.910 | 0.910 | 0 |
+| Russian choice, accuracy | original | 0.900 | 0.900 | 0 |
+
+The translated Bulgarian question scores 0.90 on confirmation and Russian 0.89, below the original.
+The short emotion question scores 0.55 on confirmation, but lost discovery (0.467 versus 0.483),
+so selecting it now would use the confirmation data to choose the question. A subsequent fixed
+one-vs-rest emotion method asks six separate no/yes questions and picks the highest P(yes):
+discovery 0.458, confirmation 0.500, difference +0.033 [−0.033, 0.100]. Six passes buy no established
+gain over one. **No question replacement is justified by these checks.** The model's weak suites
+remain limitations; this does not claim they have been repaired by wording.
+
+**The injection dip was confounded by the sampler.** Injection is the only release task with
+`english_only`. That filter called the installed laya-mlx language detector before applying the
+seed. The cached 0.2.0 detector admits 405 rows; 0.5.0 admits 359. Their 200-item samples overlap
+on **138 items**, with only five identical positions. A pinned dataset revision and seed did not
+pin this extra filter.
+
+A controlled check runs both cached runtime versions against the union of those samples, with
+identical weights, clipping and the present environment (MLX 0.32.2, Transformers 5.17.0). One
+model runs at a time; installed dependencies are not changed:
+
+| metric | old detector's cohort, runtime 0.2.0 / 0.5.0 | current cohort, runtime 0.2.0 / 0.5.0 |
+|---|---|---|
+| injection yes/no AUC | 0.9059 / 0.9059 | 0.9084 / 0.9084 |
+| injection choice accuracy | 0.805 / 0.805 | 0.795 / 0.795 |
+
+On the current cohort the paired runtime differences are zero, with [0, 0] bootstrap intervals;
+no selected choices change. The choice dip is reproduced by changing the cohort alone. The old
+release yes/no values, 0.914 and 0.900, are **not reproduced in the present environment**, so their
+historical difference cannot be assigned to the runtime from this check. It does establish that
+there is no measured injection regression between these two runtimes under the fixed current
+conditions. The earlier release note's dependency attribution was too strong.
+
+**What changed.** Both injection suites now pin the current 359 eligible row indices at their
+existing dataset revision. Their current 200-item samples are unchanged. Future detector updates
+cannot silently replace them. Every new suite score records `sample_sha256`; verification refuses
+a comparison when both scorecards carry different sample fingerprints. Legacy cards have no
+fingerprint and remain unverifiable on that dimension. Tests cover detector independence,
+invalid or missing row indices, sample fingerprints and comparison refusal. Historical release
+scorecards are retained as written. No dependency downgrade or global question rewrite is made.
+
+The defaults in [decision defaults](../design/defaults.md) are explicit decisions: retain the
+20-option guard and override, beam 2, short read budget, no/yes rewrite and explicit multilingual
+selection; fit cuts per task. A failed wording experiment does not justify changing those defaults.

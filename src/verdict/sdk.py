@@ -172,9 +172,11 @@ class Verdict:
         return DecideResponse.model_validate(raw)
 
     def classify(self, state: Any, tree: dict, *, beam: int = 2, model: Optional[str] = None):
-        """Classify `state` into one leaf of a two-level `tree`: the way past laya's 20-option limit
+        """Classify `state` into one leaf of a two-level `tree`, beyond the 20-option flat default
         (`verdict classify`, FINDINGS §50). Returns a `hierarchy.Classification`: `.label`, `.path`,
-        `.probability`, `.candidates`, `.passes`. A level past 20 raises `VerdictError` (`refused`)."""
+        `.probability`, `.candidates`, `.passes`, `.group_probabilities`, `.searched_groups`.
+        The group diagnostics record stage one without another model call.
+        A level past 20 raises `VerdictError` (`refused`)."""
         from .judge import hierarchy
 
         def ask(st: Any, questions: dict) -> dict:

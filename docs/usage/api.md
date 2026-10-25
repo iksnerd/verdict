@@ -124,8 +124,9 @@ r = TypeSafeClient().system_one(
   profile requires instructions as TypeSafe's current HTTP reference specifies. The local bearer
   key is ignored: the server binds to localhost.
 
-What does not carry over: Jev takes up to 255 choice options, and laya degrades past about 20
-(its options share a 192-token budget). Jev's fan-out pattern, many questions in one call, is one
+What does not carry over: Jev takes up to 255 choice options; verdict's flat Laya choices use a
+conservative default of 20, with an explicit `allow_unmeasured` override. Jev's fan-out pattern,
+many questions in one call, is one
 pass there and one pass per question here (§11). `verdict bench --systemone URL` scores any
 `/v1/systemone` endpoint on the same suites, Jev included with `TYPESAFE_API_KEY`.
 
@@ -164,7 +165,8 @@ Score `legend` and `probabilities` are keyed by strings, as on the wire. `v.mode
 answer and `v.capabilities(model=None)` returns the backend's limits and confidence semantics
 (`family`, option and level caps), over HTTP or from the backend you passed.
 `v.classify(state, tree, beam=2)` walks a two-level tree for more than 20 options and returns a
-`Classification` (`.label`, `.path`, `.probability`, `.candidates`, `.passes`); a level past 20 raises
+`Classification` (`.label`, `.path`, `.probability`, `.candidates`, `.passes`,
+`.group_probabilities`, `.searched_groups`); a level past 20 raises
 `VerdictError` with code `refused` (FINDINGS §50). The CLI's `verdict cascade` composes two servers
 (a primary and a second to re-ask the least-sure answers of); the HTTP API itself stays one backend
 per server, so a cascade is two `verdict serve` processes and a client that merges (§52, §54).

@@ -207,6 +207,42 @@ def test_english_only_drops_what_the_detector_flags(monkeypatch):
     assert "bad 1" not in texts and "bad 2" in texts
 
 
+def test_pinned_eligible_rows_do_not_depend_on_the_installed_language_detector(monkeypatch):
+    monkeypatch.setattr(bench.inputs, "language", lambda state: pytest.fail("dynamic filter"))
+    s = suite(english_only=True, eligible_rows=[0, 1, 2, 10, 11, 12])
+    assert sorted(t for t, _ in bench.sample(s, ROWS)) == [
+        "bad 0", "bad 1", "bad 2", "good 0", "good 1", "good 2"]
+
+
+def test_shipped_language_filtered_suites_pin_their_eligible_rows():
+    filtered = [s for s in bench.load_suites() if s.english_only]
+    assert filtered and all(s.eligible_rows for s in filtered)
+    assert filtered[0].eligible_rows == filtered[1].eligible_rows
+
+
+@pytest.mark.parametrize("indices", [[], [True], [-1], [0, 0], ["1"]])
+def test_invalid_eligible_rows_are_rejected(indices):
+    with pytest.raises(ValueError, match="eligible_rows"):
+        suite(eligible_rows=indices)
+
+
+def test_missing_pinned_rows_fail_instead_of_silently_changing_the_sample():
+    with pytest.raises(ValueError, match="eligible_rows"):
+        bench.sample(suite(eligible_rows=[100]), ROWS)
+
+
+def test_scorecards_fingerprint_the_actual_sample():
+    s = suite()
+    items = bench.sample(s, ROWS)
+    original = bench.score(s, items, fake_noul)
+    assert original["sample_sha256"] == bench.score(s, items, fake_noul)["sample_sha256"]
+    changed = [("different text", items[0][1]), *items[1:]]
+    assert original["sample_sha256"] != bench.score(s, changed, fake_noul)["sample_sha256"]
+    assert bench.verify({"suites": {s.name: original}},
+                        {"suites": {s.name: bench.score(s, changed, fake_noul)}}) == [
+        "toy: sample differs from the previous scorecard; rerun the baseline on the same items"]
+
+
 # ---- a /v1/systemone contestant (TypeSafe's Jev, or verdict itself) ------------------------------
 
 import httpx  # noqa: E402

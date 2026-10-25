@@ -68,23 +68,25 @@ _OFF_PAGE = re.compile(
 _ABSENCE = re.compile(r"\b(ordinary|normal|regular|typical|benign|legitimate)\b", re.IGNORECASE)
 
 
-#: Past this many options a choice degrades: they share one token budget, so at 77 each gets 3 or
-#: 4 tokens, and Laya scored 0.43 on Banking77 against Jev's 0.87 (Laya's README; FINDINGS §41).
+#: Conservative default, not a measured cliff: trees help Banking77 but lose on CLINC150 (§58).
+#: `allow_unmeasured` permits a labelled comparison without changing other callers' defaults.
 MAX_OPTIONS = 20
 
 
 def lint(questions: dict[str, Any], max_options: int | None = MAX_OPTIONS) -> list[str]:
     """Warnings for questions whose wording has failed before. Empty when nothing matches.
 
-    `max_options` is laya's token budget; pass None for a backend with its own limit (Jev takes 255).
+    `max_options` is the conservative choice limit; pass None for a backend with its own limit
+    (Jev takes 255).
     """
     out = []
     for qid, q in questions.items():
         n = len(q.get("criteria") or {}) if q.get("type") == "choice" else 0
         if max_options is not None and n > max_options:
-            out.append(f"{qid} has {n} options; past {max_options} they share too few tokens to "
-                       "tell apart (Banking77, 77 options: 0.43, FINDINGS §41). Split it into "
-                       "yes/no questions, shortlist the options first, or use an LLM")
+            out.append(f"{qid} has {n} options; {max_options} is a conservative default, not a "
+                       "measured accuracy boundary. A tree helped Banking77 but lost to a flat "
+                       "150-way choice on CLINC150 (FINDINGS §50, §58). Compare flat and tree "
+                       "on a labelled sample, or shortlist the options first")
         text = inputs.instruction_text(q)
         m = _OFF_PAGE.search(text)
         if m:
@@ -177,7 +179,7 @@ def prepare(state: Any, questions: dict[str, Any], *, model: str, allow_unmeasur
 
 
 def refusal(problems: list[str], opt_out: str = CLI_OPT_OUT) -> str:
-    return ("; ".join(problems) + ". Refused, because answers to this shape measured at chance; "
+    return ("; ".join(problems) + ". Refused by the default question checks; "
             f"{opt_out} asks anyway")
 
 

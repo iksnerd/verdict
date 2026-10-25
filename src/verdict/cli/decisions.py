@@ -212,7 +212,7 @@ def _ask_cmd(args: argparse.Namespace) -> int:
 
 
 def _classify_cmd(args: argparse.Namespace) -> int:
-    """A text into one leaf of a two-level tree: the way past laya's 20-option limit."""
+    """A text into one leaf of a two-level tree, beyond the 20-option flat default."""
     from ..judge import hierarchy
     from .. import inputs
 

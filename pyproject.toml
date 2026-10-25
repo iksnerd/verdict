@@ -55,6 +55,7 @@ packages = ["src/verdict"]
 "docs/usage/patterns.md" = "verdict/_docs/patterns.md"
 "docs/usage/rough-edges.md" = "verdict/_docs/rough-edges.md"
 "docs/usage/models.md" = "verdict/_docs/models.md"
+"docs/design/defaults.md" = "verdict/_docs/defaults.md"
 # `verdict examples` reads these from an installed tool the same way.
 "examples" = "verdict/_examples"
 

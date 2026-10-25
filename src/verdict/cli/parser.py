@@ -101,11 +101,12 @@ a field (`message`) when the text is plain text. Ask what the text says or does 
 """
 
 CLASSIFY_HELP = """\
-Classify one text into one leaf of a two-level tree, for more options than one choice can take.
+Classify one text into one leaf of a two-level tree for a large label set.
 
-laya's options share one token budget, so past 20 an exclusive choice degrades (77 options: 0.43,
-FINDINGS §41) and `ask` and `decide` refuse it. A tree asks which of at most 20 groups, then which
-of at most 20 options inside the best few groups, and ranks leaves by P(group) * P(option | group).
+`ask` and `decide` refuse more than 20 options by default; --allow-unmeasured permits a flat
+comparison. This is a conservative default, not an accuracy boundary. A tree asks which of at
+most 20 groups, then which of at most 20 options inside the best few groups, and ranks leaves
+by P(group) * P(option | group).
 On Banking77 (77 labels, base laya) that took 0.38 to 0.55 with --beam 2 (FINDINGS §50). It is not
 always the better choice: on CLINC150 (150 distinct intents) one flat choice beat both trees tried
 (0.56 against 0.47 and 0.31, §58), so compare the two on your own labelled sample. For
@@ -212,8 +213,9 @@ A bank looks like:
               "criteria": {"refund": "money back", "info": "a question", "other": "none fit"}},
    "anger":  {"type": "score",  "instructions": "How angry is `message`?",
               "criteria": ["calm", "annoyed", "angry"]}}
-A choice with more than 20 options is refused: they share a 192-token budget (77 options scored
-0.43, FINDINGS §41). Each option is also cut at 48 tokens without an error (--check reports where).
+A choice with more than 20 options is refused by default; --allow-unmeasured permits a flat
+comparison with a tree on labelled items (FINDINGS §50, §58). Each option is also cut at 48 tokens
+without an error (--check reports where).
 
 With --jsonl over 10 or more states, each yes/no question's range is printed to stderr, and a
 range under 0.1 is flagged: an ordering squeezed that tight ranks almost nothing, and the cause
@@ -676,7 +678,7 @@ def main(argv: list[str] | None = None) -> int:
     dc.add_argument("topic", nargs="?", default="readme", choices=list(docs_cmd.TOPIC_NAMES),
                     metavar="TOPIC",
                     help="readme (default), concepts, guide, api, findings, pipeline, routing, "
-                         "patterns, rough-edges or models")
+                         "patterns, rough-edges, models or defaults")
     dc.add_argument("section", nargs="?", type=int, help="with findings: one section, by number")
     dc.set_defaults(fn=docs_cmd._docs_cmd)
 

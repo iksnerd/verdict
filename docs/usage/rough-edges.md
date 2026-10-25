@@ -14,11 +14,12 @@ asked as a choice between `no` and `yes` score 0.91 to 0.94. **verdict asks ever
 way** and hands back P(yes); `--yesno` sends the plain form. Laya's own advice, opaque `A`/`B` keys,
 measured no better (§47).
 
-## Past about 20 options an exclusive choice degrades
+## Many options can weaken an exclusive choice
 
 Options share one token budget. Banking77, 77 options: 0.38 here, 0.43 in Laya's README, against
 Jev's 0.78 on the same items (§41, §50, §53). **verdict refuses a choice with more than 20
-options.** `verdict classify` walks a two-level tree instead: 0.38 to 0.55 with `--beam 2` on
+options by default.** `--allow-unmeasured` (HTTP: `?allow_unmeasured=true`) permits a flat comparison.
+`verdict classify` walks a two-level tree instead: 0.38 to 0.55 with `--beam 2` on
 Banking77. It does not always help: on CLINC150's 150 distinct intents one flat choice scored 0.56
 and the trees 0.31 to 0.47 (§58). Near-neighbour options hurt a flat choice and distinct ones may
 not, so compare the flat choice with the tree on a labelled sample before choosing. For topical
@@ -109,5 +110,8 @@ questions combined in code (`verdict rank`).
 ## The numbers on real traffic depend on the model
 
 `is_instruction` is AUC 0.65 on base Laya and 0.75 on the private fine-tune, measured on the same
-kind of real turns (§49). Three library questions are still quoted from the fine-tune and say so in
-`verdict questions`.
+kind of real turns (§49). The remaining library questions now have base measurements (§60):
+`is_approval` and `touches_secret` did not establish skill-call or rejection prediction on the new
+sample. `work_finished` ranked resolved room status at AUC 0.70; that proxy does not establish
+semantic completion accuracy. The cohorts differ from the fine-tune's, so the gaps are not a paired
+model comparison. Wording changes did not establish improvements on the weak public suites (§61).
