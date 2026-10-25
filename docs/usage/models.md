@@ -2,7 +2,7 @@
 
 verdict answers with one of these, chosen by `[model]` in `verdict.toml`, `--lang` and
 `--systemone`. The numbers are the 12 pinned public suites of `verdict bench` (200 to 240 items
-each, 95% intervals in the scorecards) unless stated; `bench/scorecards/v0.9.0.json` is base Laya
+each, 95% intervals in the scorecards) unless stated; `bench/scorecards/v0.10.0.json` is base Laya
 and `bench/head-to-head/` holds Jev's run (FINDINGS §48).
 
 | model | what it is | use it for | limits |

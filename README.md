@@ -18,7 +18,7 @@ can answer instead (`verdict serve --systemone`), or only for the answers Laya i
 Apple Silicon, Python 3.11.
 
 ```sh
-uv tool install --python 3.11 'verdict[mlx,laya] @ git+https://github.com/iksnerd/verdict.git@v0.9.0'
+uv tool install --python 3.11 'verdict[mlx,laya] @ git+https://github.com/iksnerd/verdict.git@v0.10.0'
 verdict init        # picks a free port and writes ~/.config/verdict/config.toml
 verdict serve &     # holds the model, so each call costs milliseconds
 
@@ -54,7 +54,7 @@ Hosted Jev is optional. Add TypeSafe's SDK by reinstalling with the `jev` extra,
 `TYPESAFE_API_KEY` supply the key:
 
 ```sh
-uv tool install --force --python 3.11 'verdict[mlx,laya,jev] @ git+https://github.com/iksnerd/verdict.git@v0.9.0'
+uv tool install --force --python 3.11 'verdict[mlx,laya,jev] @ git+https://github.com/iksnerd/verdict.git@v0.10.0'
 ```
 
 verdict is installed from GitHub, not PyPI: the name `verdict` there is an unrelated project, so
@@ -71,13 +71,15 @@ injection at 0.93 AUC (the 0.9.0 release scorecard, 200 items each; method in
 
 It is the wrong tool for categories that need world knowledge (seven commit types: 0.44 accuracy,
 where an LLM does better) or a maintainer's judgment (bug report or support question: 0.59, and two
-rounds of fine-tuning did not fix it; [FINDINGS §41, §45](docs/research/FINDINGS.md)). It is also wrong for
-more than 20 options in one flat choice (a tree takes more: `verdict classify`), for long
+rounds of fine-tuning did not fix it; [FINDINGS §41, §45](docs/research/FINDINGS.md)). It is also a
+weak fit for a very large flat choice (Banking77's 77 options: 0.38; a tree or an embedding model
+does better there, but not everywhere, see below), for long
 documents (it reads the first 128 tokens), for comparing numbers
 (which of four decks has the highest mean: chance, where "is this one negative" is perfect;
 [§46](docs/research/FINDINGS.md)), and for questions about consequences or difficulty, which score at
-chance. verdict refuses those questions and more than
-20 options rather than answer them badly, and warns when a text runs past what it reads.
+chance. verdict refuses those questions rather than answer them badly, refuses more than 20 options
+as a conservative default (`--allow-unmeasured` overrides it), and warns when a text runs past what
+it reads.
 
 ## Features
 
@@ -89,7 +91,8 @@ chance. verdict refuses those questions and more than
   held-out split.
 - **Measured questions by name:** `verdict questions` lists questions with their measured results;
   `-q is_instruction,touches_secret` uses them.
-- **Guard rails:** question shapes that measured at chance, and questions about a field the
+- **Guard rails:** question shapes that measured at chance, choices of more than 20 options (a default,
+  not a measured cliff), and questions about a field the
   state does not have, are refused (`--allow-unmeasured` asks anyway), and `validate` checks a bank
   with no model loaded.
 - **Built for scripts and agents:** every error is one `verdict:` line and exit 2, and under
@@ -121,10 +124,12 @@ chance. verdict refuses those questions and more than
   it helps, and says so when it would not (AG News). Fitting the yes/no cut (`--fit`, `--calibration`)
   lifts Laya alone from 0.81 to 0.86 on five bench suites and makes the cascade pick better.
   Every escalated text leaves the machine ([FINDINGS §52, §54, §55](docs/research/FINDINGS.md)).
-- **More than 20 options:** `verdict classify TEXT --tree FILE` walks a two-level tree. On Banking77
+- **Many options:** `verdict classify TEXT --tree FILE` walks a two-level tree and reports the group scores it
+  used (`group_probabilities`, `searched_groups`). On Banking77
   (77 intents) it took base Laya from 0.38 flat to 0.55 ([FINDINGS §50](docs/research/FINDINGS.md)); the tree
   is `examples/banking-tree/tree.json`. It does not always help: on CLINC150 (150 distinct intents)
-  one flat choice scored 0.56 and the trees 0.31 to 0.47 ([§58](docs/research/FINDINGS.md)), so compare
+  one flat choice scored 0.56 and the trees 0.31 to 0.49, mostly losing at the group stage
+  ([§58, §59](docs/research/FINDINGS.md)), so compare
   on a labelled sample. For topical labels an embedding model does better still
   (0.89 on the same items, FINDINGS §53); Laya is a judge of typed facts, not a retriever.
 - **The docs ship with the tool:** `verdict docs`, `verdict docs concepts`, `verdict docs guide`,
@@ -155,7 +160,7 @@ flowchart TB
         direction LR
         CAL["calibrate<br/>cut or temperature"]
         CAS["cascade<br/>ask the second only when unsure"]
-        HIE["hierarchy<br/>classify, over 20 options"]
+        HIE["hierarchy<br/>classify, large label sets"]
         SW["switch · router · rank"]
     end
 
@@ -227,6 +232,8 @@ Using verdict (`docs/usage/`):
 How it is built (`docs/design/`):
 
 - [pipeline.md](docs/design/pipeline.md): building a checkpoint.
+- [defaults.md](docs/design/defaults.md): the defaults verdict keeps, why, and how to override each
+  (`verdict docs defaults`).
 - [routing.md](docs/design/routing.md): the big-or-small model switch, kept as a worked example of
   why a routing question can sit at chance.
 
