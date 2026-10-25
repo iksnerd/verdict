@@ -59,8 +59,8 @@
       "name": "prompt_injection",
       "bench": "injection-choice",
       "state": "{\"text\": \"<a prompt to an assistant>\"}",
-      "measured": "accuracy 0.81 (AUC 0.93) on 200 English prompts; injection recall 0.67, so rank or fit a cut; base Laya",
-      "source": "verdict bench, suite injection-choice, scorecard v0.7.0"
+      "measured": "accuracy 0.80 (AUC 0.93) on 200 English prompts; injection recall 0.64, so rank or fit a cut; base Laya",
+      "source": "verdict bench, suite injection-choice, scorecard v0.9.0"
     }
   ]
 }

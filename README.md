@@ -18,7 +18,7 @@ can answer instead (`verdict serve --systemone`), or only for the answers Laya i
 Apple Silicon, Python 3.11.
 
 ```sh
-uv tool install --python 3.11 'verdict[mlx,laya] @ git+https://github.com/iksnerd/verdict.git@v0.8.0'
+uv tool install --python 3.11 'verdict[mlx,laya] @ git+https://github.com/iksnerd/verdict.git@v0.9.0'
 verdict init        # picks a free port and writes ~/.config/verdict/config.toml
 verdict serve &     # holds the model, so each call costs milliseconds
 
@@ -54,7 +54,7 @@ Hosted Jev is optional. Add TypeSafe's SDK by reinstalling with the `jev` extra,
 `TYPESAFE_API_KEY` supply the key:
 
 ```sh
-uv tool install --force --python 3.11 'verdict[mlx,laya,jev] @ git+https://github.com/iksnerd/verdict.git@v0.8.0'
+uv tool install --force --python 3.11 'verdict[mlx,laya,jev] @ git+https://github.com/iksnerd/verdict.git@v0.9.0'
 ```
 
 verdict is installed from GitHub, not PyPI: the name `verdict` there is an unrelated project, so
@@ -66,7 +66,7 @@ command that says it will.
 It fits a task with many items, short texts, a question about what the text shows, a yes/no or a
 few named options, and a need for a number to rank or cut on, or for data to stay on the machine.
 On public labelled sets the default model ranks sentiment at 0.97, spam at 0.98 and prompt
-injection at 0.93 AUC (the 0.7.0 release scorecard, 200 items each; method in
+injection at 0.93 AUC (the 0.9.0 release scorecard, 200 items each; method in
 [FINDINGS §40](docs/research/FINDINGS.md)).
 
 It is the wrong tool for categories that need world knowledge (seven commit types: 0.44 accuracy,

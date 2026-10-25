@@ -2,7 +2,7 @@
 
 verdict answers with one of these, chosen by `[model]` in `verdict.toml`, `--lang` and
 `--systemone`. The numbers are the 12 pinned public suites of `verdict bench` (200 to 240 items
-each, 95% intervals in the scorecards) unless stated; `bench/scorecards/v0.7.0.json` is base Laya
+each, 95% intervals in the scorecards) unless stated; `bench/scorecards/v0.9.0.json` is base Laya
 and `bench/head-to-head/` holds Jev's run (FINDINGS §48).
 
 | model | what it is | use it for | limits |
@@ -19,7 +19,7 @@ and `bench/head-to-head/` holds Jev's run (FINDINGS §48).
 |---|---|---|
 | SST-2, yes/no / choice | 0.500 / 0.910 | **0.989** / 0.960 |
 | spam, yes/no / choice | 0.982 / 0.960 | 0.986 / 0.965 |
-| injection, yes/no / choice | 0.914 / 0.805 | **0.992** / 0.865 |
+| injection, yes/no / choice | 0.900 / 0.795 | **0.992** / 0.865 |
 | AG News, 4 topics | **0.940** | 0.825 |
 | emotion, 6 labels | 0.475 | 0.500 |
 | Bulgarian, choice / yes/no | 0.925 / 0.963 | **0.985** / **1.000** |
