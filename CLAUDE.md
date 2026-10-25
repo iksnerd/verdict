@@ -11,6 +11,19 @@ History is pushed, so do not rewrite it without asking.
 - Python 3.11, `>=3.11.4,<3.12` (pinned: the ML wheels this project needs have no 3.14 build), managed by uv
 - pydantic 2, FastAPI, pytest
 
+## Layout
+- `src/verdict/`: the public surface stays at the top (`schema`, `sdk`, `client`, `api`, `config`,
+  `library`, `errors`, `cli/`). `backends/` holds `Backend` and what implements it (`base`, `mlx`,
+  `jev`, `systemone`, `engine`, `capabilities`); `judge/` what is built on a backend (`cascade`,
+  `calibrate`, `hierarchy`, `switch`, `router`, `rank`); `evaluation/` the scorecard and router eval.
+  `backend_jev.py` and `backend_systemone.py` are old import paths kept as aliases.
+- `tests/` mirrors that: `backends/`, `serving/`, `judge/`, `evaluation/`, `pipeline/`, `project/`
+  (config, docs, plugin, public-repo guards), `cli/`. Shared doubles are in `tests/fakes.py`
+  (`FakeEngine`, `noul()`, `uniform_client()`, `REPO_ROOT`) and the `fake_laya` fixture in `conftest.py`.
+- `docs/`: `usage/` (guide, api, patterns, rough-edges, models), `design/` (pipeline, routing,
+  `architecture.mmd`), `research/FINDINGS.md`. `training/` holds the pipeline `configs/` and `cloud/`
+  scripts; `bench/` the release scorecards and the router prompts.
+
 ## Conventions
 - The wire format in `src/verdict/schema.py` mirrors laya's `predict(state, questions)`.
   Change it only if laya's changes; the dataset, teachers, model and API share it. laya's in turn
