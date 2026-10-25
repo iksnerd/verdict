@@ -1917,6 +1917,7 @@ whether the tree could be built mechanically, and whether retrieval does better.
 | approach | accuracy |
 |---|---|
 | embedding model alone: nearest label to the text (`embeddinggemma:300m`, no Laya) | **0.886** |
+| the same with `embeddinggemma-2:latest` (2026-10-11, see §57) | 0.932 |
 | Jev, flat 77-way | 0.779 [0.734, 0.825] |
 | Laya choice over the embedding model's top 10 | 0.653 [0.601, 0.708] |
 | Laya choice over the top 20 | 0.623 [0.568, 0.679] |
@@ -2101,3 +2102,24 @@ finds what Laya cannot. It stays documentation-only until someone needs it.
 **Caveats.** One fixed regularization and no tuning, so a tuned probe on Laya's encoder could do
 somewhat better. 200 to 240 items per task limits n to 40 per class. Public English and Cyrillic review,
 spam, prompt and news sets; a task far from these may differ.
+
+**Update, same day: `embeddinggemma-2` against v1** (`scripts/eval_embed_v2.py`; Ollama's `embeddinggemma-2:latest`, a
+740M multimodal model on Gemma 4 that Ollama serves quantized to `nvfp4`, against `embeddinggemma:300m`).
+The mixed result is why v1 stays the reference:
+
+| job | v1 (300m) | v2 (latest) |
+|---|---|---|
+| Banking77 nearest label, 308 items (§53) | 0.886 | **0.932** |
+| Banking77 gold label in the top 5 | 0.984 | **0.997** |
+| few-shot probe, macro over 7 tasks, 5 per class | **0.786** | 0.756 |
+| the same, 10 per class | **0.820** | 0.789 |
+| the same, 20 per class | **0.850** | 0.821 |
+| the same, 40 per class (5 tasks) | **0.928** | 0.903 |
+
+v2 retrieves a label better (+0.046 on 308 items, the paired interval was not computed) but gives
+the probe worse features at every size, most on sentiment (SST-2 at 20 per class: 0.833 against 0.906) and
+on Russian reviews (0.866 against 0.910). Neither beats Laya's own zero-shot answer on the classification
+tasks, so §57's conclusion does not change. The text-only `570m` build gave bit-identical embeddings on all
+seven suites and the same Banking77 numbers: the builds differ in their vision and audio towers, not in how
+text is embedded, so the model size is not a lever. Not tried: any unquantized weights (Ollama serves `nvfp4`),
+so this says nothing about v2 as released, only about the build Ollama serves.
