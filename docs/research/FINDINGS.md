@@ -2346,3 +2346,47 @@ scorecards are retained as written. No dependency downgrade or global question r
 The defaults in [decision defaults](../design/defaults.md) are explicit decisions: retain the
 20-option guard and override, beam 2, short read budget, no/yes rewrite and explicit multilingual
 selection; fit cuts per task. A failed wording experiment does not justify changing those defaults.
+
+
+## 62. Label confusability does not explain why a tree helps on Banking77 and hurts on CLINC150 (2026-10-25)
+
+§50 and §58 left a question: a tree took Banking77 from 0.38 to 0.55 and cost CLINC150 0.09. One
+guess was that Banking77's labels have near-duplicate neighbours that a flat choice splits its
+probability between, while CLINC150's are distinct. The test and its rule were written before any
+model ran (`scripts/eval_confusability.py`). A label's confusability is the highest cosine
+similarity between its name and any other label name in its dataset (`embeddinggemma:300m`, label
+names only). Same samples and trees as §50 and §58 (Banking77 308 items, CLINC150 300, seed 0, base
+Laya, 128-token clip), only the flat choice and the tree at beam 2 asked. The arms reproduce the
+earlier numbers exactly: flat 0.380 and tree 0.545 on Banking77, flat 0.557 and tree 0.463 on
+CLINC150. Public data only.
+
+**The guess is not supported.** The rule: confusability explains the split only if (H1) Banking77's
+median is higher than CLINC150's and (H3) the tree's gain over flat is larger on the more
+confusable half of the labels, pooled, with an interval that excludes zero.
+
+| check | Banking77 | CLINC150 |
+|---|---|---|
+| H1: median nearest-neighbour cosine of the label names | 0.666 | **0.713** |
+| H2: flat accuracy, less minus more confusable half | +0.049 [−0.061, +0.154] | −0.007 [−0.120, +0.113] |
+| H3: tree gain, more minus less confusable half | +0.168 [+0.052, +0.282] | −0.036 [−0.182, +0.115] |
+
+H1 fails in the wrong direction: CLINC150's label names are the closer together. H2 shows no
+difference in flat accuracy between the halves in either dataset. Pooled over both datasets, H3 is
++0.027 [−0.066, +0.125]. The three-nearest-neighbour variant is also not decisive (pooled
++0.067 [−0.030, +0.160]).
+
+**One lead, not a finding.** Within Banking77 alone the tree gains more on the confusable labels
+(+0.266 against +0.098). CLINC150 shows nothing of the kind, the test was not set up to decide on
+one dataset, and the two datasets used differently drawn trees, so a dataset effect and a tree-quality
+effect cannot be told apart here.
+
+**Where the trees lose is the group stage, again.** The gold group fell outside the beam in 76% of
+the CLINC150 tree's errors (123 of 161) and 49% of Banking77's (68 of 140), which fits §59.
+
+**Limits.** Label-name cosine is a rough proxy for confusability. At about 300 items per dataset,
+differences under roughly 0.1 are out of reach.
+
+**What this changes.** Nothing in the tool. There is still no rule from a task's labels alone for
+choosing between a flat choice and a tree, so the docs keep the advice to compare both on a
+labelled sample of your own (§58, [decision defaults](../design/defaults.md)). A fair test of
+tree quality would build the trees for both datasets by one method; that is not done.
