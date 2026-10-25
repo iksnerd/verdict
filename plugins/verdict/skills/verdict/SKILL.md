@@ -123,6 +123,7 @@ Measured on real agent traffic (FINDINGS §25 to §33):
 verdict ask "<text>" "<yes/no question>"                     # 0.72
 verdict ask "<text>" "<question>" -o a -o "b=description"    # b 0.61, P(b)
 verdict classify "<text>" --tree tree.json                    # more than 20 options: groups, then options
+                                                              # (not always better than one flat choice: compare, §58)
 verdict cascade -q bank.json --escalate URL --check labelled.jsonl --fit --out fit.json   # would it help? fit the cut
 verdict cascade -q bank.json --escalate URL < rows.jsonl      # local first, the unsure share re-asked
 verdict ask "<text>" "<question>" -l low -l mid -l high      # 1.30/2 high

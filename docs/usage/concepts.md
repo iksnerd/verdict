@@ -39,8 +39,9 @@ and combine the answers in code, rather than writing one question that weighs se
 questions folded into one scored below the best single one (FINDINGS §27), and each question costs a
 forward pass, about 30 ms. See [patterns](patterns.md).
 
-Two limits are enforced, not advised. A flat `choice` takes at most 20 options; past that, use
-`verdict classify` with a tree. Questions measured at chance (consequences, difficulty, an absence
+Two limits are enforced, not advised. A flat `choice` takes at most 20 options; past that, try
+`verdict classify` with a tree, and check it against the flat choice on a labelled sample, since a
+tree is not always better (FINDINGS §58). Questions measured at chance (consequences, difficulty, an absence
 instead of a property) are refused. The reasons are in [rough edges](rough-edges.md).
 
 Describing both sides of a yes/no with `criteria` dropped `is_sensitive` from AUC 0.813 to 0.633
