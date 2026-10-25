@@ -36,7 +36,8 @@ command still works by loading the model itself, and says so on stderr.
 
 Laya runs on this machine. `serve --systemone URL` answers with a remote model (Jev) instead, and
 `cascade` asks Laya first and re-asks Jev only about the answers Laya is least sure of. Both send
-text out, and say so. More than 20 options: `classify` with a tree. What it is bad at:
+text out, and say so. A large label set: `classify` with a tree, or one flat choice (compare
+both on your labels). What it is bad at:
 `verdict docs rough-edges`.
 """
 
@@ -63,8 +64,9 @@ your own labelled examples (`verdict calibrate`) before gating anything on one.
 
 Ask about what the text says. `ask` and `decide` refuse (exit 2) the shapes that scored at chance:
 a question about a consequence, difficulty or risk (FINDINGS §25, §29), a yes/no about an absence
-("is this ordinary", §33), more than 20 options (§41; `classify` takes more, in a tree), and a
-question naming a field the state lacks (plain text has none). --allow-unmeasured asks anyway. A
+("is this ordinary", §33) and a question naming a field the state lacks (plain text has none).
+More than 20 options is refused too, as a conservative default (§58), not a measured cliff.
+--allow-unmeasured asks anyway. A
 new yes/no is asked as a choice between no and yes and answered as a yes/no (§38). The HTTP API
 does the same.
 
@@ -309,8 +311,8 @@ and the error names the process to look up) or for a usage or config error.
 
 VALIDATE_HELP = """\
 Validate a bank with no model, download or server: its structure, and the question shapes `decide`
-refuses because they scored at chance (a consequence, difficulty or risk; a yes/no about an
-absence; more than 20 options). Possible option truncation and a question with no instructions
+refuses by default (a consequence, difficulty or risk; a yes/no about an absence; more than 20
+options, a conservative default). Possible option truncation and a question with no instructions
 are warnings. This checks structure, not prediction quality.
 """
 
@@ -599,7 +601,7 @@ def main(argv: list[str] | None = None) -> int:
     server_flags(a)
     a.set_defaults(fn=decisions._ask_cmd)
 
-    c = command("classify", "one text into one leaf of a two-level tree (more than 20 options)",
+    c = command("classify", "one text into one leaf of a two-level tree",
                 CLASSIFY_HELP, CLASSIFY_EPILOG)
     c.add_argument("text", help="the text to classify; a JSON object is sent as a structured "
                                 "state; @FILE reads a file; - reads stdin")

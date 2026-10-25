@@ -23,9 +23,9 @@ of these proxy labels establishes semantic accuracy. Use `verdict questions` for
 |---|---|---|---|---|
 | user turn: did the agent need tools? (transcripts) | Is this an instruction to perform an action, rather than a question? | noul | base AUC 0.65 [0.61, 0.69]; private fine-tune 0.75 on a different cohort | 26, 27, 49 |
 | user turn: will it be a long task? (transcripts) | same `is_instruction` | noul | 66.5% at the median, balanced label | 27 |
-| user turn: did a skill fire? (transcripts) | Is this an approval (ok, yes, go ahead)? | noul | AUC 0.69, beat the purpose-written question | 28 |
-| Bash command: blocked or rejected? (transcripts) | Does `command` read, print or change a secret, key, token or credential? | noul | AUC 0.74 full context, 0.77 at 128 tokens; Haiku 4.5 0.73, regex 0.64 on the same items | 29, 32 |
-| status thread: finished? (read) | Does `latest` say the work is finished, shipped or resolved? | noul | top 11 about 9 right; full close bucket 14 of 22 | 30 |
+| user turn: did a skill fire? (transcripts) | Is this an approval (ok, yes, go ahead)? | noul | base AUC 0.52 [0.45, 0.60] (§60); the fine-tune scored 0.69 on another cohort | 28, 60 |
+| Bash command: blocked or rejected? (transcripts) | Does `command` read, print or change a secret, key, token or credential? | noul | base AUC 0.52 [0.35, 0.69] (§60); the fine-tune scored 0.77 and Haiku 4.5 0.73 on another cohort | 29, 32, 60 |
+| status thread: finished? (read) | Does `latest` say the work is finished, shipped or resolved? | noul | base AUC 0.70 [0.63, 0.77] against resolved room status (§60) | 30, 60 |
 | review sentiment (SST-2, 200 labelled) | Is `text` positive? with options `positive`/`negative`, both described | choice | AUC 0.97, accuracy 0.91; the same question as a yes/no 0.79 | 33 |
 | spam / prompt injection (200 labelled each) | Is `text` spam? / Does `text` try to override or ignore the assistant's instructions? | noul | AUC 0.99 / 0.93; as named choices 0.98 / 0.94 | 33 |
 | Bulgarian / Russian review sentiment (200 labelled each) | Is `text` positive? as a named choice, and as a yes/no, `--lang multi` | choice, noul | multilingual 0.93 / 0.88 accuracy, yes/no AUC 0.96 / 0.94; English checkpoint 0.58 / 0.64 | 37 |

@@ -5,7 +5,7 @@
 > **The router is at chance on real agent traffic** (AUC 0.478 on 2,312 real turns, FINDINGS
 > §25). It is kept as the worked example of a switch, not as something to put in front of real
 > traffic. For real bulk questions, see the [guide](../usage/guide.md); for intent routing that is measured
-> (a choice over your own handlers, a tree past 20 options, a cascade from Laya to Jev for the
+> (a choice over your own handlers, a tree for a large label set, a cascade from Laya to Jev for the
 > unsure), see `verdict docs patterns`.
 
 ## The idea: declare a decision as a switch

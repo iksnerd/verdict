@@ -53,8 +53,8 @@ Plus `model`, the checkpoint that answered.
 It answers as `verdict decide` does, so the same question gets the same number from either:
 
 - A question naming a field the state lacks (a plain-text state has none), or shaped like the
-  questions that measured at chance (a consequence, difficulty or absence; more than 20 options),
-  is refused with a 422 and the reason. `?allow_unmeasured=true` asks anyway. The check reads
+  questions that measured at chance (a consequence, difficulty or absence), or with more than 20
+  options (a conservative default), is refused with a 422 and the reason. `?allow_unmeasured=true` asks anyway. The check reads
   each question's `instructions` only, not its `criteria`. It matches `dangerous`, `risk`/`risky`,
   `consequence(s)`, `difficult(y)`, `cause` and `hard(er) is/for/to` (and, for a yes/no, words like
   `ordinary` or `benign`), so "How dangerous is this ticket?" is refused and the same word in a
@@ -158,7 +158,7 @@ server (the configured one by default), and `Verdict(backend=MlxBackend(...))` o
 `Verdict(backend=JevBackend(...))` answers in this process. Nothing loads a model unless you build
 one, and with no server the error says `no_server` instead of quietly loading 800 MB. The caller
 owns a backend it passes in. The refusals are the CLI's and the HTTP API's, through the same code
-(`library.ask`): a question measured at chance raises `VerdictError` with `status` 422 and `code`
+(`library.ask`): a question refused by the default checks raises `VerdictError` with `status` 422 and `code`
 `"refused"`, and `allow_unmeasured=True` asks anyway. Codes: `refused`, `no_server`,
 `server_timeout`, `server_error`, `upstream` (502), `unknown_model` (400) and `invalid_question`.
 Score `legend` and `probabilities` are keyed by strings, as on the wire. `v.models()` lists what can

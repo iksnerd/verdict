@@ -111,7 +111,8 @@ Measured on real agent traffic (FINDINGS §25 to §33):
   is at least as good.
 - **verdict refuses (exit 2) what measured at chance:** a question about a consequence, difficulty
   or risk ("could this cause harm", 0.53), a yes/no about an absence ("is this ordinary", 0.32 to
-  0.64), a choice past 20 options (0.43 at 77), and a state missing a field the question names.
+  0.64) and a state missing a field the question names. A choice past 20 options is refused as a
+  conservative default, not a measured cliff (a tree helped Banking77 and lost on CLINC150, §58).
   A state far past the 128-token read gets a warning. Reword to ask what the text says or does;
   don't reach for `--allow-unmeasured` unless you will `calibrate` the question on real labels.
 - Give the state named fields and refer to them in backticks:
@@ -168,8 +169,8 @@ questions and a result with `.nouls`, `.choices` and `.scores` (`verdict docs ap
   model), usually because it was started as `uvicorn verdict.api:app` instead of `verdict serve`.
   Stop it and run `verdict serve`. Never gate on a uniform answer.
 - Each call takes about 2 s: no server is answering, so every call loads the model. Start one.
-- "Refused, because answers to this shape measured at chance": the question asks about a
-  consequence or an absence, or names a field the state lacks. Reword it or fix the state. Over
+- "Refused by the default question checks": the question asks about a consequence or an absence,
+  has more than 20 options, or names a field the state lacks. Reword it or fix the state. Over
   HTTP it is a 422 whose body carries `error.code` `refused`; a 422 without `error` is a
   malformed request. A refusal never succeeds on retry, so do not treat it as an outage.
 - A warning says the state isn't English: add `--lang multi` before reading any number.
@@ -188,8 +189,9 @@ A user asks which of the 1,500 shell commands their agent ran last month touched
 1. Too many to read well, and each answer is on the page: a yes/no about what the command does.
    That's a job for verdict. Sorting the commands by which service they touch would be a small
    LLM's job instead (FINDINGS §32).
-2. `verdict questions` lists `touches_secret` (AUC 0.77 on real blocked commands on the private
-   fine-tune, Haiku 4.5 0.73; not yet re-measured on base Laya). Use it by name, with states shaped as it says: `{"command": "..."}`.
+2. `verdict questions` lists `touches_secret` (base Laya AUC 0.52 [0.35, 0.69] on 120 held-out
+   rejected commands, an outcome proxy, §60; the private fine-tune scored 0.77 on another cohort). Do not rely on it
+   to find secrets without checking it on your own labels. Use it by name, with states shaped as it says: `{"command": "..."}`.
 3. Check what is loaded, then start `verdict serve` in the background, or reuse one already
    answering on the port. Score a sample of 200 first:
    `verdict decide --jsonl -q touches_secret --server-only < commands.jsonl > scored.jsonl`.
