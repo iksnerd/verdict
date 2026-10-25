@@ -23,6 +23,16 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # GitHub's generated notes are only a "Full Changelog" link for direct commits, so the notes are a
+      # file reviewed with the code. Checked first: a missing file should not cost a test run.
+      - name: Release notes exist
+        run: |
+          notes="docs/release-notes/$GITHUB_REF_NAME.md"
+          if [ ! -s "$notes" ]; then
+            echo "no $notes: write what this release changes and commit it before tagging" >&2
+            exit 1
+          fi
+
       # setup-uv publishes full versions only; there is no floating `v10` tag (the first run of
       # this workflow failed on exactly that). actions/checkout does keep `v7`.
       - uses: astral-sh/setup-uv@v10.2.0
@@ -62,4 +72,4 @@ jobs:
       - name: Release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" dist/* --title "verdict $GITHUB_REF_NAME" --generate-notes
+        run: gh release create "$GITHUB_REF_NAME" dist/* --title "verdict $GITHUB_REF_NAME" --notes-file "docs/release-notes/$GITHUB_REF_NAME.md"

@@ -100,7 +100,8 @@ Do not re-derive these. Each is measured, in `docs/research/FINDINGS.md`.
 - The agent skill ships from this repo as a plugin: `.claude-plugin/marketplace.json` and
   `plugins/verdict/skills/verdict/`. `tests/project/test_plugin.py` ties the plugin version to
   the package version and refuses private paths in what ships.
-- Releases: a `vX.Y.Z` tag with a committed scorecard (`bench/scorecards/vX.Y.Z.json`, run at
+- Releases: a `vX.Y.Z` tag with committed release notes (`docs/release-notes/vX.Y.Z.md`, which the
+  workflow publishes as the release page) and a committed scorecard (`bench/scorecards/vX.Y.Z.json`, run at
   normal priority); `.github/workflows/release.yml` runs the suite on macOS arm64 on tags only
   (macOS is the only runner with the mlx and laya extras, and downloading model weights plus the
   full suite is real wall-clock time to spend on every push; the pre-commit hook gates day-to-day
