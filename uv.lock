@@ -550,7 +550,7 @@ wheels = [
 
 [[package]]
 name = "laya-mlx"
-version = "0.2.0"
+version = "0.5.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "huggingface-hub" },
@@ -558,9 +558,9 @@ dependencies = [
     { name = "numpy" },
     { name = "tokenizers" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/4c/4c/2b67e41023ee51bf06af9ac4fb4a2b2e015cc3e8af7d779a989fb2332991/laya_mlx-0.2.0.tar.gz", hash = "sha256:d51c2366c3bbccaa1aee87862728b9b51704547ffce5027de37e44756fbf8251", size = 53854, upload-time = "2026-09-22T06:02:22.566Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/2c/d7/7e6d51f58e6799fb86bf41b0dce11daf79f22c99bb640816445285bc43df/laya_mlx-0.5.0.tar.gz", hash = "sha256:a06e85e5f83eb1dbff647411aa406a553c90c44c72b52357580be49a64ecd068", size = 334939, upload-time = "2026-10-20T01:18:03.065Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/61/21/89b7f030fcbfb6327f1fc553480fbeaa2aae7408338ee422c2cf37746e66/laya_mlx-0.2.0-py3-none-any.whl", hash = "sha256:1a80a0cc79c55be808de0b1208a172566209b5780d796b98d86235e9cf335187", size = 63524, upload-time = "2026-09-22T06:02:20.61Z" },
+    { url = "https://files.pythonhosted.org/packages/f9/4c/6e869dd0d7be5b30532a7b044bcd8c3f31d3c5ad1df657301d2596ac4bb2/laya_mlx-0.5.0-py3-none-any.whl", hash = "sha256:de7990580c4be3974663caa21c98684cb02969127ecb0b559609fe2dc78a1d7f", size = 364522, upload-time = "2026-10-20T01:18:01.724Z" },
 ]
 
 [[package]]
