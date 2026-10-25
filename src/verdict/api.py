@@ -7,7 +7,17 @@ from fastapi.responses import JSONResponse
 
 from pydantic import BaseModel, field_validator
 
-from .backends.base import Backend, UniformBackend, UnknownModel
+from .backends.base import (
+    Backend,
+    UniformBackend,
+    UnknownModel,
+    capabilities_of,
+    engine_of,
+    is_proxy,
+    known_models,
+    listed_models,
+    model_id_of,
+)
 from .backends.capabilities import Capabilities
 from .errors import QuestionError
 from .judge.router import BIG_SMALL
@@ -79,11 +89,10 @@ def to_decide_request(body: dict | SystemOneRequest, backend: Backend | None = N
 
 
 def _model_name(name: str | None, backend: Backend | None) -> str | None:
-    if getattr(backend, "preserve_model_names", False):
+    if backend is not None and is_proxy(backend):
         return name
-    else:
-        known = getattr(backend, "known_models", lambda: set())()
-        return None if name in _LOCAL_ALIASES and name not in known else name
+    known = known_models(backend) if backend is not None else set()
+    return None if name in _LOCAL_ALIASES and name not in known else name
 
 
 def _release_date(backend: Backend) -> str:
@@ -91,7 +100,7 @@ def _release_date(backend: Backend) -> str:
     import datetime
     from pathlib import Path
 
-    path = Path(str(getattr(backend, "model_id", "")))
+    path = Path(str(model_id_of(backend, "")))
     stamp = path.stat().st_mtime if path.exists() else datetime.datetime.now().timestamp()
     return datetime.date.fromtimestamp(stamp).isoformat()
 
@@ -178,11 +187,12 @@ def create_app(backend: Backend | None = None) -> FastAPI:
 
     @app.get("/v1/models", response_model=ModelList)
     def models() -> ModelList:
-        if hasattr(backend, "models"):
+        own = listed_models(backend)
+        if own is not None:
             #: A proxied backend (SystemOneBackend) has its own real model list; the cards below
             #: describe laya/Jev's fixed vocabulary and would misdescribe whatever this actually
             #: forwards to.
-            return ModelList(models=[ModelCard(**card) for card in backend.models()])
+            return ModelList(models=[ModelCard(**card) for card in own])
         date = _release_date(backend)
         cards = [
             ModelCard(name="jev-latest", release_date=date,
@@ -191,7 +201,7 @@ def create_app(backend: Backend | None = None) -> FastAPI:
             ModelCard(name="english", release_date=date,
                       description=f"The served checkpoint, {backend.name}."),
         ]
-        known = getattr(backend, "known_models", lambda: set())()
+        known = known_models(backend)
         if "multilingual" in known:
             cards.append(ModelCard(name="multilingual", release_date=date,
                                    description=f"laya's multilingual checkpoint, "
@@ -206,10 +216,7 @@ def create_app(backend: Backend | None = None) -> FastAPI:
     def capabilities(model: str | None = None) -> Capabilities:
         """Verdict extension; model cards stay compatible with TypeSafe's SDKs."""
         try:
-            if hasattr(backend, "capabilities"):
-                return backend.capabilities(_model_name(model, backend))
-            return Capabilities(family="uniform" if backend.name == "uniform" else "unknown",
-                                model=backend.name)
+            return capabilities_of(backend, _model_name(model, backend))
         except UnknownModel as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -218,13 +225,13 @@ def create_app(backend: Backend | None = None) -> FastAPI:
         were fitted on; the CLI clips because it has a tokenizer loaded, and before this the
         server did not, so the two front doors could disagree on a long prompt. A backend with no
         engine (uniform) has no tokenizer and needs none."""
-        if getattr(backend, "preserve_model_names", False):
+        if is_proxy(backend):
             # The thresholds were fitted on laya's difficulty and is_sensitive scores. Another
             # model's numbers on the same questions would route on a scale nobody measured.
             raise Refused(f"routing is calibrated for laya's difficulty and is_sensitive scores "
                           f"(FINDINGS §15, §25); this server fronts {backend.name}, which they "
                           "were never fitted on. Use /v1/decide with your own questions")
-        engine = getattr(backend, "engine", None)
+        engine = engine_of(backend)
         if engine is not None:
             prompt = engine.clip(prompt)
         return backend.decide(DecideRequest(state=prompt, questions=BIG_SMALL.questions)).answers

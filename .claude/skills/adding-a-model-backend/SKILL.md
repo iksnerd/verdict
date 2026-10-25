@@ -18,6 +18,12 @@ kind — a different architecture entirely, not a different laya checkpoint. `[m
 `verdict.toml` already covers "another laya checkpoint"; reach for this skill only when the model
 itself is not laya.
 
+Declare `proxy = True` if it forwards to another model server (it then keeps the caller's model
+names and gets the refusals, and `/v1/route` is refused); `proxy = False` if it runs the model here.
+`models()`, `capabilities(model)`, `known_models()` and `engine` are optional, read through the
+helpers in `backends/base.py`; `tests/backends/test_backend_contract.py` pins what a `decide`-only
+backend gets behind every front door.
+
 ## 1. Verify it is real before spending any more effort on it
 
 Every session that has gone looking for "Jev alternatives" has found at least one fabricated

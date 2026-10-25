@@ -26,6 +26,8 @@ from ..schema import (ChoiceAnswer, DecideRequest, DecideResponse, NoulAnswer, S
 class MlxBackend:
     """`load_options` go straight through to `laya_mlx.load`; see `engine.load` for which ones."""
 
+    proxy = False
+
     def __init__(self, model_id: str = DEFAULT_MODEL, agent: Any = None,
                  multilingual_id: str | None = None, extra_checkpoints: dict[str, str] | None = None,
                  budget: int | None = None, bits: int = 16, **load_options: Any):

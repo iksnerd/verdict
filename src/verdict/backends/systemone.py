@@ -19,7 +19,7 @@ class SystemOneBackend:
     api.typesafe.ai hostname is detected automatically; other providers retain unknown limits.
     """
 
-    preserve_model_names = True
+    proxy = True
 
     def __init__(self, base_url: str, model: str = "jev-latest", key: str = "local", **ask_kwargs: Any):
         self.base_url, self.model = base_url, model

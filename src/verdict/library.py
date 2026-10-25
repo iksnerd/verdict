@@ -201,14 +201,15 @@ def ask(backend: Any, request: Any, *, allow_unmeasured: bool = False, yesno: bo
     """`prepare` around `backend.decide`: what the HTTP API and the Python client both do, so the
     same question gets the same treatment and the same number from either.
 
-    A proxy backend (`preserve_model_names`: Jev, Kev, another verdict) gets the refusals, so a
+    A proxy backend (`proxy = True`: Jev, Kev, another verdict) gets the refusals, so a
     question is refused whichever model is behind it, and nothing else of laya's: no clipping, no
     yes/no rewrite and no 20-option cap, since Jev takes 255. A refused question never reaches the
     upstream. Raises `QuestionError` for a refusal.
     """
+    from .backends.base import is_proxy, model_id_of
     from .schema import DecideRequest, DecideResponse, NoulAnswer, laya_questions
 
-    if getattr(backend, "preserve_model_names", False):
+    if is_proxy(backend):
         prepare(request.state, {qid: q.model_dump(exclude_none=True)
                                 for qid, q in request.questions.items()},
                 model=request.model or backend.name, allow_unmeasured=allow_unmeasured,
@@ -216,7 +217,7 @@ def ask(backend: Any, request: Any, *, allow_unmeasured: bool = False, yesno: bo
         return backend.decide(request)
     questions, rewritten, _ = prepare(
         request.state, laya_questions(request.questions),
-        model=request.model or getattr(backend, "model_id", backend.name),
+        model=request.model or model_id_of(backend, backend.name),
         allow_unmeasured=allow_unmeasured, yesno=yesno, opt_out=opt_out)
     out = backend.decide(DecideRequest(state=request.state, questions=questions,
                                        model=request.model))

@@ -68,7 +68,7 @@ class JevBackend:
     manager or `close()`; `create_app` does not close a backend it was given.
     """
 
-    preserve_model_names = True
+    proxy = True
 
     def __init__(self, model: str = DEFAULT_MODEL, *, api_key: str | None = None,
                  base_url: str | None = None, retry: sdk.RetryPolicy | None = None,

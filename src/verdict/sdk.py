@@ -26,7 +26,7 @@ from pydantic import ValidationError
 
 from . import client as _http
 from . import library
-from .backends.base import UnknownModel
+from .backends.base import UnknownModel, capabilities_of, known_models, listed_models
 from .backends.capabilities import Capabilities
 from .errors import QuestionError
 from .systemone import UpstreamError
@@ -192,10 +192,10 @@ class Verdict:
         if self._backend is None:
             with _served_errors():
                 return _http.models(self._url)
-        if hasattr(self._backend, "models"):
-            return list(self._backend.models())
-        known = getattr(self._backend, "known_models", lambda: set())()
-        return [{"name": self._backend.name}, *({"name": n} for n in sorted(known))]
+        own = listed_models(self._backend)
+        if own is not None:
+            return list(own)
+        return [{"name": self._backend.name}, *({"name": n} for n in sorted(known_models(self._backend)))]
 
     def capabilities(self, model: Optional[str] = None) -> Capabilities:
         """The backend's limits and confidence semantics: family (`laya`, `jev`, ...), how many
@@ -203,10 +203,7 @@ class Verdict:
         if self._backend is None:
             with _served_errors():
                 return Capabilities.model_validate(_http.capabilities(self._url, model))
-        if hasattr(self._backend, "capabilities"):
-            return self._backend.capabilities(model)
-        return Capabilities(family="uniform" if self._backend.name == "uniform" else "unknown",
-                            model=self._backend.name)
+        return capabilities_of(self._backend, model)
 
     def close(self) -> None:
         """Nothing to release: there is no connection pool, and a passed-in backend is the
