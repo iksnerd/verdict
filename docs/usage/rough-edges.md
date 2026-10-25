@@ -74,7 +74,8 @@ and not others (§42).
 ## Describing the two sides of a yes/no hurts
 
 Adding `criteria` for `true` and `false` dropped `is_sensitive` from AUC 0.813 to 0.633 (§22). Leave
-them out unless you have measured otherwise.
+them out unless you have measured otherwise. Naming the sides with `labels` is the same lever and is
+not measured either; a labelled yes/no is not rewritten as a no/yes choice, so it also loses that fix.
 
 ## Probabilities rank; they are not calibrated
 

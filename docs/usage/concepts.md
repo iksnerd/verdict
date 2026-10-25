@@ -30,7 +30,7 @@ A question has a type and, usually, instructions:
 
 | Type | Asks | `criteria` |
 |---|---|---|
-| `noul` | does the statement hold (yes/no) | optional; leave it off (see below) |
+| `noul` | does the statement hold (yes/no) | optional; leave it off (see below). `labels` can name the two sides, unmeasured |
 | `choice` | which one of these options | the options, as names or `name: description`; at least 2 |
 | `score` | how much, on an ordered scale | the levels, lowest first; at least 2 |
 

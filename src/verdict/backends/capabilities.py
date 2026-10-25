@@ -42,6 +42,9 @@ class Capabilities(BaseModel):
                 raise QuestionError(f"{qid}: {self.family} accepts at most {self.max_score_levels} score levels")
             if self.family == "jev" and q.instructions is None:
                 raise QuestionError(f"{qid}: Jev requires instructions")
+            if self.family == "jev" and getattr(q, "labels", None) is not None:
+                raise QuestionError(f"{qid}: Jev does not take noul labels; use `criteria` for what "
+                                    "each side means, or ask a choice")
 
 
 def jev_capabilities(model: str) -> Capabilities:

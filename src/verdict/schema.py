@@ -66,6 +66,10 @@ class NoulQuestion(BaseModel):
     type: Literal["noul"]
     instructions: Instructions = None
     criteria: Union[dict[str, Any], None] = None
+    #: What each side is called, as laya's `noul` takes since laya-mlx 0.3.0:
+    #: `{"false": "calm", "true": "urgent"}`. Passed through as written, and not measured: describing
+    #: the sides hurt (FINDINGS §22), and a labelled yes/no is not rewritten as a no/yes choice.
+    labels: Any = None
 
     model_config = {"extra": "forbid"}
 
@@ -75,6 +79,18 @@ class NoulQuestion(BaseModel):
             unknown = set(self.criteria) - {"true", "false"}
             if unknown:
                 raise ValueError(f"noul criteria keys must be 'true' and/or 'false', got {sorted(unknown)}")
+        return self
+
+    @model_validator(mode="after")
+    def _two_distinct_labels(self):
+        if self.labels is None:
+            return self
+        refusal = "noul labels must map exactly 'false' and 'true' to distinct non-empty strings"
+        if not isinstance(self.labels, dict) or set(self.labels) != {"false", "true"}:
+            raise ValueError(refusal)
+        names = [self.labels["false"], self.labels["true"]]
+        if not all(isinstance(n, str) and n.strip() for n in names) or names[0].strip() == names[1].strip():
+            raise ValueError(refusal)
         return self
 
 

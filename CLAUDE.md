@@ -91,7 +91,8 @@ Do not re-derive these. Each is measured, in `docs/research/FINDINGS.md`.
 
 ## Commands
 - `uv sync --extra mlx --extra laya --extra jev` then `uv run pytest` (`jev` is TypeSafe's SDK; its
-  tests skip without it). Plain `uv sync` *removes* the extras,
+  tests skip without it). `verdict bench` also needs `--extra bench` (the `datasets` library), which
+  every other sync drops. Plain `uv sync` *removes* the extras,
   which silently skips the laya-dependent tests (including the guard that the vendored router bank
   still matches `laya.router_questions()`) and breaks the CLI and the scorer.
 - `git config core.hooksPath .githooks` once per clone enables the pre-commit hook. It blocks the

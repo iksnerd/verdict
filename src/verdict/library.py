@@ -135,8 +135,8 @@ def as_choice(questions: dict[str, Any], keep_measured: bool = True
     """
     out, rewritten = {}, set()
     for qid, q in questions.items():
-        if q.get("type") != "noul" or (keep_measured and is_measured(q)):
-            out[qid] = q
+        if q.get("type") != "noul" or q.get("labels") or (keep_measured and is_measured(q)):
+            out[qid] = q   # a labelled yes/no is asked as written: its labels would be dropped
             continue
         sides = q.get("criteria") or {}
         out[qid] = {"type": "choice", "instructions": q.get("instructions", ""),

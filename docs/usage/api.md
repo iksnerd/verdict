@@ -44,6 +44,11 @@ Plus `model`, the checkpoint that answered.
   is also a 400. `GET /v1/models` lists whatever is configured. Both `/v1/decide` and `/v1/systemone` can select them.
 - A `noul` question may describe its sides with `criteria: {"true": ..., "false": ...}`. On this
   project's data that hurt (§22), so leave them out unless you've measured otherwise.
+- A `noul` question may also name its sides with `labels: {"false": "calm", "true": "urgent"}`, as
+  laya's `noul` takes since laya-mlx 0.3.0: exactly those two keys, distinct non-empty strings, else a
+  422 with laya's wording. It reaches laya as written and is not measured. A labelled yes/no is asked as a
+  yes/no, not rewritten as a no/yes choice (the rewrite would drop the labels), so on base Laya it
+  can follow its own labels instead of the text (§38, §40). Jev has no such field and is refused it.
 
 It answers as `verdict decide` does, so the same question gets the same number from either:
 
