@@ -18,7 +18,7 @@ can answer instead (`verdict serve --systemone`), or only for the answers Laya i
 Apple Silicon, Python 3.11.
 
 ```sh
-uv tool install --python 3.11 'verdict[mlx,laya] @ git+https://github.com/iksnerd/verdict.git@v0.10.0'
+uv tool install --python 3.11 'verdict[mlx,laya] @ git+https://github.com/iksnerd/verdict.git@v0.10.1'
 verdict init        # picks a free port and writes ~/.config/verdict/config.toml
 verdict serve &     # holds the model, so each call costs milliseconds
 
@@ -54,7 +54,7 @@ Hosted Jev is optional. Add TypeSafe's SDK by reinstalling with the `jev` extra,
 `TYPESAFE_API_KEY` supply the key:
 
 ```sh
-uv tool install --force --python 3.11 'verdict[mlx,laya,jev] @ git+https://github.com/iksnerd/verdict.git@v0.10.0'
+uv tool install --force --python 3.11 'verdict[mlx,laya,jev] @ git+https://github.com/iksnerd/verdict.git@v0.10.1'
 ```
 
 verdict is installed from GitHub, not PyPI: the name `verdict` there is an unrelated project, so
