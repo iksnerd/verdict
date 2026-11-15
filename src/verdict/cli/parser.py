@@ -77,7 +77,8 @@ resolved value and where it came from. `verdict serve --systemone URL` answers w
 /v1/systemone server (Jev) and sends it every state; its key is $TYPESAFE_API_KEY, never a setting.
 
 Errors: one `verdict:` line on stderr and exit 2, never a traceback; exit 2 never means "no".
-With --json or --jsonl (and always for decide), also {"error": {"code", "message"}} on stdout.
+With --json or --jsonl, also {"error": {"code", "message"}} on stdout; always for decide, for
+cascade without --check and for route --batch without --quiet, whose stdout is JSON anyway.
 Codes: usage, refused (reword, or --allow-unmeasured), no_server, server_timeout, server_error,
 config, not_found. A mistyped command, question, preset or example gets a "did you mean".
 """
@@ -165,7 +166,8 @@ every labelled example once and reports, per question, the primary, the cascade 
 their own, and names the questions where escalating would not help.
 
 Exit status: 0; 1 when some escalations failed (those rows keep the primary answer); 2 for a usage
-error or a refused question.
+error or a refused question. Without --check stdout is JSON rows, so an error is also
+{"error": {"code", "message"}} on stdout; with --check, only under --json.
 """
 
 ASK_EPILOG = """\
@@ -283,7 +285,8 @@ a router to trust. `verdict ask` with a surface question is the better tool. It 
 `serve` fronts Jev or another model: the thresholds were fitted to laya's scores.
 
 Exit status: 0 for small, 1 for big, 2 for an error. With --json, 0 on success whichever branch:
-the answer is in the JSON.
+the answer is in the JSON. With --json, or --batch without --quiet, an error is also
+{"error": {"code", "message"}} on stdout.
 """
 
 SERVE_EPILOG = """\
@@ -530,6 +533,19 @@ def _quiet_dependencies() -> None:
     os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
     warnings.filterwarnings("ignore", message="laya-mlx: this checkpoint ships temperatures",
                             category=RuntimeWarning)
+
+
+def _json_errors(args: argparse.Namespace) -> bool:
+    """Whether a failure is also printed as JSON on stdout: when the command's stdout is JSON.
+
+    --json and --jsonl ask for it. `decide` prints JSON whatever its flags, and so do `cascade`
+    without --check (one row per state) and `route --batch` without --quiet. `cascade --check`
+    alone and `route --batch --quiet` print words, so their failures stay on stderr only."""
+    if getattr(args, "json", False) or getattr(args, "jsonl", False) or args.cmd == "decide":
+        return True
+    if args.cmd == "cascade":
+        return not args.check
+    return args.cmd == "route" and args.batch and not args.quiet
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -812,9 +828,7 @@ def main(argv: list[str] | None = None) -> int:
     i.set_defaults(fn=setup._init_cmd)
 
     args = ap.parse_args(argv)
-    # decide prints JSON whatever its flags, so its failures are JSON too.
-    support.JSON_ERRORS = bool(getattr(args, "json", False) or getattr(args, "jsonl", False)
-                               or args.cmd == "decide")
+    support.JSON_ERRORS = _json_errors(args)
     try:
         return args.fn(args)
     except (FileNotFoundError, QuestionError, client.ServerError, client.NoServer,

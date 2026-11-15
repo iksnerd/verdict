@@ -52,6 +52,9 @@ def score_preamble(states: list[dict], reference: dict, teacher: Teacher, bank: 
                 labels = teacher.label(s["state"], bank)
             except LabelError:
                 failures += 1
+                cost = cost_of(teacher.model, teacher.last_in, teacher.last_out)  # the failed tries were billed too
+                spent += cost
+                ledger.add(cost)
                 continue
             cost = cost_of(teacher.model, teacher.last_in, teacher.last_out)
             spent += cost

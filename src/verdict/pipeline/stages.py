@@ -78,26 +78,36 @@ def label_stage(cfg: PipelineConfig, run_dir: Path, transport, bank: dict, pream
         return sum(cost_of(r["model"], r["tokens_in"], r["tokens_out"]) for r in labels.rows())
 
     failures = 0
+    # A failed call is billed for the tries that answered, but writes no row, so `spent()` cannot
+    # see it. It is counted here, for this run only: nothing on disk records what the failed calls
+    # of an earlier run cost, so a resumed run starts this at zero and the cap is per run for them.
+    failed_spend = 0.0
     for s in states:
         for model, reps in plan:
             for rep in range(reps):
                 key = f'{s["id"]}|{model}|{rep}'
                 if key in labels.done:
                     continue
-                if spent() >= lc.max_cost_usd:
-                    raise SystemExit(f"cost cap ${lc.max_cost_usd} reached (spent ${spent():.4f}); rerun to resume")
+                total = spent() + failed_spend
+                if total >= lc.max_cost_usd:
+                    raise SystemExit(f"cost cap ${lc.max_cost_usd} reached (spent ${total:.4f}, "
+                                     f"${failed_spend:.4f} of it on failed calls); rerun to resume")
                 t = teachers[model]
                 try:
                     out = t.label(s["state"], bank)
                 except LabelError:
                     failures += 1
+                    failed_spend += cost_of(model, t.last_in, t.last_out)
                     continue
                 labels.append({"id": s["id"], "model": model, "repeat": rep, "labels": out,
                                "tokens_in": t.last_in, "tokens_out": t.last_out})
     rows = labels.rows()
-    counts = {"states": len(states), "label_rows": len(rows), "failures_this_run": failures}
+    counts = {"states": len(states), "label_rows": len(rows), "failures_this_run": failures,
+              "failed_spend_usd": round(failed_spend, 6)}
+    # `spend_usd` stays what the rows on disk cost, every run included; `failed_spend_usd` is this run's only.
     write_manifest(run_dir, "label", cfg, ["states.jsonl"], ["labels.jsonl"], counts,
-                   spend_usd=round(spent(), 6), teachers=[m for m, _ in plan])
+                   spend_usd=round(spent(), 6), failed_spend_usd=round(failed_spend, 6),
+                   teachers=[m for m, _ in plan])
     return counts
 
 

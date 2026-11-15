@@ -56,6 +56,22 @@ ENV_OVERRIDES = {
     ("systemone", "model"): "VERDICT_SYSTEMONE_MODEL",
 }
 
+#: Settings where "none" is a value worth saying: the variable set but empty clears what a file
+#: set. Only the remote backend qualifies, because a file that names one sends it every state and
+#: one run must be able to stay local. Everywhere else an empty variable is ignored: an empty
+#: server URL or model path means nothing.
+ENV_CLEARS = frozenset({("systemone", "url")})
+
+
+def _env(section: str, key: str) -> str | None:
+    """The environment's value for a setting, or None when it has no say. An empty variable has
+    no say, except for the settings in `ENV_CLEARS`, where it is returned as ""."""
+    var = ENV_OVERRIDES.get((section, key))
+    value = os.environ.get(var) if var else None
+    if value or (value == "" and (section, key) in ENV_CLEARS):
+        return value
+    return None
+
 
 class Settings:
     """Resolved settings. A plain class for the same reason `switch.Branch` is: the stdlib
@@ -170,9 +186,9 @@ def load(path: Path | None = None) -> Settings:
     data = _merge(DEFAULTS, loaded)
     defaulted = tuple(k for k in DEFAULTS if k not in loaded)
 
-    for (section, key), var in ENV_OVERRIDES.items():
-        value = os.environ.get(var)
-        if value:
+    for section, key in ENV_OVERRIDES:
+        value = _env(section, key)
+        if value is not None:
             data[section][key] = value
 
     return Settings(
@@ -206,7 +222,7 @@ def explain(path: Path | None = None) -> list[dict[str, Any]]:
     rows = []
     for (section, key), value in values.items():
         var = ENV_OVERRIDES.get((section, key))
-        if var and os.environ.get(var):
+        if _env(section, key) is not None:
             source = f"${var}"
         else:
             source = next((str(f) for f, data in files if key in data.get(section, {})),

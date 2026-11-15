@@ -66,3 +66,36 @@ def test_ledger_persists_and_the_cap_stops_spending(tmp_path):
     ledger2 = SpendLedger(tmp_path / "l2.json", cap=5)
     ledger2.add(1.25)
     assert SpendLedger(tmp_path / "l2.json", cap=5).total() == 1.25
+
+
+class PaidGarbage:
+    """Answers every call, bills for it, and never returns a parsable label."""
+
+    def __init__(self):
+        self.calls = 0
+
+    def __call__(self, model, prompt):
+        self.calls += 1
+        return "not json", {"promptTokenCount": 1000, "candidatesTokenCount": 500}
+
+
+# gemini-2.5-flash-lite: (1000 * 0.10 + 500 * 0.40) / 1e6 = $0.0003 a try, two tries a failed label
+FAILED_LABEL_USD = 0.0006
+
+
+def test_a_failed_label_is_charged_to_the_ledger(tmp_path):
+    ledger = SpendLedger(tmp_path / "l.json", cap=5)
+    r = score_preamble(states(), refs(), Teacher("gemini-2.5-flash-lite", PaidGarbage(), preamble="P"), BANK,
+                       cache_path=tmp_path / "c.jsonl", ledger=ledger)
+    assert r["failures"] == 3 and r["n"] == 0
+    assert ledger.total() == pytest.approx(3 * FAILED_LABEL_USD)
+    assert r["spend_usd_this_call"] == pytest.approx(3 * FAILED_LABEL_USD)
+    assert SpendLedger(tmp_path / "l.json", cap=5).total() == pytest.approx(3 * FAILED_LABEL_USD)
+
+
+def test_failed_labels_alone_can_reach_the_spend_cap(tmp_path):
+    t = PaidGarbage()
+    with pytest.raises(SystemExit):
+        score_preamble(states(), refs(), Teacher("gemini-2.5-flash-lite", t, preamble="P"), BANK,
+                       cache_path=tmp_path / "c.jsonl", ledger=SpendLedger(tmp_path / "l.json", cap=0.001))
+    assert t.calls == 4  # two failed labels ($0.0012) cross the cap; the third state is never asked

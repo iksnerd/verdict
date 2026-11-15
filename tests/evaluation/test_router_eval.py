@@ -121,3 +121,137 @@ def test_the_refit_runs_as_a_module(capsys):
         router_eval.main(["--help"])
     assert exit_.value.code == 0
     assert "--refit" in capsys.readouterr().out
+
+
+# --- the replay cache: an entry is only as good as what it was measured for ---
+
+class CountingEngine:
+    """Stands in for a loaded checkpoint: answers from the prompt text, counts what it was asked."""
+
+    def __init__(self, die_after=None):
+        self.asked, self.budgets, self.die_after = [], [], die_after
+
+    def clip(self, prompt, budget=None):
+        self.budgets.append(budget)
+        return prompt
+
+    def predict(self, state, questions):
+        if self.die_after is not None and len(self.asked) >= self.die_after:
+            raise KeyboardInterrupt
+        self.asked.append(state)
+        return {"difficulty": {"type": "score", "score": float(len(state))},
+                "is_sensitive": {"type": "noul", "noul": 0.25}}
+
+
+@pytest.fixture
+def engine(monkeypatch):
+    """`measure` loads through `backends.engine.load`; this hands it a fake and counts the loads."""
+    from verdict.backends import engine as engine_module
+
+    eng = CountingEngine()
+    eng.loads = 0
+
+    def fake_load(model, *a, **kw):
+        eng.loads += 1
+        return eng
+
+    monkeypatch.setattr(engine_module, "load", fake_load)
+    return eng
+
+
+def test_a_full_matching_cache_loads_no_model(tmp_path, engine):
+    from verdict.evaluation.router_eval import measure
+
+    rows, _ = rows_and_probs()
+    cache = tmp_path / "probs.json"
+    first, times = measure(rows, "m", cache)
+    assert engine.loads == 1 and len(times) == 4
+
+    again, times = measure(rows, "m", cache)
+    assert engine.loads == 1 and times == []
+    assert {r["id"]: again[r["id"]]["difficulty"] for r in rows} == \
+           {r["id"]: first[r["id"]]["difficulty"] for r in rows}
+
+
+def test_an_edited_prompt_under_the_same_id_is_measured_again(tmp_path, engine):
+    from verdict.evaluation.router_eval import measure
+
+    rows, _ = rows_and_probs()
+    cache = tmp_path / "probs.json"
+    measure(rows, "m", cache)
+    rows[0] = dict(rows[0], prompt="a much longer and different prompt")
+    engine.asked.clear()
+
+    probs, times = measure(rows, "m", cache)
+    assert engine.asked == ["a much longer and different prompt"]
+    assert len(times) == 1
+    assert probs["s1"]["difficulty"] == float(len("a much longer and different prompt"))
+
+
+def test_a_changed_question_bank_misses_every_entry(tmp_path, engine, monkeypatch):
+    from verdict.evaluation import router_eval
+
+    rows, _ = rows_and_probs()
+    cache = tmp_path / "probs.json"
+    router_eval.measure(rows, "m", cache)
+    bank = {q: dict(spec) for q, spec in router_eval.ROUTER_BANK.items()}
+    bank["difficulty"]["instructions"] = "A reworded question."
+    monkeypatch.setattr(router_eval, "ROUTER_BANK", bank)
+    engine.asked.clear()
+
+    _, times = router_eval.measure(rows, "m", cache)
+    assert len(engine.asked) == 4 and len(times) == 4
+
+
+def test_a_changed_token_budget_misses_every_entry(tmp_path, engine, monkeypatch):
+    from verdict.evaluation import router_eval
+
+    rows, _ = rows_and_probs()
+    cache = tmp_path / "probs.json"
+    router_eval.measure(rows, "m", cache)
+    monkeypatch.setattr(router_eval, "PROMPT_TOKEN_BUDGET", router_eval.PROMPT_TOKEN_BUDGET * 2)
+    engine.asked.clear()
+    engine.budgets.clear()
+
+    router_eval.measure(rows, "m", cache)
+    assert len(engine.asked) == 4
+    # The budget in the fingerprint is the one the prompt was actually clipped to.
+    assert set(engine.budgets) == {router_eval.PROMPT_TOKEN_BUDGET}
+
+
+def test_an_entry_with_no_fingerprint_is_measured_again_and_the_rest_is_left_alone(tmp_path, engine):
+    import json
+
+    from verdict.evaluation.router_eval import measure
+
+    rows, _ = rows_and_probs()
+    cache = tmp_path / "probs.json"
+    old = {"difficulty": 9.0, "is_sensitive": 0.9}
+    cache.write_text(json.dumps({"m": {"s1": old, "gone": old}, "other-model": {"s1": old}}))
+
+    probs, times = measure(rows, "m", cache)
+    assert len(times) == 4 and probs["s1"]["difficulty"] == float(len("easy one"))
+    stored = json.loads(cache.read_text())
+    assert stored["m"]["gone"] == old            # not asked for in this run: untouched
+    assert stored["other-model"] == {"s1": old}
+    assert stored["m"]["s1"]["difficulty"] == float(len("easy one"))
+
+
+def test_an_interrupted_run_keeps_what_it_measured(tmp_path, engine):
+    import json
+
+    from verdict.evaluation.router_eval import measure
+
+    rows, _ = rows_and_probs()
+    cache = tmp_path / "probs.json"
+    engine.die_after = 2
+    with pytest.raises(KeyboardInterrupt):
+        measure(rows, "m", cache)
+    assert set(json.loads(cache.read_text())["m"]) == {"s1", "s2"}
+    assert [p.name for p in tmp_path.iterdir()] == ["probs.json"]   # no temp file left behind
+
+    engine.die_after = None
+    engine.asked.clear()
+    probs, times = measure(rows, "m", cache)
+    assert engine.asked == ["hard one", "hard two"] and len(times) == 2
+    assert set(probs) >= {"s1", "s2", "b1", "b2"}

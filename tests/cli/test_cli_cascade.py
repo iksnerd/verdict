@@ -267,3 +267,32 @@ def test_a_calibration_file_of_the_wrong_shape_is_a_usage_error(servers, monkeyp
     fit.write_text(content)
     code, _, err = run(["--share", "0.5", "--calibration", str(fit)], capsys)
     assert code == 2 and str(fit) in err and what in err and err.count(str(fit)) == 1
+
+
+# ---- errors: run mode prints JSON rows, so its failures are JSON too ---------------------------
+def test_run_mode_reports_a_usage_error_as_json_on_stdout(servers, monkeypatch, capsys):
+    """A script reading the rows gets JSON either way, as with `decide`; no --json needed."""
+    stdin(monkeypatch)
+    code, rows, err = run(["--share", "0.2", "--below", "0.6"], capsys)
+    assert code == 2 and err.startswith("verdict: ")
+    assert len(rows) == 1 and rows[0]["error"]["code"] == "usage"
+    assert "--share or --below" in rows[0]["error"]["message"]
+
+
+def test_run_mode_reports_empty_stdin_as_json(servers, monkeypatch, capsys):
+    monkeypatch.setattr("sys.stdin", io.StringIO(""))
+    code, rows, _ = run([], capsys)
+    assert code == 2 and rows[0]["error"]["message"].startswith("no states on stdin")
+
+
+def test_check_in_words_keeps_its_errors_in_words(servers, tmp_path, capsys):
+    """--check without --json prints a report for a person, so stdout stays empty on a failure."""
+    code = cli.main(["cascade", "-q", BANK, "--escalate", SECOND, "--server-only",
+                     "--check", str(tmp_path / "missing.jsonl")])
+    out = capsys.readouterr()
+    assert code == 2 and "missing.jsonl" in out.err and out.out == ""
+
+
+def test_check_json_reports_its_errors_as_json(servers, tmp_path, capsys):
+    code, rows, _ = run(["--check", str(tmp_path / "missing.jsonl"), "--json"], capsys)
+    assert code == 2 and "missing.jsonl" in rows[0]["error"]["message"]

@@ -102,8 +102,7 @@ def _batch_cmd(args: argparse.Namespace) -> int:
     """Read prompts from stdin, one per line; write one JSON object per line, in order."""
     prompts = [line.strip() for line in sys.stdin if line.strip()]
     if not prompts:
-        print("verdict: no prompts on stdin", file=sys.stderr)
-        return 2
+        return support._fail("no prompts on stdin")
 
     branches, ms, source = decide_many(
         prompts, args.model, args.budget, url=args.url, use_server=not args.no_server
@@ -134,8 +133,7 @@ def _route_cmd(args: argparse.Namespace) -> int:
     if args.batch:
         return _batch_cmd(args)
     if not args.prompt:
-        print("verdict: give a prompt, or --batch to read them from stdin", file=sys.stderr)
-        return 2
+        return support._fail("give a prompt, or --batch to read them from stdin")
     branch, ms, source = decide(
         args.prompt, args.model, args.budget, url=args.url, use_server=not args.no_server
     )

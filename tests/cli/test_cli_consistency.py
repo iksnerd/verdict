@@ -317,3 +317,33 @@ def test_an_interrupt_and_an_exit_still_pass_through(monkeypatch, exc):
     with pytest.raises(BaseException) as caught:
         cli.main(["ask", "x", "q?"])
     assert isinstance(caught.value, (KeyboardInterrupt, SystemExit))
+
+
+# route: --batch prints JSON lines, so its failures are JSON too; --quiet and a single prompt
+# print words, so theirs stay words unless --json asks
+
+def test_route_batch_with_no_prompts_is_a_json_error(monkeypatch, capsys):
+    monkeypatch.setattr("sys.stdin", io.StringIO("\n"))
+    assert cli.main(["route", "--batch"]) == 2
+    out = capsys.readouterr()
+    assert out.err.strip() == "verdict: no prompts on stdin"
+    assert json.loads(out.out)["error"] == {"code": "usage", "message": "no prompts on stdin"}
+
+
+def test_route_batch_quiet_keeps_its_error_in_words(monkeypatch, capsys):
+    monkeypatch.setattr("sys.stdin", io.StringIO(""))
+    assert cli.main(["route", "--batch", "--quiet"]) == 2
+    out = capsys.readouterr()
+    assert out.err.strip() == "verdict: no prompts on stdin" and out.out == ""
+
+
+@pytest.mark.parametrize("flags,json_error", [([], False), (["--json"], True)])
+def test_route_without_a_prompt_honours_the_error_mode(capsys, flags, json_error):
+    assert cli.main(["route", *flags]) == 2
+    out = capsys.readouterr()
+    message = "give a prompt, or --batch to read them from stdin"
+    assert out.err.strip() == f"verdict: {message}"
+    if json_error:
+        assert json.loads(out.out)["error"] == {"code": "usage", "message": message}
+    else:
+        assert out.out == ""

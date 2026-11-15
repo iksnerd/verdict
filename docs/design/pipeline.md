@@ -49,7 +49,9 @@ uses it by pointing `[model].path` at a local copy. verdict itself defaults to b
   Training checkpoints record the items they were made from, and `--resume` refuses a checkpoint
   made from other items.
 - **Cost-capped.** The label stage sums spend from the rows already on disk, so a resume cannot
-  forget what an earlier run spent, and it stops before crossing `max_cost_usd`.
+  forget what an earlier run spent, and it stops before crossing `max_cost_usd`. A failed call is
+  billed too and writes no row: its cost counts toward the cap for the run it happened in and is
+  reported as `failed_spend_usd`.
 - **Manifested.** Every stage ends by writing `<stage>.manifest.json`: config digest, git commit,
   sha256 of each input and output, counts, spend. APOL scorecards pin these hashes, so a scorecard
   fails when its data drifts instead of quietly scoring something else.

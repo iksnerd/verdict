@@ -327,7 +327,8 @@ success. `bench --verify` exits 1 on a regression, and `update --check` exits 1 
 release is available. Every command's `--help` ends with its own exit status.
 
 An error is one `verdict:` line on stderr. With `--json` or `--jsonl`, stdout also gets
-`{"error": {"code": ..., "message": ...}}` (`decide` always, since it prints JSON), with `code`
+`{"error": {"code": ..., "message": ...}}` (always for `decide`, for `cascade` without `--check` and
+for `route --batch` without `--quiet`, since their stdout is JSON anyway), with `code`
 one of `usage`, `refused` (the bank or question can't be asked as written: reword it, or
 `--allow-unmeasured`; a server's refusal arrives as `refused` too), `no_server`, `server_timeout`,
 `server_error`, `config`, `not_found` or `internal` (a bug or an unplanned failure: the traceback
@@ -357,7 +358,7 @@ key in either file is an error, not ignored. These seven override a `[section].k
 | `VERDICT_MULTILINGUAL` | `[model].multilingual`, the checkpoint `"model": "multilingual"` answers from | `aac6fef/laya-multilingual-mlx` |
 | `VERDICT_BITS` | `[model].bits`, quantization at load (16 or 8, §36) | 16 |
 | `VERDICT_LANG` | `[model].lang`, `auto`, `en` or `multi` | `auto` |
-| `VERDICT_SYSTEMONE_URL` | `[systemone].url`, a remote `/v1/systemone` server for `verdict serve` to answer with (https unless loopback) | unset: local Laya |
+| `VERDICT_SYSTEMONE_URL` | `[systemone].url`, a remote `/v1/systemone` server for `verdict serve` to answer with (https unless loopback). Set but empty, it switches off a URL a config file set, so one run stays local | unset: local Laya |
 | `VERDICT_SYSTEMONE_MODEL` | `[systemone].model`, the model field sent to it | `jev-latest` |
 
 The API key for a remote `/v1/systemone` server is `$TYPESAFE_API_KEY` and nothing else. It is

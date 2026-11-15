@@ -101,3 +101,29 @@ def test_a_cut_file_that_is_not_a_fits_object_is_a_usage_error(monkeypatch, caps
     assert cli.main(["ask", "x", "q?", "--cut", str(fit)]) == 2
     out = capsys.readouterr()
     assert str(fit) in out.err and "Traceback" not in out.err and out.out == ""
+
+
+@pytest.mark.parametrize("fit,says", [
+    ('{"questions": {"q": {"type": "choice", "temperature": 0.5}}}', "yes/no only"),
+    ('{"q": {"type": "noul"}}', "has no cut"),
+    ('{"is_spam": {}}', "'is_spam'"),
+    ('{"q": 0.5}', "has no cut"),
+])
+def test_a_cut_file_whose_fit_has_no_cut_is_a_usage_error(monkeypatch, capsys, tmp_path, fit, says):
+    """It printed the bare probability and exited 0, which under --cut means "yes"."""
+    sent = fake_server(monkeypatch, NOUL)
+    path = tmp_path / "fit.json"
+    path.write_text(fit)
+    assert cli.main(["ask", "x", "q?", "--cut", str(path)]) == 2
+    out = capsys.readouterr()
+    assert str(path) in out.err and "has no cut" in out.err and says in out.err
+    assert out.out == "" and "Traceback" not in out.err and sent == {}
+
+
+def test_a_cut_file_with_no_cut_is_a_json_error_under_json(monkeypatch, capsys, tmp_path):
+    fake_server(monkeypatch, NOUL)
+    path = tmp_path / "fit.json"
+    path.write_text('{"q": {"type": "choice", "temperature": 0.5}}')
+    assert cli.main(["ask", "x", "q?", "--cut", str(path), "--json"]) == 2
+    error = __import__("json").loads(capsys.readouterr().out)["error"]
+    assert error["code"] == "usage" and "has no cut" in error["message"]

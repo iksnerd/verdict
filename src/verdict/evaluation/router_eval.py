@@ -15,17 +15,23 @@ Two things here are deliberate and are the reason §12's 83.3% was worthless:
 """
 from __future__ import annotations
 
+import hashlib
 import json
+import os
+import tempfile
 from pathlib import Path
 from typing import Any, Iterable, Sequence
 
 from .metrics import auc, bootstrap_ci
+from ..backends.engine import PROMPT_TOKEN_BUDGET
 from ..judge.router import BIG, ROUTER_BANK, SMALL, T_DIFFICULTY, T_SENSITIVE, route
 
 EVALS = Path("bench/router_prompts.jsonl")
 #: Model outputs, keyed by model then prompt id. Derived and gitignored: the eval file is the
 #: input, this is a replay cache so a threshold sweep or a scorecard rerun costs nothing and
-#: returns the same numbers. Delete it to re-measure.
+#: returns the same numbers. Each entry carries `fp`, a fingerprint of the prompt text, the question
+#: bank and the token budget it was measured with; an entry whose fingerprint differs, or that has
+#: none (written before fingerprints existed), is measured again. Delete the file to re-measure all.
 CACHE = Path("data/router_probs.json")
 #: Base Laya, what an install runs. The private fine-tune is opt-in with --model; a default that
 #: names weights most users do not have makes the refit fail for them.
@@ -47,11 +53,39 @@ def load_prompts(path: Path = EVALS) -> list[dict]:
     return rows
 
 
+def fingerprint(prompt: str) -> str:
+    """What a cached entry was measured for: this prompt text, the current question bank and the
+    current token budget. The model is the cache's outer key, so it is not repeated here."""
+    payload = json.dumps({"prompt": prompt, "bank": ROUTER_BANK, "budget": PROMPT_TOKEN_BUDGET},
+                         sort_keys=True, ensure_ascii=False)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
+
+
+def _write_cache(cache: Path, store: dict) -> None:
+    """Through a temp file in the same directory and a rename, so a kill mid-write leaves the
+    previous file whole instead of a torn one."""
+    cache = Path(cache)
+    cache.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=cache.parent, prefix=cache.name + ".", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w") as f:
+            f.write(json.dumps(store, indent=1, sort_keys=True))
+        os.replace(tmp, cache)
+    except BaseException:
+        Path(tmp).unlink(missing_ok=True)
+        raise
+
+
 def measure(rows: Sequence[dict], model: str = DEFAULT_MODEL, cache: Path = CACHE) -> tuple[dict, list[float]]:
-    """Model outputs per prompt id, measuring only what the cache is missing."""
+    """Model outputs per prompt id, measuring only what the cache is missing.
+
+    An entry counts only if its fingerprint matches this run's prompt text, bank and budget. The
+    file is rewritten after each prompt, so an interrupted run keeps what it measured.
+    """
     store = json.loads(Path(cache).read_text()) if Path(cache).exists() else {}
     bucket = store.setdefault(model, {})
-    todo = [r for r in rows if r["id"] not in bucket]
+    fps = {r["id"]: fingerprint(r["prompt"]) for r in rows}
+    todo = [r for r in rows if bucket.get(r["id"], {}).get("fp") != fps[r["id"]]]
     times: list[float] = []
     if todo:
         import time
@@ -61,12 +95,12 @@ def measure(rows: Sequence[dict], model: str = DEFAULT_MODEL, cache: Path = CACH
         eng = load(model)
         for r in todo:
             t0 = time.perf_counter()
-            ans = eng.predict(eng.clip(r["prompt"]), ROUTER_BANK)
+            ans = eng.predict(eng.clip(r["prompt"], PROMPT_TOKEN_BUDGET), ROUTER_BANK)
             times.append((time.perf_counter() - t0) * 1000)
             bucket[r["id"]] = {"difficulty": ans["difficulty"]["score"],
-                               "is_sensitive": ans["is_sensitive"]["noul"]}
-        Path(cache).parent.mkdir(parents=True, exist_ok=True)
-        Path(cache).write_text(json.dumps(store, indent=1, sort_keys=True))
+                               "is_sensitive": ans["is_sensitive"]["noul"],
+                               "fp": fps[r["id"]]}
+            _write_cache(Path(cache), store)
     return bucket, times
 
 

@@ -232,3 +232,49 @@ def test_a_generation_run_that_accepts_nothing_stops_the_pipeline(tmp_path):
 
     with pytest.raises(SystemExit, match="no state"):
         gen_stage(cfg(), tmp_path, Empty(), MESSAGE_TYPING)
+
+
+# ---- failed label calls cost money too ------------------------------------------------------------
+
+class PaidGarbage:
+    """Answers every call, bills for it, and never returns a parsable label."""
+
+    def __init__(self):
+        self.calls = 0
+
+    def __call__(self, model, prompt):
+        self.calls += 1
+        return "not json", {"promptTokenCount": 1000, "candidatesTokenCount": 500}
+
+
+# gemini-2.5-flash: (1000 * 0.30 + 500 * 2.50) / 1e6 = $0.00155 a try, two tries a failed label
+FAILED_LABEL_USD = 0.0031
+
+
+def priced(**label):
+    return cfg(label={"models": ["gemini-2.5-flash"], "reference": None, "repeats": 1, **label})
+
+
+def test_label_stage_counts_failed_calls_against_the_cost_cap(tmp_path):
+    gen_stage(cfg(), tmp_path, FakeGen(), MESSAGE_TYPING)
+    t = PaidGarbage()
+    with pytest.raises(SystemExit, match="cost cap"):
+        label_stage(priced(max_cost_usd=0.005), tmp_path, t, BANK)
+    assert t.calls == 4  # two failed labels ($0.0062) cross the cap; the other four are never asked
+
+
+def test_label_stage_reports_what_failed_calls_cost(tmp_path):
+    gen_stage(cfg(), tmp_path, FakeGen(), MESSAGE_TYPING)
+    out = label_stage(priced(max_cost_usd=5.0), tmp_path, PaidGarbage(), BANK)
+    assert out["failures_this_run"] == 6 and out["label_rows"] == 0
+    assert out["failed_spend_usd"] == pytest.approx(6 * FAILED_LABEL_USD)
+    manifest = json.loads((tmp_path / "label.manifest.json").read_text())
+    assert manifest["counts"]["failed_spend_usd"] == pytest.approx(6 * FAILED_LABEL_USD)
+    assert manifest["failed_spend_usd"] == pytest.approx(6 * FAILED_LABEL_USD)
+    assert manifest["spend_usd"] == 0  # still what the rows on disk cost
+
+
+def test_a_clean_label_run_reports_no_failed_spend(tmp_path):
+    gen_stage(cfg(), tmp_path, FakeGen(), MESSAGE_TYPING)
+    out = label_stage(priced(max_cost_usd=5.0), tmp_path, FakeTransport(), BANK)
+    assert out["failures_this_run"] == 0 and out["failed_spend_usd"] == 0

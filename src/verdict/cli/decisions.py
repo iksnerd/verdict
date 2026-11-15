@@ -180,10 +180,20 @@ def _ask_cmd(args: argparse.Namespace) -> int:
                     raise ValueError(f"--cut {args.cut} is neither a number between 0 and 1 nor a "
                                      "file from `verdict calibrate`") from None
                 fits = _read_fits(args.cut)
-                fit = fits.get("q") or (next(iter(fits.values())) if len(fits) == 1 else None)
+                name = "q" if fits.get("q") or len(fits) != 1 else next(iter(fits))
+                fit = fits.get(name)
                 if fit is None:
                     raise ValueError(f"{args.cut} holds more than one fit and none named 'q'")
+                if not isinstance(fit, dict):
+                    raise ValueError(f"--cut {args.cut}: the fit for question {name!r} is a JSON "
+                                     f"{type(fit).__name__}, not an object, so it has no cut")
                 cut = fit.get("cut")
+                if cut is None and not (args.options or args.levels):
+                    # Exit 0 from `ask --cut` means yes: a file that cannot decide must not say it.
+                    why = ("; it is a choice fit, and a cut applies to a yes/no only"
+                           if fit.get("type") == "choice" else "")
+                    raise ValueError(f"--cut {args.cut}: the fit for question {name!r} has no cut, "
+                                     f"so it cannot decide yes or no{why}")
             if cut is not None and not 0 <= cut <= 1:
                 raise ValueError(f"--cut {args.cut}: a cut is a probability, between 0 and 1")
         state = inputs.read_state(args.text)

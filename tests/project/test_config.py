@@ -237,6 +237,60 @@ def test_config_explain_says_where_systemone_came_from(monkeypatch, tmp_path):
     assert rows["systemone.model"] == "default"
 
 
+FILE_REMOTE = MINIMAL + '\n[systemone]\nurl = "https://api.typesafe.ai"\nmodel = "jev-1.13.0"\n'
+
+
+def test_an_empty_systemone_url_variable_switches_the_files_remote_off(monkeypatch, tmp_path):
+    """"No remote" is a value here: without it one run cannot be kept local from the environment."""
+    _isolated(monkeypatch, tmp_path)
+    write(tmp_path, FILE_REMOTE)
+    monkeypatch.setenv("VERDICT_SYSTEMONE_URL", "")
+    s = config.load()
+    assert s.systemone_url is None
+    assert s.systemone_model == "jev-1.13.0", "only the url is cleared"
+
+
+def test_config_explain_says_the_variable_switched_the_remote_off(monkeypatch, tmp_path):
+    _isolated(monkeypatch, tmp_path)
+    write(tmp_path, FILE_REMOTE)
+    monkeypatch.setenv("VERDICT_SYSTEMONE_URL", "")
+    rows = {r["key"]: r for r in config.explain()}
+    assert rows["systemone.url"] == {"key": "systemone.url", "value": None,
+                                     "source": "$VERDICT_SYSTEMONE_URL"}
+    assert rows["systemone.model"]["source"] == "verdict.toml"
+
+
+def test_an_absent_systemone_url_variable_leaves_the_file_in_charge(monkeypatch, tmp_path):
+    _isolated(monkeypatch, tmp_path)
+    write(tmp_path, FILE_REMOTE)
+    assert config.load().systemone_url == "https://api.typesafe.ai"
+    rows = {r["key"]: r["source"] for r in config.explain()}
+    assert rows["systemone.url"] == "verdict.toml"
+
+
+@pytest.mark.parametrize("var, attr, key", [
+    ("VERDICT_URL", "url", "server.url"),
+    ("VERDICT_MODEL", "model_path", "model.path"),
+    ("VERDICT_MULTILINGUAL", "multilingual_path", "model.multilingual"),
+    ("VERDICT_BITS", "bits", "model.bits"),
+    ("VERDICT_LANG", "lang", "model.lang"),
+    ("VERDICT_SYSTEMONE_MODEL", "systemone_model", "systemone.model"),
+])
+def test_an_empty_variable_is_still_ignored_everywhere_else(monkeypatch, tmp_path, var, attr, key):
+    """An empty server URL or model path is never a meaningful value, so the file keeps winning."""
+    _isolated(monkeypatch, tmp_path)
+    write(tmp_path, FILE_REMOTE.replace("prompt_token_budget = 64",
+                                        'prompt_token_budget = 64\nbits = 8\nlang = "multi"'))
+    for other in ("VERDICT_MODEL", "VERDICT_MULTILINGUAL", "VERDICT_BITS", "VERDICT_LANG"):
+        monkeypatch.delenv(other, raising=False)
+    before = getattr(config.load(), attr)
+    assert before != config.DEFAULTS[key.split(".")[0]][key.split(".")[1]], "the file must set it"
+    monkeypatch.setenv(var, "")
+    assert getattr(config.load(), attr) == before
+    rows = {r["key"]: r["source"] for r in config.explain()}
+    assert rows[key] == "verdict.toml"
+
+
 def test_the_key_comes_from_the_environment(monkeypatch):
     monkeypatch.setenv("TYPESAFE_API_KEY", "sk-live")
     assert config.systemone_key("https://api.typesafe.ai") == "sk-live"
