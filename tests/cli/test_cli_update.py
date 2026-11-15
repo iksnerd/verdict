@@ -43,6 +43,12 @@ def shell(monkeypatch, tmp_path):
     return fake
 
 
+@pytest.fixture(autouse=True)
+def no_release_lookup(monkeypatch):
+    """Nothing here asks GitHub which tags were released, unless a test says what it answers."""
+    monkeypatch.setattr(update, "_released", lambda url: None)
+
+
 def ran(fake, needle):
     return any(needle in " ".join(c) for c in fake.calls)
 
@@ -335,3 +341,72 @@ def test_the_restore_keeps_the_extras(tool, monkeypatch):
     monkeypatch.setattr(update, "_run", scripted_installs(tool, (1, "error: boom"), (0, "")))
     cli.main(["update"])
     assert restores(tool)[0][-1].startswith("verdict[mlx,laya] @ git+")
+
+
+# --- a tag is a release only once its release is published -----------------------------------
+
+def test_a_tag_whose_release_was_never_published_is_skipped(tool, monkeypatch, capsys):
+    """A tag whose release workflow failed stays on the remote with no release. Installing it
+    would install what the gates refused."""
+    monkeypatch.setattr(update, "_released", lambda url: {(0, 1, 0), (0, 2, 1), (0, 3, 0)})
+    assert cli.main(["update"]) == 0
+    assert "0.2.1 -> 0.3.0" in capsys.readouterr().out
+    assert ran(tool, "@v0.3.0") and not ran(tool, "@v0.10.0")
+
+
+def test_check_does_not_report_an_unpublished_tag_as_available(tool, monkeypatch, capsys):
+    monkeypatch.setattr(update, "_released", lambda url: {(0, 1, 0), (0, 2, 1)})
+    assert cli.main(["update", "--check"]) == 0
+    assert "up to date" in capsys.readouterr().out
+
+
+def test_when_releases_cannot_be_read_the_newest_tag_is_used(tool, capsys):
+    assert cli.main(["update"]) == 0          # `_released` answers None: not GitHub, or offline
+    assert ran(tool, "@v0.10.0")
+
+
+@pytest.mark.parametrize("url, slug", [
+    ("https://github.com/iksnerd/verdict.git", "iksnerd/verdict"),
+    ("https://github.com/iksnerd/verdict", "iksnerd/verdict"),
+    ("git@github.com:iksnerd/verdict.git", "iksnerd/verdict"),
+    ("ssh://git@github.com/iksnerd/verdict.git", "iksnerd/verdict"),
+    ("https://gitlab.com/someone/verdict.git", None),
+    ("/srv/git/verdict.git", None),
+])
+def test_only_a_github_remote_has_releases_to_ask_about(url, slug):
+    assert update._github_slug(url) == slug
+
+
+def test_released_reads_published_releases_and_skips_drafts_and_prereleases(monkeypatch):
+    import io
+    import json
+    import urllib.request
+
+    monkeypatch.undo()                        # the real `_released`, with a faked HTTP layer
+    seen = {}
+
+    def urlopen(request, timeout=None):
+        seen["url"] = request.full_url
+        return io.BytesIO(json.dumps([
+            {"tag_name": "v0.3.0", "draft": False, "prerelease": False},
+            {"tag_name": "v0.4.0", "draft": True, "prerelease": False},
+            {"tag_name": "v0.5.0", "draft": False, "prerelease": True},
+            {"tag_name": "nightly", "draft": False, "prerelease": False},
+        ]).encode())
+
+    monkeypatch.setattr(urllib.request, "urlopen", urlopen)
+    assert update._released("https://github.com/iksnerd/verdict.git") == {(0, 3, 0)}
+    assert seen["url"].startswith("https://api.github.com/repos/iksnerd/verdict/releases")
+
+
+def test_released_is_unknown_when_github_cannot_be_reached(monkeypatch):
+    import urllib.request
+
+    monkeypatch.undo()
+
+    def urlopen(request, timeout=None):
+        raise OSError("offline")
+
+    monkeypatch.setattr(urllib.request, "urlopen", urlopen)
+    assert update._released("https://github.com/iksnerd/verdict.git") is None
+    assert update._released("https://gitlab.com/someone/verdict.git") is None

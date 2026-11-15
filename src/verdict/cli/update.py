@@ -10,7 +10,7 @@ from pathlib import Path
 from . import setup, support
 
 #: Where releases come from. A `uv tool install` has no checkout, so it updates to the newest
-#: `vX.Y.Z` tag here, which the release workflow has tested and built.
+#: `vX.Y.Z` tag here that has a published release (see `_released`).
 REPO_URL = os.environ.get("VERDICT_REPO", "https://github.com/iksnerd/verdict.git")
 TOOL_EXTRAS = "mlx,laya"
 
@@ -53,15 +53,58 @@ def _server_up() -> bool:
         return False
 
 
+def _github_slug(url: str) -> str | None:
+    """`owner/name` when the remote is on github.com, else None: only there is a release a thing
+    separate from a tag that can be asked about."""
+    import re
+
+    m = re.fullmatch(r"(?:https://github\.com/|git@github\.com:|ssh://git@github\.com/)"
+                     r"([^/\s]+/[^/\s]+?)(?:\.git)?/?", url)
+    return m.group(1) if m else None
+
+
+def _released(url: str) -> set[tuple[int, ...]] | None:
+    """The `vX.Y.Z` tags that have a published release, or None when that cannot be known (the
+    remote is not GitHub, or GitHub did not answer). A release is published only after its gates
+    passed, so a tag without one is a release that was refused or is still being made."""
+    import json
+    import re
+    import urllib.request
+
+    slug = _github_slug(url)
+    if slug is None:
+        return None
+    request = urllib.request.Request(
+        f"https://api.github.com/repos/{slug}/releases?per_page=100",
+        headers={"Accept": "application/vnd.github+json", "User-Agent": "verdict-update"})
+    try:
+        with urllib.request.urlopen(request, timeout=10) as r:
+            releases = json.loads(r.read())
+    except (OSError, ValueError):
+        return None
+    if not isinstance(releases, list):
+        return None
+    out = set()
+    for rel in releases:
+        m = re.fullmatch(r"v(\d+)\.(\d+)\.(\d+)", str(rel.get("tag_name", "")))
+        if m and not rel.get("draft") and not rel.get("prerelease"):
+            out.add(tuple(int(p) for p in m.groups()))
+    return out
+
+
 def _release_tags(url: str) -> list[tuple[int, ...]]:
-    """`vX.Y.Z` tags on the remote, as sortable tuples. Anything else (rc, nightly) is ignored."""
+    """`vX.Y.Z` tags on the remote that are releases, as sortable tuples. Anything else (rc,
+    nightly) is ignored. On GitHub a tag counts only once its release is published; where that
+    cannot be asked, every such tag counts."""
     import re
 
     code, out = _run(["git", "ls-remote", "--tags", "--refs", url])
     if code != 0:
         raise RuntimeError(f"could not list releases at {url}:\n{out}")
     found = re.findall(r"refs/tags/v(\d+)\.(\d+)\.(\d+)$", out, flags=re.M)
-    return sorted(tuple(int(p) for p in t) for t in found)
+    tags = sorted(tuple(int(p) for p in t) for t in found)
+    released = _released(url)
+    return tags if released is None else [t for t in tags if t in released]
 
 
 def _update_tool(args: argparse.Namespace) -> int:

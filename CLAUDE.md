@@ -42,7 +42,7 @@ History is pushed, so do not rewrite it without asking.
   §54). The question moves, no task does, and the answer comes back typed and tagged with its tier. Anyone who wants an answer to launch something writes that in their own script.
   The only commands that run anything are maintenance: `verdict update` (in a checkout, `git pull
   --ff-only` plus `uv sync --extra mlx --extra laya` (and `--extra jev` when TypeSafe's SDK is installed); in a `uv tool` install, a reinstall of the
-  newest `v*` tag).
+  newest `v*` tag that has a published GitHub release).
 - Tests first. `uv run pytest` is the gate; nothing needs the network or a model.
 
 ## The one that matters

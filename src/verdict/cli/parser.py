@@ -452,9 +452,11 @@ Examples:
   verdict update --check   # report only: exit 0 up to date, 1 behind
 
 Releases come from $VERDICT_REPO (default https://github.com/iksnerd/verdict.git): the newest
-`vX.Y.Z` tag there is installed, whether or not its release workflow passed. In a checkout it
-refuses on uncommitted changes when there are commits to pull, and only fast-forwards. It
-syncs the environment on every run, so running it again repairs a sync that failed.
+`vX.Y.Z` tag there that has a published GitHub release is installed, so a tag whose release
+was refused is skipped. Off GitHub, or when GitHub does not answer, the newest tag is used.
+In a checkout it refuses on uncommitted changes when there are commits to pull, and only
+fast-forwards. It syncs the environment on every run, so running it again repairs a sync that
+failed.
 A running `verdict serve` keeps the old code until restarted.
 
 Exit status: 0 on success, 2 on failure. --check exits 0 when up to date and 1 when a newer
