@@ -7,10 +7,17 @@ import httpx
 from ..label.teacher import cost_of
 
 
+class GenError(RuntimeError):
+    """The generator refused the request itself (a bad key, an unknown model, a malformed call).
+    No new seed fixes that, so it must not look like a text the loop rejected."""
+
+
 class GeminiGenClient:
     def __init__(self, model: str, key: str, temperature: float = 1.0):
         self.model, self.key, self.temperature = model, key, temperature
         self.tokens_in = self.tokens_out = 0
+        #: Calls that timed out or met a server error; the loop retries those with a new seed.
+        self.failures = 0
 
     def generate(self, prompt: str, seed: int) -> str:
         try:
@@ -22,8 +29,12 @@ class GeminiGenClient:
                 timeout=60,
             )
         except httpx.HTTPError:
+            self.failures += 1
             return ""
+        if r.status_code in (400, 401, 403, 404):
+            raise GenError(f"{self.model} answered {r.status_code}: check the key and the model name")
         if r.status_code != 200:
+            self.failures += 1
             return ""
         j = r.json()
         u = j.get("usageMetadata", {})

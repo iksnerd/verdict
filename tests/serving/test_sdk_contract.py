@@ -205,3 +205,20 @@ def test_jev_preserves_long_structured_state_and_noul_question():
     with SystemOneBackend("https://api.typesafe.ai", transport=httpx.MockTransport(handler)) as backend:
         result = backend.decide(DecideRequest(state=state, questions=Q))
         assert result.usage.output_tokens == 20
+
+
+def test_retry_after_is_capped_so_an_upstream_cannot_park_the_process(monkeypatch):
+    from verdict import systemone
+
+    waits, calls = [], []
+    monkeypatch.setattr("time.sleep", waits.append)
+
+    def handler(req):
+        calls.append(req)
+        if len(calls) == 1:
+            return httpx.Response(429, headers={"Retry-After": "86400"})
+        return httpx.Response(200, json={"model": "jev-1.13.0", "answers": {"q": {"type": "noul", "noul": .9}}})
+
+    with SystemOneBackend("https://api.typesafe.ai", transport=httpx.MockTransport(handler)) as backend:
+        backend.decide(request())
+    assert waits == [systemone.MAX_RETRY_WAIT] and systemone.MAX_RETRY_WAIT <= 120

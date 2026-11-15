@@ -98,6 +98,8 @@ Do not re-derive these. Each is measured, in `docs/research/FINDINGS.md`.
 - `git config core.hooksPath .githooks` once per clone enables the pre-commit hook. It blocks the
   never-commit paths below, runs gitleaks on the staged diff, and runs the suite against an export
   of the index (not the working tree, and without stashing, so peers are undisturbed). About 4 s.
+  It warns when the `.venv` lacks the mlx or laya extras, since the suite then passes with those
+  tests skipped.
 - The agent skill ships from this repo as a plugin: `.claude-plugin/marketplace.json` and
   `plugins/verdict/skills/verdict/`. `tests/project/test_plugin.py` ties the plugin version to
   the package version and refuses private paths in what ships.

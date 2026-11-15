@@ -221,3 +221,14 @@ def test_a_rerun_with_other_fractions_refuses_instead_of_moving_the_test_set(tmp
     split_stage(cfg(split={"test_frac": 0.3}), tmp_path)
     with pytest.raises(SystemExit, match="split.json"):
         split_stage(cfg(split={"test_frac": 0.5}), tmp_path)
+
+
+def test_a_generation_run_that_accepts_nothing_stops_the_pipeline(tmp_path):
+    class Empty:
+        model = "fake-gen"
+
+        def generate(self, prompt, seed):
+            return ""
+
+    with pytest.raises(SystemExit, match="no state"):
+        gen_stage(cfg(), tmp_path, Empty(), MESSAGE_TYPING)

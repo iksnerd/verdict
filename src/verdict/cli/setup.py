@@ -140,6 +140,17 @@ def _serve_remote(args, settings, url, key, create_app, uvicorn) -> int:
     return 0
 
 
+def _verdict_listens(url: str) -> bool:
+    """Whether what holds the port is a verdict server. Its own server is the usual reason the
+    configured port is taken, and moving the config off it would point every client at nothing."""
+    from .. import client
+
+    try:
+        return bool(client.capabilities(url).get("family"))
+    except (client.NoServer, client.ServerError, client.ServerTimeout):
+        return False
+
+
 def _port_free(host: str, port: int) -> bool:
     import socket
 
@@ -221,7 +232,9 @@ def _init_cmd(args: argparse.Namespace) -> int:
     # 2. the port
     print(f"[2/{total}] server")
     host, port = "127.0.0.1", current.port
-    if not _port_free(host, port):
+    if not _port_free(host, port) and _verdict_listens(f"http://{host}:{port}"):
+        print(f"  {port} is held by a running verdict server; keeping it")
+    elif not _port_free(host, port):
         free = next((p for p in range(port, port + 40) if _port_free(host, p)), port)
         print(f"  {port} is taken (`lsof -nP -iTCP:{port} -sTCP:LISTEN` names it); {free} is free")
         port = free

@@ -154,26 +154,29 @@ def generate_cases(
         def one(i):
             return clean_output(client.generate(prompts[i], call_seeds[i]))
 
-        if workers > 1:
-            with ThreadPoolExecutor(workers) as ex:
-                texts = dict(zip(todo, ex.map(one, todo)))
-        else:
-            texts = {i: one(i) for i in todo}
-        for i in todo:
-            text = texts[i]
-            if not _acceptable(text, accepted):
-                continue
-            accepted.append(text)
-            sd = seeds[i]
-            case = Case(
-                id=hashlib.sha1(f"{domain.name}|{text}".encode()).hexdigest()[:12],
-                domain=domain.name, intended_type=sd.intended_type, ambiguous=sd.ambiguous,
-                confusable=sd.confusable, generator=generator, state=_state(domain, sd, text),
-                topic=sd.room_topic, author=sd.author,
-            )
-            done[i] = case
-            if on_case:
-                on_case(case)
+        # Texts are taken in seed order as they arrive, and each accepted one is handed over at
+        # once: a kill mid-round keeps what was already paid for. `map` yields in input order,
+        # so the result still does not depend on which call finished first.
+        ex = ThreadPoolExecutor(workers) if workers > 1 else None
+        texts = ex.map(one, todo) if ex else map(one, todo)
+        try:
+            for i, text in zip(todo, texts):
+                if not _acceptable(text, accepted):
+                    continue
+                accepted.append(text)
+                sd = seeds[i]
+                case = Case(
+                    id=hashlib.sha1(f"{domain.name}|{text}".encode()).hexdigest()[:12],
+                    domain=domain.name, intended_type=sd.intended_type, ambiguous=sd.ambiguous,
+                    confusable=sd.confusable, generator=generator, state=_state(domain, sd, text),
+                    topic=sd.room_topic, author=sd.author,
+                )
+                done[i] = case
+                if on_case:
+                    on_case(case)
+        finally:
+            if ex:
+                ex.shutdown(wait=False, cancel_futures=True)
     return [done[i] for i in sorted(done)]
 
 

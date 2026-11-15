@@ -95,6 +95,8 @@ class _Asker:
         self._warned: set[str] = set()
         #: What the server fronts (`/v1/capabilities` family), asked once; see `_proxied`.
         self._family: object = _UNASKED
+        #: Whether a failed probe was already repeated; see `__call__`.
+        self._reasked = False
         #: `--model` only chooses what loads locally; a server answers with its own checkpoint.
         self.model_flag = getattr(args, "model", None)
 
@@ -138,6 +140,12 @@ class _Asker:
         if proxied and result.get("source") == "in-process":
             # The server went away and laya answered here: its rules apply from the next row.
             self._family = _UNASKED
+        elif (self._family is None and not self._reasked
+              and result.get("source", "").startswith("server")):
+            # No server could say what it fronts, and now one answers: it may have started after
+            # the first row, and it may be a proxy. Ask once more, not on every row: a server with
+            # no capabilities endpoint would cost a request per row for the same answer.
+            self._family, self._reasked = _UNASKED, True
         served = str(result.get("model", ""))
         if (self.model_flag and result.get("source", "").startswith("server")
                 and not served.endswith(str(self.model_flag).rstrip("/"))):

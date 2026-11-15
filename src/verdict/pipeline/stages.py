@@ -55,6 +55,11 @@ def gen_stage(cfg: PipelineConfig, run_dir: Path, client, domain: Domain) -> int
             domain, client, n=need, rng=random.Random(f"{cfg.gen.seed}:{have}"), seen=seen,
             on_case=lambda c: store.append(c.__dict__), workers=cfg.gen.workers,
         )
+        if len(store.rows()) == have:
+            # Short of `n` is normal (the length cap drops texts). Nothing at all is not: every
+            # call failed or was rejected, and the later stages would run on an empty or stale set.
+            raise SystemExit(f"gen: no state was accepted out of {need} asked for; check the "
+                             "generator (key, model, server) before running the other stages")
     rows = store.rows()
     write_manifest(run_dir, "gen", cfg, [], ["states.jsonl"], {"states": len(rows), "requested": cfg.gen.n},
                    generator=cfg.gen.model)

@@ -328,3 +328,36 @@ def test_serve_beyond_loopback_warns_and_names_the_host(monkeypatch, capsys, hos
     assert "binds to localhost" not in out
     warning = next(line for line in out.splitlines() if "reachable from other machines" in line)
     assert host in warning and "no auth" in warning
+
+
+def test_init_keeps_the_port_its_own_server_is_holding(monkeypatch, tmp_path):
+    """Running init while `verdict serve` is up found the port taken and wrote the next free one,
+    so every client then pointed at a port nobody serves."""
+    from verdict import client, config
+    from verdict.cli import setup
+
+    path = tmp_path / "config.toml"
+    path.write_text(config.to_toml(config.Settings("http://127.0.0.1:8799", "org/model", 128)))
+    monkeypatch.setattr(config, "CONFIG_PATHS", (path,))
+    monkeypatch.setattr(setup, "_port_free", lambda host, port: port != 8799)
+    monkeypatch.setattr(client, "capabilities", lambda url=None, **k: {"family": "laya", "model": "m"})
+    monkeypatch.chdir(tmp_path)
+    assert cli.main(["init", "--yes", "--out", str(path)]) == 0
+    assert config.load(path).url == "http://127.0.0.1:8799"
+
+
+def test_init_moves_off_a_port_something_else_holds(monkeypatch, tmp_path):
+    from verdict import client, config
+    from verdict.cli import setup
+
+    def nobody(url=None, **k):
+        raise client.NoServer("not verdict")
+
+    path = tmp_path / "config.toml"
+    path.write_text(config.to_toml(config.Settings("http://127.0.0.1:8799", "org/model", 128)))
+    monkeypatch.setattr(config, "CONFIG_PATHS", (path,))
+    monkeypatch.setattr(setup, "_port_free", lambda host, port: port != 8799)
+    monkeypatch.setattr(client, "capabilities", nobody)
+    monkeypatch.chdir(tmp_path)
+    assert cli.main(["init", "--yes", "--out", str(path)]) == 0
+    assert config.load(path).url == "http://127.0.0.1:8800"

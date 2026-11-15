@@ -31,7 +31,8 @@ def main() -> int:
         else:
             client = OllamaClient(cfg.gen.model)
         n = gen_stage(cfg, a.run_dir, client, spec.domain)
-        print(f"gen: {n}/{cfg.gen.n} states" + (f"  (generator spend ${client.cost_usd():.4f})" if hasattr(client, "cost_usd") else ""))
+        print(f"gen: {n}/{cfg.gen.n} states" + (f"  (generator spend ${client.cost_usd():.4f})" if hasattr(client, "cost_usd") else "")
+              + (f"  ({client.failures} calls failed and were retried)" if getattr(client, "failures", 0) else ""))
     failed = 0
     if "label" in stages:
         counts = label_stage(cfg, a.run_dir, gemini_transport(load_key(a.key_file or cfg.label.key_file)), spec.bank, spec.preamble)

@@ -115,3 +115,19 @@ def test_write_jsonl_round_trips(tmp_path):
     write_jsonl(cases, p)
     rows = [json.loads(line) for line in p.read_text().splitlines()]
     assert [Case(**r).id for r in rows] == [c.id for c in cases]
+
+
+def test_accepted_states_are_handed_over_as_they_arrive_not_at_the_end_of_a_round():
+    """A kill mid-round used to lose every state of the round, paid calls included."""
+    class Dies(FakeClient):
+        def generate(self, prompt, seed):
+            if self.calls == 3:
+                raise RuntimeError("killed")
+            return super().generate(prompt, seed)
+
+    kept = []
+    try:
+        generate_cases(MESSAGE_TYPING, Dies(), n=8, rng=random.Random(0), on_case=kept.append)
+    except RuntimeError:
+        pass
+    assert len(kept) == 3

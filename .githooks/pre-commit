@@ -38,6 +38,12 @@ if [ ! -x "$python" ]; then
   echo "pre-commit: no .venv; run: uv sync --extra mlx --extra laya --extra jev" >&2
   exit 1
 fi
+# Without the extras the laya-dependent tests skip and the suite still passes. Say so: a plain
+# `uv sync` removes them, and a green hook would then cover less than it appears to.
+if ! "$python" -c 'import importlib.util as u, sys; sys.exit(0 if all(u.find_spec(m) for m in ("mlx", "laya_mlx")) else 1)'; then
+  echo "pre-commit: WARNING: this .venv lacks the mlx or laya extras, so the tests that need them" >&2
+  echo "  are skipped. Restore them: uv sync --extra mlx --extra laya --extra jev" >&2
+fi
 snapshot=$(mktemp -d "${TMPDIR:-/tmp}/verdict-precommit.XXXXXX")
 trap 'rm -rf "$snapshot"' EXIT
 git checkout-index --all --prefix="$snapshot/"

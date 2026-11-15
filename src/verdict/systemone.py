@@ -81,6 +81,11 @@ def validate_response(raw: Any, request: DecideRequest,
         raise UpstreamError("upstream returned an invalid SystemOne response") from exc
 
 
+#: The longest wait between attempts, whatever the upstream's Retry-After says: an hour-long or
+#: malformed value would otherwise park the process, and the caller in front has long timed out.
+MAX_RETRY_WAIT = 60.
+
+
 def _retry_after(value: str | None) -> float | None:
     if value is None:
         return None
@@ -146,6 +151,7 @@ class SystemOneClient:
                 after = _retry_after(response.headers.get("Retry-After"))
                 if after is not None:
                     delay = max(delay, after)
+            delay = min(delay, MAX_RETRY_WAIT)
             print(f"verdict: {self.base_url}{path} {reason}; it may still be loading -- "
                   f"retrying ({attempt + 2}/{self.attempts})", file=sys.stderr)
             if delay:

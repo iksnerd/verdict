@@ -31,3 +31,27 @@ def test_blocked_or_failed_calls_return_empty_string_so_the_loop_retries(monkeyp
     assert GeminiGenClient("gemini-2.5-flash-lite", key="k").generate("x", 1) == ""
     monkeypatch.setattr(httpx, "post", lambda *a, **k: R(500, {}))
     assert GeminiGenClient("gemini-2.5-flash-lite", key="k").generate("x", 1) == ""
+
+
+def test_a_refused_key_or_request_raises_instead_of_looking_like_a_rejected_text(monkeypatch):
+    """A bad key returned "" on every call: four silent rounds, zero states, exit 0."""
+    import pytest
+
+    from verdict.gen.gemini import GenError
+
+    for status in (400, 401, 403, 404):
+        monkeypatch.setattr(httpx, "post", lambda *a, _s=status, **k: R(_s, {"error": "no"}))
+        with pytest.raises(GenError, match=str(status)):
+            GeminiGenClient("gemini-2.5-flash-lite", key="bad").generate("x", 1)
+
+
+def test_transient_failures_are_counted(monkeypatch):
+    def boom(*a, **k):
+        raise httpx.ReadTimeout("slow")
+
+    c = GeminiGenClient("gemini-2.5-flash-lite", key="k")
+    monkeypatch.setattr(httpx, "post", lambda *a, **k: R(503, {}))
+    assert c.generate("x", 1) == ""
+    monkeypatch.setattr(httpx, "post", boom)
+    assert c.generate("x", 1) == ""
+    assert c.failures == 2
