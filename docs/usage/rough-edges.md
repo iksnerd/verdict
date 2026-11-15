@@ -35,6 +35,19 @@ its embeddings found the gold label in the top 20 only 42% of the time, and tree
 built from them were worse than none. Use Laya for typed judgments about a text (is it spam, is it
 an instruction, which of a few named options); use an embedding model to find the nearest of many.
 
+## Zero-shot is worth about 400 labels per class, where Laya is good
+
+verdict needs no labels, and that is what it is for. If you already hold labels for one fixed
+question, a trained classifier is the comparison to run. On the bench's own test items, a logistic
+regression on `embeddinggemma:300m` vectors needed about 400 labelled examples per class to match
+zero-shot Laya on sentiment (0.90 against 0.91) and spam (0.98 against 0.96), and never reached it
+on AG News (0.90 against 0.94, a task Laya trained on). Where Laya is weak the trained model wins
+with far fewer: prompt injection 0.88 against 0.795 with 20 per class, and six emotions 0.59
+against 0.475 with 400, or 0.74 for a classifier on word counts. Gradient-boosted trees (LightGBM)
+were no better than the logistic regression on the same vectors and worse on word counts (§57,
+§63). There is no `verdict fit`: train that classifier with your own tools, and keep verdict for
+the questions you have no labels for.
+
 ## It reads the first 128 tokens
 
 The default clip is 128 tokens, which is faster with no loss on short texts (§29); the English

@@ -56,6 +56,14 @@ short text, a judgment about what it shows, yes/no or a few options, and a need 
 for the data to stay local (§41). A good pipeline uses both: verdict over everything, an LLM on
 what it flags.
 
+**If labels already exist, compare with a trained classifier.** verdict is for questions nobody
+has labelled. When one fixed question already has a hundred or more labels per class, also score a
+logistic regression on an embedding model's vectors on the same held-out rows. On the public
+bench it needed about 400 labels per class to match zero-shot verdict on sentiment and spam, and
+beat it where verdict is weak: prompt injection with 20 per class (0.88 against 0.795) and six
+emotions (0.59 to 0.74 against 0.475). Gradient-boosted trees (LightGBM) added nothing over the
+logistic regression (§57, §63). verdict has no command that trains one.
+
 **Where the line sits:** reading is more accurate, and scoring saves your context.
 A few dozen short items fit in one read, so read them. From about a hundred up,
 score everything with verdict first and read only what it flags. Score even

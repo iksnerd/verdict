@@ -101,6 +101,9 @@ verdict ask '{"command": "cat ~/.netrc"}' "Does \`command\` read, print or chang
 ```
 
 24 examples is a demonstration of the shape, not a fit to trust. Use a few hundred real labels.
+With that many labels for one question, also score a trained classifier on the same held-out rows:
+on the public bench one matched zero-shot Laya at about 400 labels per class and beat it on the
+tasks Laya is weak at (FINDINGS §63).
 
 ## support-tickets/
 

@@ -37,6 +37,12 @@ published. About 0.03 s a call local, about 0.5 s hosted.
   **Jev**, or `verdict classify` with a tree on Laya.
 - Many topical labels (intents, topics) to pick among: not Laya, and not Jev either. An embedding
   model's nearest label scored 0.89 on Banking77 against Jev's 0.78 and Laya's 0.38 to 0.55 (§53).
+- One fixed question and a hundred or more labels per class for it: compare with a trained
+  classifier before settling on any of these. A logistic regression on `embeddinggemma:300m`
+  vectors matched zero-shot Laya on sentiment and spam at 400 labels per class, and beat it on the
+  six emotions (0.59 against 0.475) and on prompt injection (0.88 against 0.795, with 20 per class).
+  Laya stayed ahead on AG News (0.94 against 0.90), and LightGBM was no better than the logistic
+  regression (§63). It answers that one question only; Laya answers a new one with no labels.
 - Laya for most items and Jev for the ones Laya is unsure of: half the items sent closes 92% of the
   gap, with the rest of the text staying local (§52). `verdict cascade` does it, and `--check` says
   whether it helps for your task.

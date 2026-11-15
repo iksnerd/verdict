@@ -132,6 +132,10 @@ it reads.
   ([§58, §59](docs/research/FINDINGS.md)), so compare
   on a labelled sample. For topical labels an embedding model does better still
   (0.89 on the same items, FINDINGS §53); Laya is a judge of typed facts, not a retriever.
+- **When you already have labels:** verdict is for questions you have no labels for. For one fixed
+  question, a logistic regression on an embedding model's vectors needed about 400 labels per class
+  to match zero-shot Laya on sentiment and spam, and beat it where Laya is weak (emotion, prompt
+  injection). LightGBM added nothing over it ([FINDINGS §63](docs/research/FINDINGS.md)).
 - **The docs ship with the tool:** `verdict docs`, `verdict docs concepts`, `verdict docs guide`,
   `verdict docs findings N`, and three short pages in the shape of TypeSafe's: [patterns](docs/usage/patterns.md) (fan-out,
   confidence routing, composite scoring, intent routing), [rough edges](docs/usage/rough-edges.md) (where

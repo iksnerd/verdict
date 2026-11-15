@@ -2390,3 +2390,65 @@ differences under roughly 0.1 are out of reach.
 choosing between a flat choice and a tree, so the docs keep the advice to compare both on a
 labelled sample of your own (§58, [decision defaults](../design/defaults.md)). A fair test of
 tree quality would build the trees for both datasets by one method; that is not done.
+
+## 63. A trained classifier needs about 400 labels per class to match zero-shot Laya, and LightGBM adds nothing over a logistic head (2026-11-15)
+
+§57 trained a head on 5 to 40 labelled examples per class and stopped there, because it drew them
+from the bench's own 200-item samples. The open question was what a classifier trained the usual
+way does with more: gradient-boosted trees (LightGBM), or a logistic regression, on TF-IDF or on a
+dedicated embedding model. The design was fixed before any result (`scripts/eval_supervised.py`).
+Test items are the v0.10.1 scorecard's pinned samples for the five English choice suites, so Laya's
+column is the scorecard's number on the same items. Training rows are other rows of the same public
+dataset (its train split, or the rows of the suite's split the sample did not take), with exact
+test texts removed. Each arm sees 20, 100 or 400 labelled examples per class, 3 seeds. TF-IDF is
+word 1- and 2-grams; `gemma` is `embeddinggemma:300m` vectors through Ollama; the logistic
+regression is L2 with one fixed C per feature set; LightGBM is 300 trees, learning rate 0.05, 15
+leaves. Nothing was tuned on the test items. Public data only.
+
+Accuracy at 20 / 100 / 400 labelled examples per class:
+
+| suite | base Laya, zero-shot | TF-IDF + logistic | TF-IDF + LightGBM | gemma + logistic | gemma + LightGBM |
+|---|---|---|---|---|---|
+| sst2 | 0.910 [0.870, 0.945] | 0.612 / 0.603 / 0.730 | 0.632 / 0.518 / 0.610 | 0.863 / 0.887 / 0.900 | 0.820 / 0.898 / 0.910 |
+| spam | 0.960 [0.930, 0.985] | 0.860 / 0.952 / 0.955 | 0.802 / 0.883 / 0.960 | 0.962 / 0.972 / 0.980 | 0.947 / 0.955 / 0.967 |
+| injection (20 only) | 0.795 [0.725, 0.845] | 0.742 | 0.663 | **0.882** | 0.852 |
+| AG News | **0.940** [0.905, 0.970] | 0.603 / 0.810 / 0.870 | 0.347 / 0.682 / 0.810 | 0.817 / 0.882 / 0.875 | 0.757 / 0.867 / 0.902 |
+| emotion | 0.475 [0.412, 0.542] | 0.288 / 0.471 / 0.688 | 0.203 / 0.360 / **0.742** | 0.525 / 0.556 / 0.588 | 0.503 / 0.558 / 0.617 |
+
+| labelled per class | suites | base Laya | TF-IDF + logistic | TF-IDF + LightGBM | gemma + logistic | gemma + LightGBM |
+|---|---|---|---|---|---|---|
+| 20 | 5 | 0.816 | 0.621 | 0.529 | 0.810 | 0.776 |
+| 100 | 4 | 0.821 | 0.709 | 0.611 | 0.824 | 0.820 |
+| 400 | 4 | 0.821 | 0.811 | 0.780 | 0.836 | 0.849 |
+
+**LightGBM is not the lever.** On the embedding vectors it is within about 0.03 of the logistic
+regression at 100 and 400 per class on all four suites, and below it at 20 on all five. On TF-IDF
+it is the worse of the two nearly everywhere (sst2 at 400: 0.610 against 0.730; AG News at 100:
+0.682 against 0.810), ahead only on emotion at 400. The features decide the result: at 20 and 100
+per class both TF-IDF arms trail the embedding arms on every suite, and on sst2 they never get
+close (0.73 and 0.61 against 0.90 at 400).
+
+**Zero-shot Laya is worth roughly 400 labels per class where it is good.** On sst2 and spam the best
+trained arm at 400 per class lands inside Laya's interval (0.910 and 0.980). On AG News no trained
+arm reaches it (0.902 against 0.940), though AG News is in Laya's training mix (§48), so that lead
+is partly Laya having seen the task.
+
+**A trained model wins where Laya was already weak.** Emotion, the many-way suite: 0.742 for
+LightGBM on TF-IDF at 400 per class, well outside Laya's interval, and the embedding arms pass
+Laya's point value from 20 per class. Prompt injection: 0.882 at 20 per class, above Laya's
+interval, the same number §57 found on a different draw (0.883).
+
+**Caveats.** Three seeds, and at 400 per class the draw is the whole 400-row pool, so the seeds
+differ only in LightGBM's row subsampling. The intervals are Laya's alone and the comparison is not
+paired. One fixed setting per arm; a tuned one could do somewhat better. The injection set had only
+32 spare positive rows, so it stops at 20 per class. The emotion labels in `dair-ai/emotion` follow
+the words of the text closely, which favours TF-IDF there and should not be read as a general
+result. `embeddinggemma`'s training data is not known to exclude these sets (§53). XGBoost was not
+run: it is the same model family as LightGBM.
+
+**What this changes.** Nothing in the tool, and the default model stays base Laya. Every trained arm
+needs labels for the one question it answers, so none can stand in for a model that takes a new
+typed question with no labels. §57's decision holds: no `verdict fit`. The advice in §53 and §57
+extends to larger label counts: for one fixed question with a hundred or more labels per class, on
+a task where Laya is weak (many options, prompt injection), a logistic head on an embedding model
+is the better tool, and trees are not needed.
