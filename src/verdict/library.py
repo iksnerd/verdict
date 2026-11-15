@@ -195,6 +195,8 @@ def as_yesno(answers: dict[str, Any], rewritten: set[str]) -> dict[str, Any]:
         # different scale, so it is recomputed rather than passed through.
         out[qid] = {"type": "noul", "noul": p, "confidence": round(max(p, 1 - p), 4),
                     "asked_as": "choice"}
+        if a.get("truncated") is not None:
+            out[qid]["truncated"] = a["truncated"]   # the state was cut, however it was asked
     return out
 
 

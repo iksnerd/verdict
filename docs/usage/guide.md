@@ -315,7 +315,7 @@ The rules that came out of doing it once:
 | `verdict bench [--verify CARD]` | answer quality on pinned public datasets; the release gate; `--systemone URL` scores a Jev-compatible endpoint (hosted Jev through TypeSafe's SDK when `verdict[jev]` is installed). The scorecard also records `timing`: calls, median and p95 milliseconds, and the tokens a service reported; `--verify` ignores it |
 | `verdict examples [NAME...]` | runs `examples/` banks against a backend, printing ms/call and, where a row carries an `expected` label, a match count against it; `--systemone URL` checks a different backend (Kev, another verdict) against the same real inputs; `--path NAME` prints an installed example's directory |
 | `verdict serve` | holds the model on localhost:8799; also speaks TypeSafe's Jev protocol ([api.md](api.md)) |
-| `verdict update [--check]` | installs the newest release (or pulls, in a dev checkout) |
+| `verdict update [--check]` | installs the newest release tag (or, in a dev checkout, pulls and syncs the environment, also when already up to date) |
 | `verdict init` | writes the config from what the machine has |
 | `verdict config [--json]` | each resolved setting and where it came from: a flag, `$VAR`, a file or the default |
 | `verdict route PROMPT` | the big-or-small switch example; at chance on real traffic ([routing.md](../design/routing.md)) |
@@ -330,7 +330,9 @@ An error is one `verdict:` line on stderr. With `--json` or `--jsonl`, stdout al
 `{"error": {"code": ..., "message": ...}}` (`decide` always, since it prints JSON), with `code`
 one of `usage`, `refused` (the bank or question can't be asked as written: reword it, or
 `--allow-unmeasured`; a server's refusal arrives as `refused` too), `no_server`, `server_timeout`,
-`server_error`, `config` or `not_found`.
+`server_error`, `config`, `not_found` or `internal` (a bug or an unplanned failure: the traceback
+is on stderr and the exit status is 2, never 1, because 1 is an answer for `ask --cut`, `route`,
+`update --check` and `bench --verify`).
 In `--jsonl` the error also carries the failing line's `index`. `validate --json` returns the
 same `error` object beside `"valid": false`. `decide --jsonl` gives every output
 row an `index`, the 0-based line of the input it answers, so rows pair with lines across skipped

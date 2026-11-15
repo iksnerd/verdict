@@ -90,3 +90,14 @@ def test_json_prints_the_full_answer(monkeypatch, capsys):
     fake_server(monkeypatch, NOUL)
     cli.main(["ask", "x", "q?", "--json"])
     assert '"noul": 0.72' in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("content", ["[0.5]", '{"questions": [0.5]}', "not json"])
+def test_a_cut_file_that_is_not_a_fits_object_is_a_usage_error(monkeypatch, capsys, tmp_path, content):
+    """A JSON list raised AttributeError past the handler: a traceback and exit 1, which means "no"."""
+    fake_server(monkeypatch, NOUL)
+    fit = tmp_path / "fit.json"
+    fit.write_text(content)
+    assert cli.main(["ask", "x", "q?", "--cut", str(fit)]) == 2
+    out = capsys.readouterr()
+    assert str(fit) in out.err and "Traceback" not in out.err and out.out == ""

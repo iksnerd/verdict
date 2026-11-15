@@ -3,7 +3,8 @@
 ← [Back to the README](../../README.md)
 
 `verdict serve` exposes the same decisions over HTTP on `127.0.0.1:8799`. It binds to localhost and
-has no auth, so do not expose it beyond the machine. The wire format mirrors Laya's
+has no auth, so do not expose it beyond the machine; `--host` with any other address is allowed
+and prints a warning that the server is reachable from other machines. The wire format mirrors Laya's
 `Agent.predict(state, questions)`, so a Laya checkpoint drops in as a backend with no translation,
 and Laya's mirrors TypeSafe's Jev, which `/v1/systemone` serves.
 
@@ -122,7 +123,7 @@ r = TypeSafeClient().system_one(
   question (laya re-reads it for each, §11), so it is not Jev's billing figure. `output_tokens` is 0.
 - Local `instructions` may be text, JSON, or left out (Laya receives an empty string). The Jev
   profile requires instructions as TypeSafe's current HTTP reference specifies. The local bearer
-  key is ignored: the server binds to localhost.
+  key is ignored: the server binds to localhost by default and has no auth.
 
 What does not carry over: Jev takes up to 255 choice options; verdict's flat Laya choices use a
 conservative default of 20, with an explicit `allow_unmeasured` override. Jev's fan-out pattern,

@@ -101,7 +101,9 @@ the other 30%, and `--calibration fit.json` then decides each yes/no at that cut
 sent from 0.872 to 0.916 (§55). Asking Laya again in another form (options swapped, plain against
 choice) does not find its mistakes better than its own probabilities do (§55).
 Each output row marks every answer `primary` or `escalated`, and a line on stderr says how many
-states were sent out. Live on 200 public prompt-injection items: Laya 0.805, Jev 0.845, the cascade
+states were sent out. A state whose escalation failed counts as sent: its row lists the questions
+in `escalation_attempted`, carries `escalation_error`, keeps the primary answer, and the command
+exits 1. Live on 200 public prompt-injection items: Laya 0.805, Jev 0.845, the cascade
 with 60 of 200 sent 0.845; on AG News the check said escalating would not help (§54).
 
 ## Select instead of generate, and verify evidence

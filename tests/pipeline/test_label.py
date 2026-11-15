@@ -139,3 +139,48 @@ def test_a_network_timeout_is_a_label_error_so_the_stage_carries_on(monkeypatch)
     monkeypatch.setattr(httpx, "post", slow)
     with pytest.raises(LabelError, match="timed out"):
         gemini_transport("k")("gemini-2.5-flash-lite", "prompt")
+
+
+class FlakyTransport:
+    """Each step is a reply to return or an exception to raise."""
+
+    def __init__(self, steps):
+        self.steps, self.calls = list(steps), 0
+
+    def __call__(self, model, prompt):
+        self.calls += 1
+        step = self.steps.pop(0)
+        if isinstance(step, Exception):
+            raise step
+        return step, {"promptTokenCount": 100, "candidatesTokenCount": 50}
+
+
+def test_teacher_retries_once_on_a_transport_error_then_succeeds():
+    t = FlakyTransport([LabelError("ReadTimeout: timed out"), json.dumps(good())])
+    teacher = Teacher("m", t)
+    out = teacher.label({"message": "x"}, BANK)
+    assert t.calls == 2 and set(out) == set(BANK)
+    assert (teacher.tokens_in, teacher.tokens_out) == (100, 50)
+
+
+def test_two_transport_errors_give_up_naming_the_last_cause():
+    t = FlakyTransport([LabelError("HTTP 500: first"), LabelError("HTTP 503: second")])
+    with pytest.raises(LabelError, match=r"m: gave up after 2 tries: HTTP 503: second"):
+        Teacher("m", t).label({"message": "x"}, BANK)
+    assert t.calls == 2
+
+
+def test_a_transport_error_on_the_second_try_keeps_the_first_try_tokens():
+    t = FlakyTransport(["not json", LabelError("HTTP 503: down")])
+    teacher = Teacher("m", t)
+    with pytest.raises(LabelError, match="gave up after 2 tries: HTTP 503: down"):
+        teacher.label({"message": "x"}, BANK)
+    assert (teacher.tokens_in, teacher.tokens_out) == (100, 50)
+    assert (teacher.last_in, teacher.last_out) == (100, 50)
+
+
+def test_an_error_that_is_not_a_label_error_is_not_retried():
+    t = FlakyTransport([RuntimeError("bug"), json.dumps(good())])
+    with pytest.raises(RuntimeError, match="bug"):
+        Teacher("m", t).label({"message": "x"}, BANK)
+    assert t.calls == 1

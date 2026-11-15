@@ -127,7 +127,7 @@ def _git_url(url: str) -> str:
 
 
 def _update_cmd(args: argparse.Namespace) -> int:
-    """Fast-forward the checkout and re-sync with both extras.
+    """Fast-forward the checkout and re-sync with both extras, also when nothing was pulled.
 
     The extras are the point: `uv sync` alone removes `mlx` and `laya`, which silently breaks the
     CLI and the tests that need them (CLAUDE.md). Refuses on uncommitted changes rather than
@@ -143,6 +143,16 @@ def _update_cmd(args: argparse.Namespace) -> int:
             raise RuntimeError(f"`{' '.join(argv)}` failed:\n{out}")
         return out
 
+    def sync() -> None:
+        """Runs when nothing was pulled too: a pull that worked and a sync that failed leaves HEAD
+        current and the environment stale, and the next run is the only thing that can repair it."""
+        argv = ["uv", "sync", "--quiet", *(a for extra in _extras() for a in ("--extra", extra))]
+        code, out = _run(argv, cwd=repo)
+        if code != 0:
+            raise RuntimeError(f"`{' '.join(argv)}` failed:\n{out}\n"
+                               f"{repo} is current but its environment was not synced; "
+                               "rerun `verdict update` to sync it")
+
     try:
         step(["git", "fetch", "--quiet", "origin"])
         behind = int(step(["git", "rev-list", "--count", "HEAD..@{upstream}"]) or 0)
@@ -151,14 +161,14 @@ def _update_cmd(args: argparse.Namespace) -> int:
                   if behind else f"{support._version()} is up to date ({repo})")
             return 1 if behind else 0
         if not behind:
-            print(f"{support._version()} is up to date ({repo})")
+            sync()
+            print(f"{support._version()} is up to date ({repo}); environment synced")
             return 0
         if step(["git", "status", "--porcelain", "--untracked-files=no"]):
             return support._fail(f"{repo} has uncommitted changes; commit or stash them, then update")
         before = step(["git", "rev-parse", "--short", "HEAD"])
         step(["git", "pull", "--ff-only", "--quiet"])
-        step(["uv", "sync", "--quiet",
-              *(a for extra in _extras() for a in ("--extra", extra))])
+        sync()
         after = step(["git", "rev-parse", "--short", "HEAD"])
         log = step(["git", "log", "--oneline", f"{before}..{after}"])
     except RuntimeError as exc:

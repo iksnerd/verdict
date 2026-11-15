@@ -81,6 +81,40 @@ def test_a_full_precision_engine_is_untouched(monkeypatch):
     assert not e.name.endswith("q8")
 
 
+def test_an_injected_agent_is_not_quantized_so_its_name_does_not_say_q8(monkeypatch):
+    monkeypatch.setattr(engine, "quantize", lambda *a: pytest.fail("quantized an injected agent"))
+    agent = object()
+    e = engine.Engine("m", agent=agent, bits=8)
+    assert e.agent is agent
+    assert e.name == "laya-mlx:m"
+    assert e.bits == 8, "bits is what the caller asked for; the name is what is served"
+
+
+def test_a_lazy_8_bit_engine_is_named_q8_before_it_loads(monkeypatch):
+    """`MlxBackend` reads the name at construction, before any weights load."""
+    fake_laya(monkeypatch, [])
+    monkeypatch.setattr(engine, "quantize", lambda a, bits: None)
+    assert engine.load("m", bits=8).name == "laya-mlx:m q8"
+
+
+def test_a_failed_quantize_never_serves_the_fp16_agent_under_a_q8_name(monkeypatch):
+    loaded, attempts = [], []
+    agent = fake_laya(monkeypatch, loaded)
+
+    def boom(a, bits):
+        attempts.append(bits)
+        if len(attempts) < 3:
+            raise RuntimeError("out of memory")
+
+    monkeypatch.setattr(engine, "quantize", boom)
+    e = engine.load("m", bits=8)
+    for _ in range(2):  # every access retries; none hands back the unquantized agent
+        with pytest.raises(RuntimeError, match="out of memory"):
+            e.agent
+    assert e.agent is agent and e.name.endswith("q8")
+    assert attempts == [8, 8, 8] and len(loaded) == 3
+
+
 def test_compile_and_quantize_are_refused_together():
     """A compiled forward pass would keep the FP16 graph, so the quantization would do nothing."""
     with pytest.raises(ValueError, match="compile"):

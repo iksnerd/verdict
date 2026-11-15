@@ -127,7 +127,8 @@ Do not re-derive these. Each is measured, in `docs/research/FINDINGS.md`.
   measured it (group 64, `act_head` left FP16, in `engine.quantize`): half the memory, same answers,
   no speedup. Only 16 and 8 are accepted. Scorecards record `bits`.
 - `uv run verdict init` writes `~/.config/verdict/config.toml` from what the machine actually has
-  (`--out verdict.toml` for a per-directory one, gitignored), and fetches the weights if missing.
+  (`--out verdict.toml` for a per-directory one, gitignored). It does not fetch weights: a Hub id is
+  downloaded on first use, and a missing local path is reported as MISSING.
   Settings resolve flag > environment > file > built-in default, and there is deliberately no
   `[thresholds]` key: the cuts live in the server process, so a file value would be ignored.
 - `uv run verdict serve` first: it loads the checkpoint once, and `verdict route` then costs

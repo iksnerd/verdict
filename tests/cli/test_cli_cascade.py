@@ -239,3 +239,31 @@ def test_a_saved_fit_is_what_calibration_reads(many, tmp_path, monkeypatch, caps
                      "--calibration", str(out_file)])
     rows = [json.loads(l) for l in capsys.readouterr().out.splitlines() if l.startswith("{")]
     assert code == 0 and all("decision" in r["answers"]["spam"] for r in rows)
+
+
+def test_a_failed_escalation_is_counted_as_sent_not_as_stayed(servers, monkeypatch, capsys):
+    """Its text went to the second server; only the answer did not come back."""
+    stdin(monkeypatch)
+    real = client.decide
+
+    def flaky(state, questions, url=None, model=None, **flags):
+        if url == SECOND and state["text"].endswith("1"):
+            raise client.NoServer("no verdict server at the second url")
+        return real(state, questions, url=url, model=model, **flags)
+
+    monkeypatch.setattr(client, "decide", flaky)
+    code, rows, err = run(["--below", "0.6"], capsys)
+    assert code == 1
+    assert rows[1]["escalated"] == [] and rows[1]["escalation_attempted"] == ["spam"]
+    assert "3 of 4 states were sent there (2 answered, 1 failed)" in err
+    assert "1 stayed on the primary" in err
+
+
+@pytest.mark.parametrize("content,what", [("[1, 2]", "JSON object"), ('{"questions": [1]}', "questions")])
+def test_a_calibration_file_of_the_wrong_shape_is_a_usage_error(servers, monkeypatch, tmp_path, capsys,
+                                                                 content, what):
+    stdin(monkeypatch)
+    fit = tmp_path / "fit.json"
+    fit.write_text(content)
+    code, _, err = run(["--share", "0.5", "--calibration", str(fit)], capsys)
+    assert code == 2 and str(fit) in err and what in err and err.count(str(fit)) == 1

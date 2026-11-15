@@ -68,10 +68,27 @@ def _serve_cmd(args: argparse.Namespace) -> int:
     backend.engine.tokenizer
     print(f"serving {backend.name} on http://{args.host}:{args.port}, "
           f"reading {budget or 'all'} tokens of each state", flush=True)
-    print("  it binds to localhost and has no auth; do not expose it beyond this machine.")
+    if _is_loopback(args.host):
+        print("  it binds to localhost and has no auth; do not expose it beyond this machine.")
+    else:
+        print(f"  WARNING: it binds to {args.host}, so it is reachable from other machines, "
+              "and has no auth.")
     uvicorn.run(create_app(backend), host=args.host, port=args.port,
                 log_level=args.log_level)
     return 0
+
+
+def _is_loopback(host: str) -> bool:
+    """Whether a `--host` keeps the server on this machine: `localhost`, `::1` or 127.0.0.0/8.
+    Any other name is taken as reachable, since saying "localhost" wrongly is the worse error."""
+    import ipaddress
+
+    if host == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
 
 
 def _serve_remote(args, settings, url, key, create_app, uvicorn) -> int:
@@ -217,6 +234,7 @@ def _init_cmd(args: argparse.Namespace) -> int:
         url=url.rstrip("/"), model_path=model_path,
         prompt_token_budget=current.prompt_token_budget, multilingual_path=multilingual,
         bits=current.bits, lang=current.lang, extra_checkpoints=current.extra_checkpoints,
+        systemone_url=current.systemone_url, systemone_model=current.systemone_model,
     )
     out = target
     if out.exists() and not args.yes and sys.stdin.isatty():

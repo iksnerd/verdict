@@ -235,3 +235,12 @@ def test_with_a_fit_an_escalated_yes_no_still_carries_a_decision_and_says_at_wha
     kept, sent = (r["answers"]["spam"] for r in out.rows)
     assert kept["tier"] == "primary" and kept["decision"] is True and kept["cut"] == 0.80
     assert sent["tier"] == "escalated" and sent["decision"] is False and sent["cut"] == 0.5
+
+
+def test_a_failed_escalation_still_counts_as_sent_and_names_what_was_attempted():
+    """The request went out: the text left the machine whether or not an answer came back."""
+    out = cascade.run(STATES, BANK, primary(), Secondary(fail_on=1), below=0.6, errors=(ValueError,))
+    assert out.rows[1]["escalated"] == [] and out.rows[1]["escalation_attempted"] == ["spam"]
+    assert out.rows[2]["escalated"] == ["dept"] and out.rows[2]["escalation_attempted"] == ["dept"]
+    assert out.rows[0]["escalation_attempted"] == []
+    assert out.states_sent == 3 and len(out.failed) == 1

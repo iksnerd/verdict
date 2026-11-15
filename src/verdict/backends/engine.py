@@ -83,11 +83,14 @@ class Engine:
         self.bits = bits
         self.load_options = load_options
         self._agent = agent
+        #: Only an agent this engine loads is quantized. One handed in is served as it came,
+        #: whatever `bits` says, so the name must not claim a width nobody applied.
+        self._quantizes = bits != 16 and agent is None
         self._tokenizer: Any = None
 
     @property
     def name(self) -> str:
-        return f"laya-mlx:{self.model_id}" + (f" q{self.bits}" if self.bits != 16 else "")
+        return f"laya-mlx:{self.model_id}" + (f" q{self.bits}" if self._quantizes else "")
 
     @property
     def agent(self) -> Any:
@@ -95,9 +98,12 @@ class Engine:
         if self._agent is None:
             import laya_mlx
 
-            self._agent = laya_mlx.load(self.model_id, **self.load_options)
-            if self.bits != 16:
-                quantize(self._agent, self.bits)
+            agent = laya_mlx.load(self.model_id, **self.load_options)
+            if self._quantizes:
+                # Cached only once quantized: if this raises, the next access loads and tries
+                # again instead of serving the FP16 agent under a q8 name.
+                quantize(agent, self.bits)
+            self._agent = agent
         return self._agent
 
     @property

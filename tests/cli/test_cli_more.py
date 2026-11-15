@@ -256,3 +256,75 @@ def test_calibrate_refuses_answers_from_two_models(monkeypatch, tmp_path, capsys
     assert cli.main(["calibrate", str(data), "--questions",
                      '{"q": {"type": "noul", "instructions": "?"}}']) == 2
     assert "more than one model" in capsys.readouterr().err
+
+
+def test_init_keeps_a_configured_remote_backend(monkeypatch, tmp_path):
+    """`[systemone]` is a setting like any other: rewriting the file must not drop it."""
+    from verdict import config
+    from verdict.cli import setup
+
+    path = tmp_path / "config.toml"
+    path.write_text(config.to_toml(config.Settings(
+        "http://127.0.0.1:8799", "org/model", 128,
+        systemone_url="http://127.0.0.1:8009", systemone_model="kev-small")))
+    monkeypatch.delenv("VERDICT_SYSTEMONE_URL", raising=False)
+    monkeypatch.delenv("VERDICT_SYSTEMONE_MODEL", raising=False)
+    monkeypatch.setattr(config, "CONFIG_PATHS", (path,))
+    monkeypatch.setattr(setup, "_port_free", lambda *a: True)
+    monkeypatch.chdir(tmp_path)
+    assert cli.main(["init", "--yes", "--out", str(path)]) == 0
+    after = config.load(path)
+    assert (after.systemone_url, after.systemone_model) == ("http://127.0.0.1:8009", "kev-small")
+
+
+def _serve_locally(monkeypatch, host):
+    """`verdict serve --host HOST` with the socket, the backend and uvicorn all faked."""
+    import socket
+    import types
+
+    import uvicorn
+
+    import verdict.backends.mlx as backend_mlx
+    from verdict import config
+    from verdict.cli import inference, support
+
+    class FakeSocket:
+        def setsockopt(self, *a):
+            pass
+
+        def bind(self, addr):
+            pass
+
+        def close(self):
+            pass
+
+    class FakeBackend:
+        name = "fake"
+
+        def __init__(self, model_id, **kw):
+            self.engine = types.SimpleNamespace(agent=None, tokenizer=None)
+
+    monkeypatch.setattr(socket, "socket", FakeSocket)
+    monkeypatch.setattr(support, "_settings",
+                        lambda: config.Settings("http://127.0.0.1:8799", "org/model", 128))
+    monkeypatch.setattr(inference, "_resolved_model", lambda flag, settings: "org/model")
+    monkeypatch.setattr(backend_mlx, "MlxBackend", FakeBackend)
+    monkeypatch.setattr(uvicorn, "run", lambda *a, **k: None)
+    return cli.main(["serve", "--port", "8799", "--host", host])
+
+
+@pytest.mark.parametrize("host", ["127.0.0.1", "127.0.0.2", "localhost", "::1"])
+def test_serve_on_loopback_says_it_binds_to_localhost(monkeypatch, capsys, host):
+    assert _serve_locally(monkeypatch, host) == 0
+    out = capsys.readouterr().out
+    assert "binds to localhost" in out and "reachable from other machines" not in out
+
+
+@pytest.mark.parametrize("host", ["0.0.0.0", "192.168.1.20", "::", "myhost.lan"])
+def test_serve_beyond_loopback_warns_and_names_the_host(monkeypatch, capsys, host):
+    """It still serves: the claim "binds to localhost" was simply false for these."""
+    assert _serve_locally(monkeypatch, host) == 0
+    out = capsys.readouterr().out
+    assert "binds to localhost" not in out
+    warning = next(line for line in out.splitlines() if "reachable from other machines" in line)
+    assert host in warning and "no auth" in warning

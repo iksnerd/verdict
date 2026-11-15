@@ -59,7 +59,7 @@ def probe(precisions: str = "fp16,bf16,tf32", steps: int = 30) -> list[dict]:
 
 
 @app.function(image=image, gpu="A10G", volumes={"/data": vol}, timeout=60 * 60)
-def train(run: str = "run1", precision: str = "fp16", epochs: int = 4, resume: bool = True) -> str:
+def train(run: str = "v1", precision: str = "fp16", epochs: int = 4, resume: bool = True) -> str:
     md = _model_dir()
     d = f"/data/verdict/{run}"
     args = ["/root/laya_train.py", "--model-dir", md, "--items", f"{d}/train_items.pt", "--calib-items", f"{d}/holdout_items.pt",

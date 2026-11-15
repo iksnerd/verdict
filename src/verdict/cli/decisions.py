@@ -14,8 +14,18 @@ from ..backends.engine import maybe_truncated
 def _read_fits(path: str | None) -> dict:
     if not path:
         return {}
-    data = json.loads(Path(path).read_text())
-    return data.get("questions", data)
+    try:
+        data = json.loads(Path(path).read_text())
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"{path} is not valid JSON: {exc}") from None
+    if not isinstance(data, dict):
+        raise ValueError(f"{path} is not a fits file: it holds a JSON {type(data).__name__}, not a "
+                         "JSON object of fits per question (what `verdict calibrate --out` writes)")
+    fits = data.get("questions", data)
+    if not isinstance(fits, dict):
+        raise ValueError(f"{path} is not a fits file: its \"questions\" is a JSON "
+                         f"{type(fits).__name__}, not an object of fits per question")
+    return fits
 
 
 def _decide_cmd(args: argparse.Namespace) -> int:
@@ -264,7 +274,7 @@ def _cascade_cmd(args: argparse.Namespace) -> int:
     try:
         fits = _read_fits(args.calibration)
     except (OSError, ValueError) as exc:
-        return support._fail(f"{args.calibration}: {exc}")
+        return support._fail(exc)   # the message names the file
 
     primary = inference._Asker(args)
     flags = {"allow_unmeasured": True} if args.allow_unmeasured else {}
@@ -328,12 +338,14 @@ def _cascade_cmd(args: argparse.Namespace) -> int:
                          share=share, below=below, fits=fits, errors=errors)
     for (index, state), row in zip(numbered, result.rows):
         print(json.dumps({"index": index, "state": state, **row}), flush=True)
-    kept = len(numbered) - result.states_sent
+    # Sent means a request was made: a state whose escalation failed still left the machine.
+    sent, lost = result.states_sent, len(result.failed)
+    outcome = f" ({sent - lost} answered, {lost} failed)" if lost else ""
     print(f"verdict: escalated {result.escalated} of {result.answers} answers to {second_url}: "
-          f"{result.states_sent} of {len(numbered)} states were sent there, {kept} stayed on the "
-          "primary", file=sys.stderr)
+          f"{sent} of {len(numbered)} states were sent there{outcome}, {len(numbered) - sent} "
+          "stayed on the primary", file=sys.stderr)
     if result.failed:
-        print(f"verdict: {len(result.failed)} state(s) could not be escalated and kept the primary "
+        print(f"verdict: {lost} state(s) were sent but could not be escalated and kept the primary "
               f"answer (first: {result.failed[0][1]})", file=sys.stderr)
         return 1
     return 0

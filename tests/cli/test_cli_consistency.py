@@ -277,3 +277,43 @@ def test_examples_reports_the_median_call_so_a_cold_load_does_not_inflate_it(mon
     served(monkeypatch)
     assert cli.main(["examples", "test-output", "--pause", "0"]) == 0
     assert "test-output: 30 ms/call (median of 12; 30 to 5000 ms)" in capsys.readouterr().out
+
+
+# an unexpected exception is exit 2, never 1: 1 is an answer (`ask --cut`: no; `route`: big)
+
+def test_an_unexpected_exception_exits_two_with_its_traceback(monkeypatch, capsys):
+    from verdict.cli import decisions
+
+    def boom(args):
+        raise RuntimeError("something nobody planned for")
+
+    monkeypatch.setattr(decisions, "_ask_cmd", boom)
+    assert cli.main(["ask", "x", "q?", "--cut", "0.5"]) == 2
+    out = capsys.readouterr()
+    assert "Traceback" in out.err and "RuntimeError: something nobody planned for" in out.err
+    assert out.out == ""
+
+
+def test_an_unexpected_exception_is_a_json_error_under_json(monkeypatch, capsys):
+    from verdict.cli import decisions
+
+    def boom(args):
+        raise KeyError("answers")
+
+    monkeypatch.setattr(decisions, "_ask_cmd", boom)
+    assert cli.main(["ask", "x", "q?", "--json"]) == 2
+    error = json.loads(capsys.readouterr().out)["error"]
+    assert error["code"] == "internal" and "KeyError" in error["message"]
+
+
+@pytest.mark.parametrize("exc", [KeyboardInterrupt, SystemExit(3)])
+def test_an_interrupt_and_an_exit_still_pass_through(monkeypatch, exc):
+    from verdict.cli import decisions
+
+    def stop(args):
+        raise exc
+
+    monkeypatch.setattr(decisions, "_ask_cmd", stop)
+    with pytest.raises(BaseException) as caught:
+        cli.main(["ask", "x", "q?"])
+    assert isinstance(caught.value, (KeyboardInterrupt, SystemExit))

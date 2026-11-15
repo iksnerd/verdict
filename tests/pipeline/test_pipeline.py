@@ -142,3 +142,59 @@ def test_coverage_search_gives_up_loudly_when_impossible(tmp_path):
     gen_stage(c, tmp_path, FakeGen(), MESSAGE_TYPING)
     with pytest.raises(SystemExit):
         split_stage(c, tmp_path)
+
+
+# ---- `python -m verdict.pipeline` -----------------------------------------------------------------
+
+def run_module(monkeypatch, tmp_path, failures):
+    """Run the module as the process would, with every stage replaced. Returns (exit code, stages run)."""
+    import runpy
+    import sys
+
+    import verdict.gen.ollama as ollama
+    import verdict.label.teacher as teacher
+    import verdict.pipeline.export as export
+    import verdict.pipeline.stages as stages
+
+    ran = []
+    monkeypatch.setattr(ollama, "OllamaClient", lambda model: object())
+    monkeypatch.setattr(teacher, "load_key", lambda key_file=None: "k")
+    monkeypatch.setattr(stages, "gen_stage", lambda *a, **k: ran.append("gen") or 6)
+    monkeypatch.setattr(stages, "label_stage", lambda *a, **k: ran.append("label") or {
+        "states": 6, "label_rows": 30 - failures, "failures_this_run": failures})
+    monkeypatch.setattr(stages, "split_stage", lambda *a, **k: ran.append("split") or {
+        "train": [], "holdout": [], "test": [], "seed_used": 0})
+    monkeypatch.setattr(export, "export_stage", lambda *a, **k: ran.append("export") or {})
+    conf = tmp_path / "pipeline.json"
+    conf.write_text(cfg().model_dump_json())
+    monkeypatch.setattr(sys, "argv", ["verdict.pipeline", "--config", str(conf), "--run-dir", str(tmp_path)])
+    monkeypatch.delitem(sys.modules, "verdict.pipeline.__main__", raising=False)
+    try:
+        runpy.run_module("verdict.pipeline", run_name="__main__")
+    except SystemExit as e:
+        return e.code, ran
+    return None, ran
+
+
+def test_label_failures_exit_1_after_every_stage_has_run(monkeypatch, tmp_path, capsys):
+    code, ran = run_module(monkeypatch, tmp_path, failures=3)
+    assert ran == ["gen", "label", "split", "export"], "a rerun fills the gaps; the later stages still run"
+    assert code == 1
+    err = capsys.readouterr().err
+    assert "3 labels failed" in err and "rerun" in err
+
+
+def test_a_clean_run_exits_0_and_says_nothing_on_stderr(monkeypatch, tmp_path, capsys):
+    code, ran = run_module(monkeypatch, tmp_path, failures=0)
+    assert ran == ["gen", "label", "split", "export"]
+    assert code in (0, None)
+    assert capsys.readouterr().err == ""
+
+
+def test_importing_the_module_runs_nothing(monkeypatch):
+    import importlib
+    import sys
+
+    monkeypatch.setattr(sys, "argv", ["x"])  # no --config: main() would exit 2
+    monkeypatch.delitem(sys.modules, "verdict.pipeline.__main__", raising=False)
+    assert callable(importlib.import_module("verdict.pipeline.__main__").main)

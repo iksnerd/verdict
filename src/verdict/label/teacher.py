@@ -166,7 +166,11 @@ class Teacher:
         prompt = build_prompt(state, bank, self.preamble)
         last: Exception | None = None
         for _ in range(2):
-            text, usage = self.transport(self.model, prompt)
+            try:  # a timeout or an HTTP error gets the same second try as a malformed reply
+                text, usage = self.transport(self.model, prompt)
+            except LabelError as e:
+                last = e
+                continue
             self.calls += 1
             tin = usage.get("promptTokenCount", 0)
             tout = usage.get("candidatesTokenCount", 0) + usage.get("thoughtsTokenCount", 0)

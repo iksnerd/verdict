@@ -147,3 +147,10 @@ def test_questions_that_showed_no_signal_on_base_laya_are_not_in_the_library(nam
     """AUC 0.52 against their outcome proxies (FINDINGS §60); re-adding one needs a new measurement."""
     with pytest.raises(ValueError, match=name):
         inputs.load_questions(name)
+
+
+def test_a_rewritten_yes_no_keeps_the_truncated_mark_and_does_not_invent_one():
+    choice = {"type": "choice", "choice": "yes", "probabilities": {"no": 0.3, "yes": 0.7}}
+    out = library.as_yesno({"cut": {**choice, "truncated": True}, "whole": choice}, {"cut", "whole"})
+    assert out["cut"]["truncated"] is True and out["cut"]["noul"] == 0.7
+    assert "truncated" not in out["whole"]

@@ -76,11 +76,55 @@ def test_check_reports_and_changes_nothing(shell, capsys):
     assert "3" in capsys.readouterr().out
 
 
-def test_up_to_date_does_not_pull_or_sync(shell, capsys):
+def test_up_to_date_does_not_pull_but_still_syncs(shell, capsys):
+    """A pull that worked followed by a sync that failed leaves HEAD current and the environment
+    stale. Nothing is behind on the next run, so the sync has to run anyway."""
     shell.behind = "0"
     assert cli.main(["update"]) == 0
+    assert not ran(shell, "pull")
+    sync = next(c for c in shell.calls if c[:2] == ["uv", "sync"])
+    assert {"--extra", "mlx", "laya"} <= set(sync)
+    out = capsys.readouterr().out
+    assert "up to date" in out and "synced" in out
+
+
+def test_a_rerun_after_a_failed_sync_repairs_the_environment(shell, monkeypatch, capsys):
+    state = {"behind": "3", "sync_ok": False}
+
+    def flaky(argv, cwd=None):
+        shell.calls.append(argv)
+        if argv[:2] == ["uv", "sync"]:
+            return (0, "") if state["sync_ok"] else (1, "error: failed to build")
+        if argv[:2] == ["git", "pull"]:
+            state["behind"] = "0"
+        return FakeShell(behind=state["behind"])(argv, cwd)
+
+    monkeypatch.setattr(update, "_run", flaky)
+    assert cli.main(["update"]) == 2
+    err = capsys.readouterr().err
+    assert "failed to build" in err
+    assert "`verdict update`" in err, "the error names the command to rerun"
+    shell.calls.clear()
+    state["sync_ok"] = True
+    assert cli.main(["update"]) == 0
+    assert ran(shell, "uv sync") and not ran(shell, "pull")
+    assert "synced" in capsys.readouterr().out
+
+
+def test_up_to_date_with_uncommitted_changes_still_syncs(shell, capsys):
+    """The refusal protects a pull from mixing into someone's work; with nothing to pull there is
+    nothing to refuse."""
+    shell.behind, shell.dirty = "0", " M src/verdict/cli.py"
+    assert cli.main(["update"]) == 0
+    assert ran(shell, "uv sync") and not ran(shell, "pull")
+
+
+def test_check_when_up_to_date_changes_nothing(shell, capsys):
+    shell.behind = "0"
+    assert cli.main(["update", "--check"]) == 0
     assert not ran(shell, "pull") and not ran(shell, "uv sync")
-    assert "up to date" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "up to date" in out and "synced" not in out
 
 
 def test_uncommitted_changes_refuse(shell, capsys):

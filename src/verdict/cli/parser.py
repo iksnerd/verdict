@@ -448,9 +448,11 @@ Examples:
   verdict update           # newest release (or pull + sync in a checkout), and what changed
   verdict update --check   # report only: exit 0 up to date, 1 behind
 
-Releases come from $VERDICT_REPO (default https://github.com/iksnerd/verdict.git) and are the
-tags the release workflow tested. In a checkout it refuses on uncommitted changes and only
-fast-forwards. A running `verdict serve` keeps the old code until restarted.
+Releases come from $VERDICT_REPO (default https://github.com/iksnerd/verdict.git): the newest
+`vX.Y.Z` tag there is installed, whether or not its release workflow passed. In a checkout it
+refuses on uncommitted changes when there are commits to pull, and only fast-forwards. It
+syncs the environment on every run, so running it again repairs a sync that failed.
+A running `verdict serve` keeps the old code until restarted.
 
 Exit status: 0 on success, 2 on failure. --check exits 0 when up to date and 1 when a newer
 release (or, in a checkout, newer commits) is available.
@@ -828,3 +830,10 @@ def main(argv: list[str] | None = None) -> int:
         except (AttributeError, OSError, ValueError):
             pass
         return 0
+    except Exception as e:
+        # A bug, or a failure no command planned for. Exit 2, never Python's default 1: 1 is an
+        # answer here (`ask --cut`: no; `route`: big; `update --check`: behind).
+        import traceback
+
+        traceback.print_exc(file=sys.stderr)
+        return support._fail(f"internal error: {type(e).__name__}: {e}", code="internal")

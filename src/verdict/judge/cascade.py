@@ -80,7 +80,8 @@ class Cascade:
 
     @property
     def states_sent(self) -> int:
-        return sum(1 for r in self.rows if r["escalated"])
+        """States a request was made for, answered or not: the text left the machine either way."""
+        return sum(1 for r in self.rows if r["escalation_attempted"])
 
 
 def run(states: Sequence[Any], bank: dict, primary: Ask, secondary: Ask, *,
@@ -88,8 +89,10 @@ def run(states: Sequence[Any], bank: dict, primary: Ask, secondary: Ask, *,
         errors: tuple[type[BaseException], ...] = (ValueError,)) -> Cascade:
     """Answer every state with `primary`, then re-ask the least-sure answers of `secondary`.
 
-    Only the escalated questions of an escalated state are sent. A secondary that fails leaves that
-    state's primary answers in place and the row says so; the run carries on. `fits` (the file
+    Only the escalated questions of an escalated state are sent. A row's `escalation_attempted` is
+    the questions sent for it and `escalated` those the secondary answered. A secondary that fails
+    leaves that state's primary answers in place and the row says so (`escalation_error`, with
+    `escalated` empty); the run carries on. `fits` (the file
     `verdict calibrate` writes) gives each yes/no its cut: the primary's answer then carries a
     `decision` at that cut, and the least sure are those nearest it. `below` is a probability, so
     it cannot be combined with a cut measured in logit units."""
@@ -109,7 +112,7 @@ def run(states: Sequence[Any], bank: dict, primary: Ask, secondary: Ask, *,
         asked = sorted(qid for qid in bank if i in chosen[qid])
         answers = {qid: {**a, "tier": "primary"} for qid, a in result["answers"].items()}
         row = {**{k: v for k, v in result.items() if k != "answers"}, "answers": answers,
-               "escalated": []}
+               "escalated": [], "escalation_attempted": asked}
         if asked:
             try:
                 second = secondary(state, {qid: bank[qid] for qid in asked})["answers"]
