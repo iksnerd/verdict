@@ -11,6 +11,7 @@
 """
 import argparse
 import contextlib
+import hashlib
 import json
 import os
 import random
@@ -21,6 +22,14 @@ from safetensors.torch import load_file, save_file
 from transformers import AutoTokenizer
 
 from laya.common import build_model, proper_reward
+
+
+def _sha256(path):
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for block in iter(lambda: f.read(1 << 20), b""):
+            h.update(block)
+    return h.hexdigest()
 
 
 def collate_train_batch(items, pad_id):
@@ -114,8 +123,18 @@ def main():
     os.makedirs(a.out, exist_ok=True)
     ckpt_path = os.path.join(a.out, "ckpt.pt")
     start_epoch = 0
+    # What a checkpoint belongs to. Without it, new items uploaded under an old run name resume the
+    # old run: the loop is skipped and the old weights are saved again as the new model.
+    made_from = {"items_sha256": _sha256(a.items), "precision": a.precision}
     if a.resume and os.path.exists(ckpt_path):
         ck = torch.load(ckpt_path, map_location="cpu", weights_only=False)
+        was = ck.get("made_from")
+        if was is None:
+            print("WARNING: this checkpoint does not record its items; resuming on trust", flush=True)
+        elif was != made_from:
+            raise SystemExit(f"{ckpt_path} was made from {was}, and this run has {made_from}. "
+                             "Resuming would save the old run's weights under this run's name. "
+                             "Train without --resume, or use a new run name.")
         model.load_state_dict(ck["model"])
         optimizer.load_state_dict(ck["optimizer"])
         scheduler.load_state_dict(ck["scheduler"])
@@ -192,7 +211,8 @@ def main():
                 return
         print(f"=== epoch {epoch + 1}/{a.epochs} done in {time.time() - t0:.0f}s | avg loss {ep_loss / max(1, nb):.4f} ===", flush=True)
         torch.save({"model": model.state_dict(), "optimizer": optimizer.state_dict(), "scheduler": scheduler.state_dict(),
-                    "scaler": scaler.state_dict(), "epoch": epoch + 1}, ckpt_path + ".tmp")
+                    "scaler": scaler.state_dict(), "epoch": epoch + 1, "made_from": made_from},
+                   ckpt_path + ".tmp")
         os.replace(ckpt_path + ".tmp", ckpt_path)
 
     temps = [1.2, 1.2, 1.2]

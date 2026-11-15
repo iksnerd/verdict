@@ -39,6 +39,11 @@ uses it by pointing `[model].path` at a local copy. verdict itself defaults to b
 - **Resumable.** Rerun a stage and only the missing work happens. Rows are appended and fsynced
   one at a time; a torn last line from a kill is dropped on reopen; whole-file writes go through
   a temp file and rename. A four-hour labeling run must survive `Ctrl-C`.
+- **The test set does not move.** The split stage records the seed it used in `split.json` and a
+  rerun reuses it, so adding states never moves an old one to another split. A rerun whose seed
+  or fractions differ from the recorded ones is refused; delete `split.json` to split afresh.
+  Training checkpoints record the items they were made from, and `--resume` refuses a checkpoint
+  made from other items.
 - **Cost-capped.** The label stage sums spend from the rows already on disk, so a resume cannot
   forget what an earlier run spent, and it stops before crossing `max_cost_usd`.
 - **Manifested.** Every stage ends by writing `<stage>.manifest.json`: config digest, git commit,

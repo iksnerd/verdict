@@ -27,7 +27,7 @@ def _bench_cmd(args: argparse.Namespace) -> int:
         path = Path(args.verify)
         current = json.loads(path.read_text())
         prev_path = Path(args.against) if args.against else bench.previous(
-            path.parent, path.stem.lstrip("v"), model=current.get("model"))
+            path.parent, path.stem.lstrip("v"), like=current)
         prev = json.loads(prev_path.read_text()) if prev_path else None
         problems = bench.verify(current, prev)
         for line in problems:

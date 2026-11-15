@@ -384,10 +384,10 @@ field it expects.
 BENCH_HELP = """\
 Score each suite's question on a fixed, balanced sample of a public labelled dataset, pinned by
 revision: AUC for yes/no, accuracy for choice, each with a 95% bootstrap interval. --verify
-compares a scorecard with the previous one of the same model, with no model; the first scorecard of
-a model is its baseline. A scorecard also records timing (calls, median and p95 milliseconds, the
-tokens a service reported), which --verify ignores. --systemone scores Jev, through TypeSafe's SDK
-when it is installed.
+compares a scorecard with the previous one of the same model, bits and budget, with no model; the
+first scorecard of such a measurement is its baseline. A scorecard also records timing (calls,
+median and p95 milliseconds, the tokens a service reported), which --verify ignores.
+--systemone scores Jev, through TypeSafe's SDK when it is installed.
 """
 
 BENCH_EPILOG = """\

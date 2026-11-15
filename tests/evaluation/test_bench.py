@@ -487,3 +487,22 @@ def test_bench_will_not_send_the_key_over_plain_http_to_a_remote_host(toy_bench,
     monkeypatch.setattr(bench, "systemone_asker", lambda *a, **k: pytest.fail("must not connect"))
     assert cli.main(["bench", "--systemone", "http://api.example", "--pause", "0"]) == 2
     assert "https" in capsys.readouterr().err
+
+
+def test_previous_matches_bits_and_budget_as_well_as_the_model(tmp_path):
+    """An 8-bit or 512-token card is a different measurement: judged against the 16-bit, 128-token
+    one it would pass or regress for a reason that is not the release."""
+    for v, bits, budget in (("0.5.0", 16, 128), ("0.6.0", 8, 128), ("0.7.0", 16, 512)):
+        (tmp_path / f"v{v}.json").write_text(json.dumps({**card(0.8, 0.7, 0.9), "bits": bits, "budget": budget}))
+    like = {**card(0.8, 0.7, 0.9), "bits": 16, "budget": 128}
+    assert bench.previous(tmp_path, "0.8.0", like=like).stem == "v0.5.0"
+    assert bench.previous(tmp_path, "0.8.0", like={**like, "bits": 8}).stem == "v0.6.0"
+    assert bench.previous(tmp_path, "0.8.0", like={**like, "bits": 8, "budget": 512}) is None
+    assert bench.previous(tmp_path, "0.8.0", like={"model": "m1", "suites": {}}).stem == "v0.7.0"
+
+
+def test_verify_fails_when_a_suite_changed_its_metric():
+    prev = card(0.82, 0.76, 0.88)
+    cur = {"model": "m1", "suites": {"toy": {"metric": "accuracy", "value": 0.95, "ci": [0.9, 1.0]}}}
+    problems = bench.verify(cur, prev)
+    assert len(problems) == 1 and "metric" in problems[0] and "accuracy" in problems[0]

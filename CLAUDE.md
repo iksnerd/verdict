@@ -111,7 +111,8 @@ Do not re-derive these. Each is measured, in `docs/research/FINDINGS.md`.
   the Hugging Face repo `iksnerd/verdict-v1-mlx`, used only where `model.path` points at it.
   Scorecards come from the release machine's configured model, which is base Laya since 0.7.0
   (v0.1.0 to v0.6.3 measured the fine-tune; the gate compares a scorecard only with an earlier one
-  of the same `model`, so the first base scorecard is a baseline, not a regression).
+  of the same `model`, `bits` and `budget`, and fails a suite whose metric changed, so the first
+  base scorecard is a baseline, not a regression).
 - Docs: README (landing), `docs/usage/guide.md` (usage), `docs/usage/api.md`, `docs/design/routing.md`,
   `docs/design/pipeline.md`, `docs/usage/patterns.md`, `docs/usage/rough-edges.md`, `docs/usage/models.md` (the last three
   follow TypeSafe's docs; `verdict docs` serves them), and

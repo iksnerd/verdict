@@ -4,6 +4,7 @@ of every input and output, counts and spend. The manifest is what a scorecard pi
 from __future__ import annotations
 
 import hashlib
+import json
 import random
 import subprocess
 from datetime import datetime, timezone
@@ -115,13 +116,26 @@ def split_stage(cfg: PipelineConfig, run_dir: Path) -> dict:
 
     With `require_type_coverage`, seeds are tried in order until every intended type appears in both
     test and holdout (a lesson from an earlier pipeline: aggregate counts hid a source missing from most splits).
-    The seed used is recorded; once a test set is chosen, do not rerun the split after adding states."""
+    The seed used is recorded in `split.json`, and a rerun reuses it instead of searching again:
+    with more states the first covering seed can be a different one, and a different seed moves
+    every topic, test set included. A rerun whose seed or fractions differ from the recorded ones
+    is refused for the same reason; delete `split.json` to split afresh on purpose."""
     run_dir = Path(run_dir)
     states = JsonlStore(run_dir / "states.jsonl", key=lambda r: r["id"]).rows()
     sp = cfg.split
     seed = sp.seed
+    recorded = run_dir / "split.json"
+    prior = json.loads(recorded.read_text()) if recorded.exists() else None
+    if prior is not None:
+        was = (prior.get("seed"), prior.get("test_frac"), prior.get("holdout_frac"))
+        now = (sp.seed, sp.test_frac, sp.holdout_frac)
+        if was != now or "seed_used" not in prior:
+            raise SystemExit(f"{recorded} was made with seed, test_frac, holdout_frac = {was} and this "
+                             f"config has {now}: splitting again would move the test set. Delete "
+                             "split.json to split afresh on purpose.")
+        seed = prior["seed_used"]
     parts = _assign(states, sp, seed)
-    if sp.require_type_coverage:
+    if sp.require_type_coverage and prior is None:
         for seed in range(sp.seed, sp.seed + 500):
             parts = _assign(states, sp, seed)
             st = split_stats(states, parts)

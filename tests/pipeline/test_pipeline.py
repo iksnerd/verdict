@@ -198,3 +198,26 @@ def test_importing_the_module_runs_nothing(monkeypatch):
     monkeypatch.setattr(sys, "argv", ["x"])  # no --config: main() would exit 2
     monkeypatch.delitem(sys.modules, "verdict.pipeline.__main__", raising=False)
     assert callable(importlib.import_module("verdict.pipeline.__main__").main)
+
+
+def test_a_rerun_keeps_the_recorded_seed_so_the_test_set_does_not_move(tmp_path):
+    """The coverage search picks the first seed that covers every type. Adding states can change
+    which seed that is, and a new seed re-buckets every topic: test items become training items."""
+    from verdict.pipeline.stages import _assign
+
+    c = cfg(gen={"n": 150}, split={"test_frac": 0.25, "holdout_frac": 0.2, "require_type_coverage": True})
+    gen_stage(c, tmp_path, FakeGen(), MESSAGE_TYPING)
+    first = split_stage(c, tmp_path)
+    recorded = first["seed_used"] + 7          # as if an earlier, smaller run had landed here
+    write_json_atomic(tmp_path / "split.json", {**first, "seed_used": recorded})
+    again = split_stage(c, tmp_path)
+    states = JsonlStore(tmp_path / "states.jsonl", key=lambda r: r["id"]).rows()
+    assert again["seed_used"] == recorded
+    assert again["test"] == sorted(_assign(states, c.split, recorded)["test"])
+
+
+def test_a_rerun_with_other_fractions_refuses_instead_of_moving_the_test_set(tmp_path):
+    gen_stage(cfg(), tmp_path, FakeGen(), MESSAGE_TYPING)
+    split_stage(cfg(split={"test_frac": 0.3}), tmp_path)
+    with pytest.raises(SystemExit, match="split.json"):
+        split_stage(cfg(split={"test_frac": 0.5}), tmp_path)

@@ -195,6 +195,10 @@ def verify(current: dict, previous: Optional[dict]) -> list[str]:
             problems.append(f"{name}: sample differs from the previous scorecard; rerun the "
                             "baseline on the same items")
             continue
+        if cur.get("metric") != prev.get("metric"):
+            problems.append(f"{name}: metric is {cur.get('metric')}, the previous scorecard's was "
+                            f"{prev.get('metric')}; the two numbers are not comparable")
+            continue
         if cur["value"] < prev["ci"][0]:
             problems.append(f"{name}: {cur['metric']} {cur['value']:.2f}, below the previous "
                             f"interval [{prev['ci'][0]:.2f}, {prev['ci'][1]:.2f}]")
@@ -209,15 +213,26 @@ def scorecards(directory: Path) -> list[Path]:
     return sorted(Path(directory).glob("v*.json"), key=_version_key)
 
 
-def previous(directory: Path, version: str, model: Optional[str] = None) -> Optional[Path]:
+#: What makes two scorecards the same measurement. A card that differs in one of these is not a
+#: predecessor: 8-bit weights or a 512-token read would pass or regress for their own reasons.
+SAME_MEASUREMENT = ("model", "bits", "budget")
+
+
+def previous(directory: Path, version: str, model: Optional[str] = None,
+             like: Optional[dict] = None) -> Optional[Path]:
     """The newest scorecard older than `version`. With `model`, the newest older one of the same
     model: the release scorecard moved from the fine-tune to base Laya, and a base card judged
     against a fine-tune card would "regress" on exactly what the fine-tune was made for (SST-2
-    yes/no, FINDINGS §35). The first card of a model has no predecessor and is its own baseline."""
+    yes/no, FINDINGS §35). The first card of a model has no predecessor and is its own baseline.
+    With `like` (the current scorecard), the newest older one that agrees with it on every
+    `SAME_MEASUREMENT` field the current card states."""
     mine = _version_key(Path(f"v{version}.json"))
     older = [p for p in scorecards(directory) if _version_key(p) < mine]
-    if model is not None:
-        older = [p for p in older if json.loads(p.read_text()).get("model") == model]
+    want = {"model": model} if model is not None else {}
+    want.update({k: like[k] for k in SAME_MEASUREMENT if like and k in like})
+    if want:
+        older = [p for p in older
+                 if all(json.loads(p.read_text()).get(k) == v for k, v in want.items())]
     return older[-1] if older else None
 
 
