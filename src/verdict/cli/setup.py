@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import argparse
-import os
 import sys
 from pathlib import Path
 
@@ -128,11 +127,10 @@ def _serve_remote(args, settings, url, key, create_app, uvicorn) -> int:
             from . import update
 
             version = support._version().split()[-1]
-            extras = ",".join([*update.TOOL_EXTRAS.split(","), "jev"])
+            spec = update._tool_spec([*update.TOOL_EXTRAS.split(","), "jev"], version)
             raise ConfigError(
                 "hosted Jev uses TypeSafe's SDK, which is not installed here. Add it with: "
-                f"uv tool install --force --python 3.11 'verdict[{extras}] @ "
-                f"git+{update._git_url(update.REPO_URL)}@v{version}' "
+                f"{update._tool_install_cmd(spec)} "
                 "(or `uv sync --extra jev` in a checkout). Not `pip install verdict`: "
                 "that name on PyPI is a different project") from exc
         backend = JevBackend(model, api_key=key, base_url=url)
@@ -277,14 +275,9 @@ def _init_cmd(args: argparse.Namespace) -> int:
             print("  left alone.")
             return 0
     out.parent.mkdir(parents=True, exist_ok=True)
-    # Write beside the target and swap it in, so Ctrl-C mid-write cannot leave a truncated config
-    # that every later command would reject.
-    tmp = out.with_name(f".{out.name}.{os.getpid()}.tmp")
-    try:
-        tmp.write_text(config.to_toml(settings))
-        os.replace(tmp, out)
-    finally:
-        tmp.unlink(missing_ok=True)
+    # Swapped in atomically, so Ctrl-C mid-write cannot leave a truncated config that every later
+    # command would reject.
+    inference.write_atomic(out, config.to_toml(settings))
     print(f"  wrote {out}")
     print()
     print("Next:")

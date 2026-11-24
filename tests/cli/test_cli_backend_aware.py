@@ -12,6 +12,7 @@ import json
 import pytest
 
 from verdict import cli, client
+from conftest import MONEY_BANK
 from fakes import noul
 
 
@@ -44,7 +45,7 @@ def server(monkeypatch):
     return box
 
 
-YESNO = json.dumps({"q": {"type": "noul", "instructions": "Is `message` about money?"}})
+YESNO = MONEY_BANK
 
 
 def many(n):

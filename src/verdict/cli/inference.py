@@ -25,6 +25,11 @@ _UNASKED = object()
 _ENGINES: dict[str, object] = {}
 
 
+def _say_local(exc: Exception) -> None:
+    print(f"verdict: {exc}; loading the model in this process (a few seconds and about 800 MB "
+          "of GPU memory; `verdict serve` keeps one loaded)", file=sys.stderr)
+
+
 def write_atomic(path, text: str) -> None:
     """Write `text` to `path` through a temp file in the same directory and `os.replace`, so a
     killed run leaves the old file or the new one, never half of one (a scorecard gates a release)."""
@@ -75,8 +80,7 @@ def _answer(state, questions: dict, url: str, model_path: str, model: str | None
         laya = laya_questions(questions)
         key = (model_path, bits)
         if key not in _ENGINES and not pin:
-            print(f"verdict: {exc}; loading the model in this process (a few seconds and about "
-                  "800 MB of GPU memory; `verdict serve` keeps one loaded)", file=sys.stderr)
+            _say_local(exc)
             # A cached Hub checkpoint still draws a "Fetching 6 files" bar on stderr.
             os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
             _ENGINES[key] = load(model_path, bits=bits) if bits != 16 else load(model_path)

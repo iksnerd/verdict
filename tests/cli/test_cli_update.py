@@ -10,6 +10,8 @@ import pytest
 from verdict import cli
 from verdict.cli import support, update
 
+pytestmark = pytest.mark.usefixtures("no_release_lookup")
+
 
 class FakeShell:
     def __init__(self, dirty="", behind="0", head=("aaa1111", "bbb2222")):
@@ -41,12 +43,6 @@ def shell(monkeypatch, tmp_path):
     fake = FakeShell(behind="3")
     monkeypatch.setattr(update, "_run", fake)
     return fake
-
-
-@pytest.fixture(autouse=True)
-def no_release_lookup(monkeypatch):
-    """Nothing here asks GitHub which tags were released, unless a test says what it answers."""
-    monkeypatch.setattr(update, "_released", lambda url: None)
 
 
 def ran(fake, needle):
@@ -168,28 +164,6 @@ def test_a_failing_step_stops_and_reports(shell, monkeypatch, capsys):
 
 # --- installed as a uv tool: no checkout, so update follows release tags ---------------------
 
-class ToolShell:
-    def __init__(self, tags="v0.1.0\nv0.2.1\nv0.10.0\nv0.3.0"):
-        self.calls, self.tags = [], tags
-
-    def __call__(self, argv, cwd=None):
-        self.calls.append(argv)
-        if argv[:2] == ["git", "ls-remote"]:
-            return 0, "\n".join(f"abc{i}\trefs/tags/{t}" for i, t in enumerate(self.tags.split()))
-        return 0, ""
-
-
-@pytest.fixture
-def tool(monkeypatch, tmp_path):
-    monkeypatch.setattr(update, "_checkout", lambda: tmp_path)  # no .git: a tool install
-    monkeypatch.setattr(update, "_server_up", lambda: False)
-    monkeypatch.setattr(support, "_version", lambda: "verdict 0.2.1")
-    monkeypatch.setattr(update, "_has_jev", lambda: False)  # whatever this venv happens to hold
-    fake = ToolShell()
-    monkeypatch.setattr(update, "_run", fake)
-    return fake
-
-
 def test_tool_install_reinstalls_the_newest_release_tag_with_extras(tool, capsys):
     assert cli.main(["update"]) == 0
     install = next(c for c in tool.calls if c[:3] == ["uv", "tool", "install"])
@@ -224,29 +198,12 @@ def test_tool_install_ignores_tags_that_are_not_versions(tool, capsys):
 STALE = "fatal: Could not parse object '8d3d7e48e0f79bc66ac74c0eee8df387fafa6f09'."
 
 
-def scripted_installs(tool, *results):
-    """Make successive `uv tool install` calls return these (code, output) pairs."""
-    queue = list(results)
-    plain = tool.__call__
-
-    def call(argv, cwd=None):
-        if argv[:3] == ["uv", "tool", "install"]:
-            tool.calls.append(argv)
-            return queue.pop(0)
-        return plain(argv, cwd)
-    return call
-
-
 def installs(tool):
     """Attempts at the NEW version; a rollback to the old one is a restoration, not a retry."""
     return [c for c in tool.calls if c[:3] == ["uv", "tool", "install"] and c[-1].endswith("@v0.10.0")]
 
 
-def restores(tool):
-    return [c for c in tool.calls if c[:3] == ["uv", "tool", "install"] and c[-1].endswith("@v0.2.1")]
-
-
-def test_a_stale_uv_git_cache_is_refreshed_and_retried_once(tool, monkeypatch, capsys):
+def test_a_stale_uv_git_cache_is_refreshed_and_retried_once(tool, monkeypatch, capsys, scripted_installs):
     """Right after the v0.8.0 tag was pushed, uv resolved the tag but its cached clone lacked the
     commit; an immediate retry worked. `--refresh-package` makes the retry fetch."""
     monkeypatch.setattr(update, "_run", scripted_installs(tool, (1, STALE), (0, "")))
@@ -257,14 +214,14 @@ def test_a_stale_uv_git_cache_is_refreshed_and_retried_once(tool, monkeypatch, c
     assert "0.2.1 -> 0.10.0" in capsys.readouterr().out
 
 
-def test_any_other_install_failure_is_not_retried(tool, monkeypatch, capsys):
+def test_any_other_install_failure_is_not_retried(tool, monkeypatch, capsys, scripted_installs):
     monkeypatch.setattr(update, "_run", scripted_installs(tool, (1, "error: no such tag"), (0, "")))
     assert cli.main(["update"]) == 2
     assert len(installs(tool)) == 1
     assert "no such tag" in capsys.readouterr().err
 
 
-def test_a_stale_cache_twice_fails_instead_of_looping(tool, monkeypatch, capsys):
+def test_a_stale_cache_twice_fails_instead_of_looping(tool, monkeypatch, capsys, scripted_installs):
     monkeypatch.setattr(update, "_run", scripted_installs(tool, (1, STALE), (1, STALE), (0, "")))
     assert cli.main(["update"]) == 2
     assert len(installs(tool)) == 2
@@ -306,14 +263,14 @@ def test_a_tool_update_keeps_the_jev_extra_too(monkeypatch):
 UNREADABLE = "fatal: unable to read tree (22d12ee567376f28a1728f0505b6e001d58fc18e)"
 
 
-def test_an_unreadable_tree_is_the_same_stale_cache_and_is_retried(tool, monkeypatch, capsys):
+def test_an_unreadable_tree_is_the_same_stale_cache_and_is_retried(tool, monkeypatch, capsys, scripted_installs, restores):
     """Seen releasing 0.7.0: uv resolved the fresh tag but could not read its tree."""
     monkeypatch.setattr(update, "_run", scripted_installs(tool, (1, UNREADABLE), (0, "")))
     assert cli.main(["update"]) == 0
     assert len(installs(tool)) == 2 and restores(tool) == []
 
 
-def test_a_failed_update_puts_the_old_version_back_and_says_so(tool, monkeypatch, capsys):
+def test_a_failed_update_puts_the_old_version_back_and_says_so(tool, monkeypatch, capsys, scripted_installs, restores):
     """`uv tool install --force` removes the old install first. Without this, a failure left no
     `verdict` on the PATH at all."""
     monkeypatch.setattr(update, "_run", scripted_installs(tool, (1, "error: boom"), (0, "")))
@@ -323,13 +280,13 @@ def test_a_failed_update_puts_the_old_version_back_and_says_so(tool, monkeypatch
     assert "boom" in err and "restored v0.2.1" in err
 
 
-def test_a_failed_update_after_a_stale_retry_also_restores(tool, monkeypatch, capsys):
+def test_a_failed_update_after_a_stale_retry_also_restores(tool, monkeypatch, capsys, scripted_installs, restores):
     monkeypatch.setattr(update, "_run", scripted_installs(tool, (1, STALE), (1, STALE), (0, "")))
     assert cli.main(["update"]) == 2
     assert len(installs(tool)) == 2 and len(restores(tool)) == 1
 
 
-def test_if_the_old_version_cannot_be_restored_the_error_gives_the_command(tool, monkeypatch, capsys):
+def test_if_the_old_version_cannot_be_restored_the_error_gives_the_command(tool, monkeypatch, capsys, scripted_installs):
     monkeypatch.setattr(update, "_run", scripted_installs(tool, (1, "error: boom"), (1, "error: also")))
     assert cli.main(["update"]) == 2
     err = capsys.readouterr().err
@@ -337,7 +294,7 @@ def test_if_the_old_version_cannot_be_restored_the_error_gives_the_command(tool,
     assert "uv tool install --force" in err and "@v0.2.1" in err
 
 
-def test_the_restore_keeps_the_extras(tool, monkeypatch):
+def test_the_restore_keeps_the_extras(tool, monkeypatch, scripted_installs, restores):
     monkeypatch.setattr(update, "_run", scripted_installs(tool, (1, "error: boom"), (0, "")))
     cli.main(["update"])
     assert restores(tool)[0][-1].startswith("verdict[mlx,laya] @ git+")

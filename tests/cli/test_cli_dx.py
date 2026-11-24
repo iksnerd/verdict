@@ -5,14 +5,11 @@ import json
 import pytest
 
 from verdict import cli, client, config
-from verdict.cli import inference
 from conftest import typed
 from fakes import noul
 
 
-@pytest.fixture(autouse=True)
-def no_inference(monkeypatch):
-    monkeypatch.setattr(inference, "load", lambda *a, **k: pytest.fail("loaded a model"))
+pytestmark = pytest.mark.usefixtures("no_inference")
 
 
 def test_validate_stdin_returns_normalized_bank(monkeypatch, capsys):

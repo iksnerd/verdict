@@ -23,11 +23,6 @@ from ..judge.switch import Branch
 DEFAULT_MODEL = os.environ.get("VERDICT_MODEL", ENGINE_DEFAULT_MODEL)
 
 
-def _say_local(exc: Exception) -> None:
-    print(f"verdict: {exc}; loading the model in this process (a few seconds and about 800 MB "
-          "of GPU memory; `verdict serve` keeps one loaded)", file=sys.stderr)
-
-
 def decide(
     prompt: str,
     model: str = DEFAULT_MODEL,
@@ -51,7 +46,7 @@ def decide(
             branch = Branch(payload["branch"], payload["reason"], payload.get("scores", {}))
             return branch, ms, f"server {url or client.server_url()}"
         except client.NoServer as exc:
-            _say_local(exc)
+            inference._say_local(exc)
 
     eng = inference.load(model)
     state = eng.clip(prompt, budget)
@@ -83,7 +78,7 @@ def decide_many(
             branches = [Branch(r["branch"], r["reason"], r.get("scores", {})) for r in results]
             return branches, ms, f"server {url or client.server_url()}"
         except client.NoServer as exc:
-            _say_local(exc)
+            inference._say_local(exc)
 
     eng = inference.load(model)
     # Loading is lazy, so without this the first prompt pays the checkpoint load inside the timed

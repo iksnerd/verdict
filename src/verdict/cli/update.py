@@ -148,8 +148,8 @@ def _update_tool(args: argparse.Namespace) -> int:
         print(f"verdict {current} installed; v{newest} is available. `verdict update` installs it")
         return 1
     extras = _extras()  # before the install: `--force` removes the old venv, and the SDK with it
-    spec = f"verdict[{','.join(extras)}] @ git+{_git_url(REPO_URL)}@v{newest}"
-    install = ["uv", "tool", "install", "--force", "--python", "3.11", spec]
+    spec = _tool_spec(extras, newest)
+    install = _tool_install_argv(spec)
     try:
         code, out = _run(install)
         if code != 0 and any(marker in out for marker in STALE_CACHE):
@@ -180,15 +180,28 @@ def _restore(version: str | None, extras: list[str]) -> str:
     if version is None:
         return ("the previous version is not a release tag, so it was not restored and `verdict` "
                 "may be missing. Reinstall it by hand with:\n"
-                f"  uv tool install --force --python 3.11 'verdict[{','.join(extras)}] @ "
-                f"git+{_git_url(REPO_URL)}@vX.Y.Z'  (a release tag)")
-    spec = f"verdict[{','.join(extras)}] @ git+{_git_url(REPO_URL)}@v{version}"
-    install = ["uv", "tool", "install", "--force", "--python", "3.11", spec]
+                f"  {_tool_install_cmd(_tool_spec(extras, 'X.Y.Z'))}  (a release tag)")
+    spec = _tool_spec(extras, version)
+    install = _tool_install_argv(spec)
     code, _ = _run(install)
     if code == 0:
         return f"restored v{version}, so `verdict` still works; the update did not happen"
     return (f"v{version} could not be restored either, so `verdict` may be missing. Reinstall it with:\n"
-            f"  uv tool install --force --python 3.11 '{spec}'")
+            f"  {_tool_install_cmd(spec)}")
+
+
+def _tool_spec(extras: list[str], tag: str) -> str:
+    """The `uv tool install` requirement for release `tag` (no leading `v`) with `extras`."""
+    return f"verdict[{','.join(extras)}] @ git+{_git_url(REPO_URL)}@v{tag}"
+
+
+def _tool_install_argv(spec: str) -> list[str]:
+    return ["uv", "tool", "install", "--force", "--python", "3.11", spec]
+
+
+def _tool_install_cmd(spec: str) -> str:
+    """The install as a shell line to print, the spec quoted."""
+    return " ".join(_tool_install_argv(f"'{spec}'"))
 
 
 def _git_url(url: str) -> str:

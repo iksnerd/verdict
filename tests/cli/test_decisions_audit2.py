@@ -16,9 +16,6 @@ CALL = ["decide", '{"kind": "bad"}', "--questions", BANK]
 
 
 def serve(monkeypatch, model="fake"):
-    def decide(state, questions, url=None, model_=None, model=None, **flags):
-        return {"model": served[0], "answers": typed(questions, lambda k: noul(0.5))}
-
     served = [model]
     monkeypatch.setattr(client, "decide", lambda s, q, url=None, model=None, **f: {
         "model": served[0], "answers": typed(q, lambda k: noul(0.5))})

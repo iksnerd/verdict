@@ -9,52 +9,11 @@ import pytest
 from verdict import cli, config
 from verdict.cli import support, update
 
+pytestmark = pytest.mark.usefixtures("no_release_lookup")
 
 
-class ToolShell:
-    def __init__(self, tags="v0.1.0\nv0.2.1\nv0.10.0"):
-        self.calls, self.tags = [], tags
 
-    def __call__(self, argv, cwd=None):
-        self.calls.append(argv)
-        if argv[:2] == ["git", "ls-remote"]:
-            return 0, "\n".join(f"abc{i}\trefs/tags/{t}" for i, t in enumerate(self.tags.split()))
-        return 0, ""
-
-
-def restores(tool):
-    return [c for c in tool.calls if c[:3] == ["uv", "tool", "install"] and c[-1].endswith("@v0.2.1")]
-
-
-def scripted_installs(tool, *results):
-    queue = list(results)
-    plain = tool.__call__
-
-    def call(argv, cwd=None):
-        if argv[:3] == ["uv", "tool", "install"]:
-            tool.calls.append(argv)
-            return queue.pop(0)
-        return plain(argv, cwd)
-    return call
-
-
-@pytest.fixture(autouse=True)
-def no_release_lookup(monkeypatch):
-    monkeypatch.setattr(update, "_released", lambda url: None)
-
-
-@pytest.fixture
-def tool(monkeypatch, tmp_path):
-    monkeypatch.setattr(update, "_checkout", lambda: tmp_path)
-    monkeypatch.setattr(update, "_server_up", lambda: False)
-    monkeypatch.setattr(support, "_version", lambda: "verdict 0.2.1")
-    monkeypatch.setattr(update, "_has_jev", lambda: False)
-    fake = ToolShell()
-    monkeypatch.setattr(update, "_run", fake)
-    return fake
-
-
-def test_ctrl_c_during_the_install_restores_the_old_version(tool, monkeypatch, capsys):
+def test_ctrl_c_during_the_install_restores_the_old_version(tool, monkeypatch, capsys, restores):
     plain = tool.__call__
 
     def call(argv, cwd=None):
@@ -71,7 +30,7 @@ def test_ctrl_c_during_the_install_restores_the_old_version(tool, monkeypatch, c
     assert "restored v0.2.1" in capsys.readouterr().err
 
 
-def test_restore_never_guesses_a_pin_for_an_untagged_version(monkeypatch, tool, capsys):
+def test_restore_never_guesses_a_pin_for_an_untagged_version(monkeypatch, tool, capsys, scripted_installs):
     monkeypatch.setattr(support, "_version", lambda: "verdict (not installed)")
     monkeypatch.setattr(update, "_run", scripted_installs(tool, (1, "error: boom")))
     assert cli.main(["update"]) == 2
@@ -81,7 +40,7 @@ def test_restore_never_guesses_a_pin_for_an_untagged_version(monkeypatch, tool, 
     assert "uv tool install" in err and "reinstall" in err.lower()
 
 
-def test_restore_uses_the_extras_computed_before_the_removal(tool, monkeypatch, capsys):
+def test_restore_uses_the_extras_computed_before_the_removal(tool, monkeypatch, capsys, restores):
     state = {"jev": True}
     monkeypatch.setattr(update, "_has_jev", lambda: state["jev"])
     plain = tool.__call__

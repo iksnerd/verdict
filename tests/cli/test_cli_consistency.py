@@ -7,16 +7,14 @@ import json
 import pytest
 
 from verdict import cli, client, config
-from verdict.cli import inference, parser, setup
-from conftest import typed
+from verdict.cli import parser, setup
+from conftest import MONEY_BANK, typed
 from fakes import noul
 
-BANK = '{"q": {"type": "noul", "instructions": "Is `message` about money?"}}'
+BANK = MONEY_BANK
 
 
-@pytest.fixture(autouse=True)
-def no_inference(monkeypatch):
-    monkeypatch.setattr(inference, "load", lambda *a, **k: pytest.fail("loaded a model"))
+pytestmark = pytest.mark.usefixtures("no_inference")
 
 
 def served(monkeypatch, noul=0.6):
