@@ -51,7 +51,11 @@ uses it by pointing `[model].path` at a local copy. verdict itself defaults to b
 - **Cost-capped.** The label stage sums spend from the rows already on disk, so a resume cannot
   forget what an earlier run spent, and it stops before crossing `max_cost_usd`. A failed call is
   billed too and writes no row: its cost counts toward the cap for the run it happened in and is
-  reported as `failed_spend_usd`.
+  reported as `failed_spend_usd`. A label model with no price (in `PRICES` or `label.prices`) is
+  refused before any call, so the cap cannot be bypassed by a model that costs "zero".
+- **Fresh.** `split`, `label`, `export` and `compile` compare each recorded input hash with the
+  file on disk and refuse a stale one, naming the stage to rerun. Label rows carry a digest of the
+  bank and preamble, and a run holds a lock on its directory.
 - **Manifested.** Every stage ends by writing `<stage>.manifest.json`: config digest, git commit,
   sha256 of each input and output, counts, spend. APOL scorecards pin these hashes, so a scorecard
   fails when its data drifts instead of quietly scoring something else.

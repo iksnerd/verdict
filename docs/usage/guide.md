@@ -324,7 +324,11 @@ The rules that came out of doing it once:
 Exit status is 2 for a usage error everywhere, and 2 never means "no". `ask --cut` exits 0 for
 yes and 1 for no. `route` exits 0 for small and 1 for big, except under `--json`, which exits 0 on
 success. `bench --verify` exits 1 on a regression, and `update --check` exits 1 when a newer
-release is available. Every command's `--help` ends with its own exit status.
+release is available. Ctrl-C exits 130, and a closed pipe (`| head`) exits 2 without a message,
+because 0 would read as "yes" or "small". Every command's `--help` ends with its own exit status.
+`decide`, `ask --cut` and `cascade` print one warning on stderr when the fit they were given
+was made on another model, bits or budget, or holds no fits, and when a server appears or
+disappears in the middle of a run.
 
 An error is one `verdict:` line on stderr. With `--json` or `--jsonl`, stdout also gets
 `{"error": {"code": ..., "message": ...}}` (always for `decide`, for `cascade` without `--check` and
