@@ -47,6 +47,13 @@ def resume_mismatch(was, now):
             for k in sorted(set(was) | set(now)) if was.get(k, object()) != now.get(k)]
 
 
+def total_updates(n_items, micro_batch, grad_accum, epochs):
+    """Optimizer steps the loop takes: each epoch steps every `grad_accum` micro-batches and once more
+    on a trailing partial accumulation, so per epoch it is ceil(micro-batches / grad_accum)."""
+    micro_batches = -(-n_items // micro_batch)
+    return max(1, -(-micro_batches // grad_accum) * epochs)
+
+
 def calibration_note(n_calib, per_type):
     """One honest line about the temperatures: what they were fitted on, and what fell back."""
     if n_calib == 0:
@@ -150,8 +157,8 @@ def main():
     enc = [p for n, p in model.named_parameters() if "encoder." in n]
     head = [p for n, p in model.named_parameters() if "encoder." not in n]
     optimizer = torch.optim.AdamW([{"params": enc, "lr": a.lr_encoder}, {"params": head, "lr": a.lr_head}], weight_decay=0.01)
-    total_updates = max(1, (len(items) // (a.micro_batch * a.grad_accum)) * a.epochs)
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=total_updates, eta_min=1e-6)
+    n_updates = total_updates(len(items), a.micro_batch, a.grad_accum, a.epochs)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=n_updates, eta_min=1e-6)
     scaler = torch.amp.GradScaler("cuda", enabled=a.precision == "fp16")
     amp_dtype = {"fp16": torch.float16, "bf16": torch.bfloat16}.get(a.precision)
 
