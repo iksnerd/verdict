@@ -26,8 +26,11 @@ def _bench_cmd(args: argparse.Namespace) -> int:
     if args.verify:
         path = Path(args.verify)
         current = json.loads(path.read_text())
-        prev_path = Path(args.against) if args.against else bench.previous(
-            path.parent, path.stem.lstrip("v"), like=current)
+        try:
+            prev_path = Path(args.against) if args.against else bench.previous(
+                path.parent, path.stem.lstrip("v"), like=current)
+        except ValueError as exc:
+            return support._fail(exc)
         prev = json.loads(prev_path.read_text()) if prev_path else None
         problems = bench.verify(current, prev)
         for line in problems:
@@ -136,7 +139,7 @@ def _bench_cmd(args: argparse.Namespace) -> int:
                "timing": _timing(spent, tokens)}
         if args.out:
             Path(args.out).parent.mkdir(parents=True, exist_ok=True)
-            Path(args.out).write_text(json.dumps(doc, indent=2) + "\n")
+            inference.write_atomic(args.out, json.dumps(doc, indent=2) + "\n")
             print(f"wrote {args.out}", file=sys.stderr)
         return 0
     finally:
@@ -250,6 +253,11 @@ def _calibrate_cmd(args: argparse.Namespace) -> int:
         result = ask(row["state"], questions)
         models.add(result["model"])
         answers.append(result["answers"])
+    # The model that answered, not the one configured: a running server may serve another, and a
+    # cut reused against a different model is a guess. Checked before anything is printed.
+    if len(models) > 1:
+        return support._fail(f"answers came from more than one model ({', '.join(sorted(models))}); "
+                             "a cut fitted across them fits none of them")
 
     fits = {}
     try:
@@ -283,14 +291,10 @@ def _calibrate_cmd(args: argparse.Namespace) -> int:
             if fit["confusions"]:
                 print("  most confused: " + ", ".join(
                     f"{c['true']}->{c['predicted']} x{c['n']}" for c in fit["confusions"][:3]))
-    # The model that answered, not the one configured: a running server may serve another, and a
-    # cut reused against a different model is a guess.
-    if len(models) > 1:
-        return support._fail(f"answers came from more than one model ({', '.join(sorted(models))}); "
-                             "a cut fitted across them fits none of them")
-    doc = {"model": next(iter(models), None), "examples": args.examples, "questions": fits}
+    doc = {"model": next(iter(models), None), "examples": args.examples, "questions": fits,
+           "bits": ask.settings.bits, "budget": ask.settings.prompt_token_budget}
     if args.out:
-        Path(args.out).write_text(json.dumps(doc, indent=2) + "\n")
+        inference.write_atomic(args.out, json.dumps(doc, indent=2) + "\n")
         print(f"wrote {args.out}; apply it with --calibration {args.out} (decide) "
               f"or --cut {args.out} (ask)", file=sys.stderr)
     else:

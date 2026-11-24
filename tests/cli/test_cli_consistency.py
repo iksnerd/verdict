@@ -306,17 +306,25 @@ def test_an_unexpected_exception_is_a_json_error_under_json(monkeypatch, capsys)
     assert error["code"] == "internal" and "KeyError" in error["message"]
 
 
-@pytest.mark.parametrize("exc", [KeyboardInterrupt, SystemExit(3)])
-def test_an_interrupt_and_an_exit_still_pass_through(monkeypatch, exc):
+def test_an_exit_still_passes_through(monkeypatch):
     from verdict.cli import decisions
 
     def stop(args):
-        raise exc
+        raise SystemExit(3)
 
     monkeypatch.setattr(decisions, "_ask_cmd", stop)
-    with pytest.raises(BaseException) as caught:
+    with pytest.raises(SystemExit):
         cli.main(["ask", "x", "q?"])
-    assert isinstance(caught.value, (KeyboardInterrupt, SystemExit))
+
+
+def test_ctrl_c_is_130_not_a_traceback(monkeypatch):
+    from verdict.cli import decisions
+
+    def stop(args):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(decisions, "_ask_cmd", stop)
+    assert cli.main(["ask", "x", "q?"]) == 130
 
 
 # route: --batch prints JSON lines, so its failures are JSON too; --quiet and a single prompt

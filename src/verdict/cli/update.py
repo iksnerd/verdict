@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
+import sys
 from pathlib import Path
 
 from . import setup, support
@@ -43,7 +45,9 @@ def _run(argv: list[str], cwd: Path | None = None) -> tuple[int, str]:
     return proc.returncode, (proc.stdout + proc.stderr).strip()
 
 
-def _server_up() -> bool:
+def _server_up() -> bool | None:
+    """Whether a verdict server answers, or None when that cannot be known (the settings do not
+    load). This runs after an update has finished, so it must not be able to fail one."""
     import urllib.request
 
     try:
@@ -51,6 +55,17 @@ def _server_up() -> bool:
             return r.status == 200
     except OSError:
         return False
+    except Exception:
+        return None
+
+
+def _note_server() -> None:
+    up = _server_up()
+    if up:
+        print("A verdict server is running the old code: restart `verdict serve` to use it.")
+    elif up is None:
+        print("Could not tell whether a verdict server is running (settings did not load); "
+              "if one is, restart `verdict serve` to use the new code.")
 
 
 def _github_slug(url: str) -> str | None:
@@ -80,9 +95,13 @@ def _released(url: str) -> set[tuple[int, ...]] | None:
     try:
         with urllib.request.urlopen(request, timeout=10) as r:
             releases = json.loads(r.read())
-    except (OSError, ValueError):
+    except (OSError, ValueError) as exc:
+        print(f"verdict: could not read published releases from GitHub ({exc}); "
+              "the published-release filter was skipped, so any vX.Y.Z tag counts", file=sys.stderr)
         return None
     if not isinstance(releases, list):
+        print("verdict: GitHub's release list had an unexpected shape; the published-release "
+              "filter was skipped, so any vX.Y.Z tag counts", file=sys.stderr)
         return None
     out = set()
     for rel in releases:
@@ -110,6 +129,7 @@ def _release_tags(url: str) -> list[tuple[int, ...]]:
 def _update_tool(args: argparse.Namespace) -> int:
     """Update a `uv tool install`: reinstall the newest release tag, with the extras."""
     current = support._version().split()[-1]
+    pin = current if re.fullmatch(r"\d+\.\d+\.\d+", current) else None
     try:
         tags = _release_tags(REPO_URL)
     except RuntimeError as exc:
@@ -127,18 +147,23 @@ def _update_tool(args: argparse.Namespace) -> int:
     if args.check:
         print(f"verdict {current} installed; v{newest} is available. `verdict update` installs it")
         return 1
-    spec = f"verdict[{','.join(_extras())}] @ git+{_git_url(REPO_URL)}@v{newest}"
+    extras = _extras()  # before the install: `--force` removes the old venv, and the SDK with it
+    spec = f"verdict[{','.join(extras)}] @ git+{_git_url(REPO_URL)}@v{newest}"
     install = ["uv", "tool", "install", "--force", "--python", "3.11", spec]
-    code, out = _run(install)
-    if code != 0 and any(marker in out for marker in STALE_CACHE):
-        # uv resolved the new tag but its cached clone predates the commit, seen right after a tag
-        # was pushed. Refreshing makes it fetch; once, so a real failure is not looped.
-        code, out = _run(install[:3] + ["--refresh-package", "verdict"] + install[3:])
+    try:
+        code, out = _run(install)
+        if code != 0 and any(marker in out for marker in STALE_CACHE):
+            # uv resolved the new tag but its cached clone predates the commit, seen right after a tag
+            # was pushed. Refreshing makes it fetch; once, so a real failure is not looped.
+            code, out = _run(install[:3] + ["--refresh-package", "verdict"] + install[3:])
+    except KeyboardInterrupt:
+        # The old install may already be gone; put it back before leaving.
+        print(f"verdict: interrupted. {_restore(pin, extras)}", file=sys.stderr)
+        return 130
     if code != 0:
-        return support._fail(f"`uv tool install {spec}` failed:\n{out}\n{_restore(current)}")
+        return support._fail(f"`uv tool install {spec}` failed:\n{out}\n{_restore(pin, extras)}")
     print(f"updated {current} -> {newest}")
-    if _server_up():
-        print("A verdict server is running the old code: restart `verdict serve` to use it.")
+    _note_server()
     return 0
 
 
@@ -147,12 +172,17 @@ def _update_tool(args: argparse.Namespace) -> int:
 STALE_CACHE = ("Could not parse object", "unable to read tree")
 
 
-def _restore(version: str) -> str:
+def _restore(version: str | None, extras: list[str]) -> str:
     """Put the version that was installed back, and say what happened.
 
     `uv tool install --force` removes the old install before it builds the new one, so a failed
     update left no `verdict` on the PATH at all (found installing 0.7.0 from its own tag)."""
-    spec = f"verdict[{','.join(_extras())}] @ git+{_git_url(REPO_URL)}@v{version}"
+    if version is None:
+        return ("the previous version is not a release tag, so it was not restored and `verdict` "
+                "may be missing. Reinstall it by hand with:\n"
+                f"  uv tool install --force --python 3.11 'verdict[{','.join(extras)}] @ "
+                f"git+{_git_url(REPO_URL)}@vX.Y.Z'  (a release tag)")
+    spec = f"verdict[{','.join(extras)}] @ git+{_git_url(REPO_URL)}@v{version}"
     install = ["uv", "tool", "install", "--force", "--python", "3.11", spec]
     code, _ = _run(install)
     if code == 0:
@@ -201,7 +231,8 @@ def _update_cmd(args: argparse.Namespace) -> int:
         behind = int(step(["git", "rev-list", "--count", "HEAD..@{upstream}"]) or 0)
         if args.check:
             print(f"{support._version()} is {behind} commit(s) behind ({repo}); `verdict update` pulls them"
-                  if behind else f"{support._version()} is up to date ({repo})")
+                  if behind else f"{support._version()} is up to date ({repo}); the environment "
+                  "was not checked, `verdict update` re-syncs it")
             return 1 if behind else 0
         if not behind:
             sync()
@@ -223,6 +254,5 @@ def _update_cmd(args: argparse.Namespace) -> int:
     print(f"updated {support._version().split()[-1]} -> {new} ({before}..{after}, {behind} commit(s))")
     for line in (log or "").splitlines()[:10]:
         print(f"  {line}")
-    if _server_up():
-        print("A verdict server is running the old code: restart `verdict serve` to use it.")
+    _note_server()
     return 0

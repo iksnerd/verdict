@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
@@ -24,8 +25,6 @@ def _serve_cmd(args: argparse.Namespace) -> int:
     from .. import config
     from ..api import create_app
 
-    import socket
-
     settings = support._settings()
     remote = (config.check_systemone_url(args.systemone) if args.systemone
               else settings.systemone_url)
@@ -39,19 +38,8 @@ def _serve_cmd(args: argparse.Namespace) -> int:
     # Check the port before loading 400 MB of weights and before claiming to serve. This printed
     # "serving ... on ..." and then died on a bind error, which is a lie in the worst place: the
     # client reads that line to decide the server is up.
-    probe = socket.socket()
-    probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    try:
-        probe.bind((args.host, args.port))
-    except OSError as exc:
-        print(f"verdict: cannot serve on {args.host}:{args.port}: {exc}", file=sys.stderr)
-        print(f"  something else is listening. `lsof -nP -iTCP:{args.port} -sTCP:LISTEN` names it.",
-              file=sys.stderr)
-        print("  pick another with --port, and point clients at it with $VERDICT_URL.",
-              file=sys.stderr)
-        return 2
-    finally:
-        probe.close()
+    if not _port_free(args.host, args.port):
+        return _port_taken(args)
 
     if remote:
         return _serve_remote(args, settings, remote, key, create_app, uvicorn)
@@ -66,6 +54,10 @@ def _serve_cmd(args: argparse.Namespace) -> int:
     print(f"loading {args.model} ...", flush=True)
     backend.engine.agent
     backend.engine.tokenizer
+    # The load took seconds, so the port can have been taken since the first check. Look again
+    # before claiming to serve.
+    if not _port_free(args.host, args.port):
+        return _port_taken(args)
     print(f"serving {backend.name} on http://{args.host}:{args.port}, "
           f"reading {budget or 'all'} tokens of each state", flush=True)
     if _is_loopback(args.host):
@@ -73,8 +65,28 @@ def _serve_cmd(args: argparse.Namespace) -> int:
     else:
         print(f"  WARNING: it binds to {args.host}, so it is reachable from other machines, "
               "and has no auth.")
-    uvicorn.run(create_app(backend), host=args.host, port=args.port,
-                log_level=args.log_level)
+    return _run(uvicorn, create_app(backend), args)
+
+
+def _port_taken(args: argparse.Namespace) -> int:
+    print(f"verdict: cannot serve on {args.host}:{args.port}: the port is in use", file=sys.stderr)
+    print(f"  something else is listening. `lsof -nP -iTCP:{args.port} -sTCP:LISTEN` names it.",
+          file=sys.stderr)
+    print("  pick another with --port, and point clients at it with $VERDICT_URL.",
+          file=sys.stderr)
+    return 2
+
+
+def _run(uvicorn, app, args: argparse.Namespace) -> int:
+    """uvicorn.run, but a bind it loses is a failure (2), not uvicorn's `sys.exit(1)`, which
+    here reads as an answer."""
+    try:
+        uvicorn.run(app, host=args.host, port=args.port, log_level=args.log_level)
+    except SystemExit as exc:
+        if exc.code not in (0, None):
+            print(f"verdict: the server stopped without serving (exit {exc.code}); "
+                  f"is {args.host}:{args.port} taken?", file=sys.stderr)
+            return 2
     return 0
 
 
@@ -133,11 +145,9 @@ def _serve_remote(args, settings, url, key, create_app, uvicorn) -> int:
     print(f"  it binds to {args.host} and has no auth; do not expose it beyond this machine.",
           flush=True)
     try:
-        uvicorn.run(create_app(backend), host=args.host, port=args.port,
-                    log_level=args.log_level)
+        return _run(uvicorn, create_app(backend), args)
     finally:
         backend.close()
-    return 0
 
 
 def _verdict_listens(url: str) -> bool:
@@ -152,17 +162,26 @@ def _verdict_listens(url: str) -> bool:
 
 
 def _port_free(host: str, port: int) -> bool:
+    """Whether nothing holds host:port. A bind alone is not enough: on macOS a SO_REUSEADDR bind
+    to 127.0.0.1 succeeds while a 0.0.0.0 listener holds the port, so also try to connect."""
     import socket
 
     probe = socket.socket()
     probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     try:
         probe.bind((host, port))
-        return True
     except OSError:
         return False
     finally:
         probe.close()
+    if port:
+        target = "127.0.0.1" if host in ("", "0.0.0.0") else host
+        try:
+            with socket.create_connection((target, port), timeout=0.5):
+                return False
+        except Exception:  # refused, timed out, unreachable: nothing is listening
+            pass
+    return True
 
 
 def _ask(prompt: str, default: str, assume_yes: bool) -> str:
@@ -250,12 +269,22 @@ def _init_cmd(args: argparse.Namespace) -> int:
         systemone_url=current.systemone_url, systemone_model=current.systemone_model,
     )
     out = target
-    if out.exists() and not args.yes and sys.stdin.isatty():
+    if out.exists() and not args.yes and not sys.stdin.isatty():
+        return support._fail(f"{out} exists and stdin is not a terminal, so there is no one to "
+                             "confirm the overwrite; pass --yes to overwrite it")
+    if out.exists() and not args.yes:
         if input(f"  {out} exists. Overwrite? [y/N]: ").strip().lower() not in ("y", "yes"):
             print("  left alone.")
             return 0
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(config.to_toml(settings))
+    # Write beside the target and swap it in, so Ctrl-C mid-write cannot leave a truncated config
+    # that every later command would reject.
+    tmp = out.with_name(f".{out.name}.{os.getpid()}.tmp")
+    try:
+        tmp.write_text(config.to_toml(settings))
+        os.replace(tmp, out)
+    finally:
+        tmp.unlink(missing_ok=True)
     print(f"  wrote {out}")
     print()
     print("Next:")

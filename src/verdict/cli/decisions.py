@@ -11,9 +11,11 @@ from . import inference, support
 from ..backends.engine import maybe_truncated
 
 
-def _read_fits(path: str | None) -> dict:
+def _read_fits_meta(path: str | None) -> tuple[dict, dict]:
+    """The fits in a calibration file, and the identity it recorded (`model`, and `bits` and
+    `budget` when written): what `verdict calibrate --out` writes, or a bare object of fits."""
     if not path:
-        return {}
+        return {}, {}
     try:
         data = json.loads(Path(path).read_text())
     except json.JSONDecodeError as exc:
@@ -25,7 +27,39 @@ def _read_fits(path: str | None) -> dict:
     if not isinstance(fits, dict):
         raise ValueError(f"{path} is not a fits file: its \"questions\" is a JSON "
                          f"{type(fits).__name__}, not an object of fits per question")
-    return fits
+    if "questions" not in data and (not fits or any(
+            isinstance(f, dict) and ("instructions" in f or "criteria" in f)
+            for f in fits.values())):
+        raise ValueError(f"{path} is not a fits file: it has no \"questions\" key and is not an "
+                         "object of fits per question. It looks like a question bank; --calibration "
+                         "takes what `verdict calibrate --out` writes")
+    return fits, {k: data[k] for k in ("model", "bits", "budget") if data.get(k) is not None}
+
+
+def _read_fits(path: str | None) -> dict:
+    return _read_fits_meta(path)[0]
+
+
+def _warn_empty_fits(path: str | None, fits: dict) -> None:
+    if path and not fits:
+        print(f"verdict: {path} holds no fits (\"questions\" is empty), so nothing is calibrated; "
+              "`cascade --check --fit` writes an empty file when no question had a fit",
+              file=sys.stderr)
+
+
+def _check_fit_identity(ask, meta: dict, result: dict, path: str | None) -> None:
+    """Warn once when the model that answers is not the one the fit was measured on. A cut moved
+    to another checkpoint is a guess (`calibrate` says so), not an error: it may be on purpose."""
+    if not meta:
+        return
+    served = result.get("model")
+    if meta.get("model") and served and meta["model"] != served:
+        ask.warn(f"{path} was fitted on {meta['model']}, but {served} answered; a cut moved to "
+                 "another model is a guess")
+    for key, now in (("bits", ask.settings.bits), ("budget", ask.settings.prompt_token_budget)):
+        if meta.get(key) is not None and now is not None and meta[key] != now:
+            ask.warn(f"{path} was fitted at {key} {meta[key]}, but this run uses {key} {now}; "
+                     "a cut moved to another setting is a guess")
 
 
 def _decide_cmd(args: argparse.Namespace) -> int:
@@ -52,7 +86,8 @@ def _decide_cmd(args: argparse.Namespace) -> int:
                                  "JSON|FILE (see `verdict questions`)")
             questions = json.loads(bank)
         questions = laya_questions(questions)
-        fits = _read_fits(args.calibration)
+        fits, meta = _read_fits_meta(args.calibration)
+        _warn_empty_fits(args.calibration, fits)
         if args.jsonl:
             # A generator, not a list: a live pipe never reaches EOF, and each line is answered
             # as it arrives. Each state keeps its input line number, blank lines included.
@@ -84,6 +119,7 @@ def _decide_cmd(args: argparse.Namespace) -> int:
                 time.sleep(args.pause)
             result = ask(state, questions)
             answered += 1
+            _check_fit_identity(ask, meta, result, args.calibration)
             if fits:
                 result["answers"] = calibrate.apply(result["answers"], fits)
             for qid, a in result["answers"].items():
@@ -163,7 +199,7 @@ def _ask_cmd(args: argparse.Namespace) -> int:
     try:
         question = inputs.inline_question(args.question, args.options, args.levels,
                                           args.true, args.false)
-        cut, fit = None, None
+        cut, fit, fit_meta = None, None, {}
         if args.cut is not None and (args.options or args.levels):
             try:
                 float(args.cut)
@@ -179,7 +215,7 @@ def _ask_cmd(args: argparse.Namespace) -> int:
                 if not Path(args.cut).is_file():
                     raise ValueError(f"--cut {args.cut} is neither a number between 0 and 1 nor a "
                                      "file from `verdict calibrate`") from None
-                fits = _read_fits(args.cut)
+                fits, fit_meta = _read_fits_meta(args.cut)
                 name = "q" if fits.get("q") or len(fits) != 1 else next(iter(fits))
                 fit = fits.get(name)
                 if fit is None:
@@ -200,7 +236,9 @@ def _ask_cmd(args: argparse.Namespace) -> int:
     except (ValueError, OSError) as exc:
         return support._fail(exc)
 
-    result = inference._Asker(args)(state, {"q": question})
+    asker = inference._Asker(args)
+    result = asker(state, {"q": question})
+    _check_fit_identity(asker, fit_meta, result, args.cut)
     if fit:
         result["answers"] = calibrate.apply(result["answers"], {"q": fit})
     answer = result["answers"]["q"]
@@ -245,6 +283,10 @@ def _classify_cmd(args: argparse.Namespace) -> int:
         return support._fail(exc)
 
     result = hierarchy.classify(inference._Asker(args), state, tree, beam=args.beam)
+    if result.label is None:
+        # Every group came back flat: no model answered. A label here would be a coin toss.
+        return support._fail("no model answered: every group came back uniform, so there is no "
+                             "label to give. Start `verdict serve`, or check the model path.")
     if args.json:
         print(json.dumps(result.as_dict(), indent=2))
         return 0
@@ -282,11 +324,18 @@ def _cascade_cmd(args: argparse.Namespace) -> int:
         return support._fail("a fitted cut measures the unsure as a distance in logit units, not a "
                              "probability: use --share with --calibration, not --below")
     try:
-        fits = _read_fits(args.calibration)
+        fits, meta = _read_fits_meta(args.calibration)
     except (OSError, ValueError) as exc:
         return support._fail(exc)   # the message names the file
 
-    primary = inference._Asker(args)
+    asker = inference._Asker(args)
+    _warn_empty_fits(args.calibration, fits)
+
+    def primary(state, qs):
+        result = asker(state, qs)
+        _check_fit_identity(asker, meta, result, args.calibration)
+        return result
+
     flags = {"allow_unmeasured": True} if args.allow_unmeasured else {}
     errors = (client.NoServer, client.ServerError, client.ServerTimeout)
 
@@ -310,7 +359,7 @@ def _cascade_cmd(args: argparse.Namespace) -> int:
                                below=below, fits=fits, holdout=0.3 if args.fit else None,
                                errors=errors)
         if args.out:
-            Path(args.out).write_text(json.dumps(
+            inference.write_atomic(args.out, json.dumps(
                 {"questions": {q: r["fit"] for q, r in report.items() if r["fit"]}}, indent=2) + "\n")
             print(f"verdict: wrote the fitted cuts to {args.out}; use them with --calibration",
                   file=sys.stderr)

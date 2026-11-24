@@ -25,6 +25,20 @@ _UNASKED = object()
 _ENGINES: dict[str, object] = {}
 
 
+def write_atomic(path, text: str) -> None:
+    """Write `text` to `path` through a temp file in the same directory and `os.replace`, so a
+    killed run leaves the old file or the new one, never half of one (a scorecard gates a release)."""
+    from pathlib import Path
+
+    target = Path(path)
+    tmp = target.with_name(f".{target.name}.{os.getpid()}.tmp")
+    try:
+        tmp.write_text(text)
+        os.replace(tmp, target)
+    finally:
+        tmp.unlink(missing_ok=True)
+
+
 def _resolved_model(flag: str | None, settings) -> str:
     """The `--model` flag as given, else the configured checkpoint, falling back to base laya
     with a warning when that is missing (`config.resolve_model`)."""
@@ -97,6 +111,10 @@ class _Asker:
         self._family: object = _UNASKED
         #: Whether a failed probe was already repeated; see `__call__`.
         self._reasked = False
+        #: Where and with what the first answer came, so a switch mid-run is said once.
+        self._first: tuple[str, str] | None = None
+        #: Every checkpoint that answered this run.
+        self.models: set[str] = set()
         #: `--model` only chooses what loads locally; a server answers with its own checkpoint.
         self.model_flag = getattr(args, "model", None)
 
@@ -137,9 +155,13 @@ class _Asker:
         if clipped:
             self.warn(clipped)
         result = self._ask(state, questions)
-        if proxied and result.get("source") == "in-process":
-            # The server went away and laya answered here: its rules apply from the next row.
-            self._family = _UNASKED
+        self._note_source(result)
+        if result.get("source") == "in-process":
+            # The server went away and laya answered here: its rules apply from the next row, and
+            # a server that comes back gets one fresh probe (`_reasked` is spent per appearance).
+            self._reasked = False
+            if proxied:
+                self._family = _UNASKED
         elif (self._family is None and not self._reasked
               and result.get("source", "").startswith("server")):
             # No server could say what it fronts, and now one answers: it may have started after
@@ -154,6 +176,20 @@ class _Asker:
                       "server, or pass --url for one serving that model")
         result["answers"] = library.as_yesno(result["answers"], rewritten)
         return result
+
+    def _note_source(self, result: dict) -> None:
+        """Say once on stderr when a run changes checkpoint between rows: a server that appears or
+        goes away mid-run answers the rest with another model, and a fit or a spread taken over
+        both mixes two."""
+        kind = "server" if str(result.get("source", "")).startswith("server") else "in-process"
+        model = str(result.get("model", ""))
+        self.models.add(model)
+        if self._first is None:
+            self._first = (kind, model)
+        elif (kind, model) != self._first:
+            self.warn(f"answers switched from {self._first[0]} ({self._first[1]}) to {kind} "
+                      f"({model}) during this run; rows before and after were not answered by "
+                      "the same model (pass --server-only, or stop the stray server, to pin it)")
 
     def _ask(self, state, questions: dict) -> dict:
         from .. import inputs

@@ -71,6 +71,7 @@ class _ClosedPipe:
 
 def test_a_closed_pipe_ends_quietly(monkeypatch):
     """`verdict docs findings | head` printed a BrokenPipeError traceback. A reader that stops early
-    is normal use, not an error."""
+    is normal use, so nothing is printed; the status is 2 (not an answer), because 0 would read as
+    "yes" or "small" from `ask --cut` and `route`."""
     monkeypatch.setattr("sys.stdout", _ClosedPipe())
-    assert cli.main(["docs", "findings"]) == 0
+    assert cli.main(["docs", "findings"]) == 2

@@ -552,6 +552,7 @@ def _json_errors(args: argparse.Namespace) -> bool:
 
 def main(argv: list[str] | None = None) -> int:
     argv = sys.argv[1:] if argv is None else argv
+    support.JSON_ERRORS = False
     _quiet_dependencies()
     fmt = _formatter(argv)
     # allow_abbrev=False: `decide --json` (a guess) used to expand to --jsonl and wait on stdin.
@@ -829,6 +830,8 @@ def main(argv: list[str] | None = None) -> int:
     i.add_argument("-y", "--yes", action="store_true", help="accept every default, no prompts")
     i.set_defaults(fn=setup._init_cmd)
 
+    # An argparse failure happens before the line below, so a previous in-process call's value
+    # must not leak into it.
     args = ap.parse_args(argv)
     support.JSON_ERRORS = _json_errors(args)
     try:
@@ -845,7 +848,10 @@ def main(argv: list[str] | None = None) -> int:
             os.dup2(devnull, sys.stdout.fileno())
         except (AttributeError, OSError, ValueError):
             pass
-        return 0
+        # Not 0: the command never finished, and 0 reads as "yes" to `ask --cut` and `route`.
+        return 2
+    except KeyboardInterrupt:
+        return 130
     except Exception as e:
         # A bug, or a failure no command planned for. Exit 2, never Python's default 1: 1 is an
         # answer here (`ask --cut`: no; `route`: big; `update --check`: behind).

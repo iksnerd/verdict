@@ -151,6 +151,10 @@ def _examples_cmd(args: argparse.Namespace) -> int:
             # (seconds), and a mean of twelve calls then reads as a slow backend.
             import statistics
 
+            if not latencies_ms:
+                print(f"{name}: no rows to ask (only *labelled* files, which `verdict examples` "
+                      "skips; `verdict calibrate` reads those)")
+                continue
             print(f"{name}: {statistics.median(latencies_ms):.0f} ms/call (median of "
                   f"{len(latencies_ms)}; {min(latencies_ms):.0f} to {max(latencies_ms):.0f} ms)")
         return 0
