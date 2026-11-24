@@ -18,7 +18,7 @@ from __future__ import annotations
 import threading
 from typing import Any
 
-from .base import UnknownModel
+from .base import UnknownModel, checkpoint_for
 from .engine import DEFAULT_MODEL, Engine, load
 from ..schema import (ChoiceAnswer, DecideRequest, DecideResponse, NoulAnswer, ScoreAnswer, Usage,
                      laya_questions)
@@ -39,9 +39,6 @@ class MlxBackend:
         )
         self.model_id = model_id
         self.name = self.engine.name
-        #: Fixed at construction: an injected agent's own context length, else laya's 512. Never
-        #: read off an agent loaded later, so `capabilities()` does not change with load order.
-        self._max_len = self.engine.max_len
         self.multilingual_id = multilingual_id
         #: Further named checkpoints a request can select (config.py's [model.extra]). Named
         #: separately from `multilingual`, which keeps its own dedicated config key and
@@ -70,7 +67,7 @@ class MlxBackend:
         # A throwaway lazy Engine for a named checkpoint: no weights, and the cache is untouched.
         engine = self._resolve(model, cache=False)
         return Capabilities(
-            family="laya", model=engine.name, max_state_and_question_tokens=self._max_len,
+            family="laya", model=engine.name, max_state_and_question_tokens=self.engine.max_len,
             state_token_budget=self.budget or None, recommended_choice_options=MAX_OPTIONS,
             option_token_cap=OPTION_TOKEN_CAP, question_execution="per_question",
             noul_confidence="max_probability", choice_score_confidence="one_minus_normalized_entropy",
@@ -88,9 +85,7 @@ class MlxBackend:
     def _resolve(self, model: str | None, *, cache: bool) -> Engine:
         if model is None or model == "english":
             return self.engine
-        checkpoint_id = self.extra_checkpoints.get(model)
-        if model == "multilingual" and self.multilingual_id:
-            checkpoint_id = self.multilingual_id
+        checkpoint_id = checkpoint_for(model, self.extra_checkpoints, self.multilingual_id)
         if checkpoint_id is None:
             known = ", ".join(sorted(self.known_models())) or "none"
             raise UnknownModel(f"this server does not know a checkpoint named {model!r}; "

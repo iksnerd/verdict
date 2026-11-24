@@ -33,6 +33,20 @@ class BackendClosed(RuntimeError, UpstreamError):
     """A closed backend was asked. An UpstreamError, so the API answers 502 and a cascade carries on."""
 
 
+def checkpoint_for(name: str | None, extras: dict[str, str], multilingual_id: str | None) -> str | None:
+    """The checkpoint id a request's `model` name selects, or None when the name means the served
+    one (`None`, `english`, the Jev alias `jev-latest` when no extra claims it) or is unknown.
+
+    The one precedence for `MlxBackend._resolve` and `library.served_checkpoint`: `english` is
+    always the served checkpoint, `multilingual` beats an extra of the same name, and an extra
+    beats the `jev-latest` alias."""
+    if name is None or name == "english":
+        return None
+    if name == "multilingual" and multilingual_id:
+        return multilingual_id
+    return extras.get(name)
+
+
 class Backend(Protocol):
     name: str
 

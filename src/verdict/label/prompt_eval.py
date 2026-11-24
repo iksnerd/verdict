@@ -98,19 +98,20 @@ def _score_preamble(states: list[dict], reference: dict, teacher: Teacher, bank:
             cached += 1
         else:
             ledger.check()
+            failed = False
             try:
                 labels = teacher.label(s["state"], bank)
             except LabelError:
                 failures += 1
-                cost = cost_of(teacher.model, teacher.last_in, teacher.last_out, teacher.prices)  # the failed tries were billed too
-                spent += cost
-                ledger.add(cost)
-                continue
+                failed = True
+            # Failed tries were billed too.
             cost = cost_of(teacher.model, teacher.last_in, teacher.last_out, teacher.prices)
             spent += cost
             # Ledger first: a crash between the two re-pays the call on a retry, but every
             # payment is counted. The other order could lose a payment from the ledger.
             ledger.add(cost)
+            if failed:
+                continue
             cache.append({"k": k, "labels": labels})
         for qid, v in agreement(labels, reference[s["id"]]).items():
             per_q.setdefault(qid, []).append(v)

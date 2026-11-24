@@ -90,6 +90,11 @@ def _choice(ask: Ask, state: Any, instructions: str, criteria: dict, qid: str) -
     return ask(state, question)["answers"][qid]["probabilities"]
 
 
+def _flat(probabilities: dict[str, float]) -> bool:
+    """No model behind a level's answer: nothing in it, or every option equally likely."""
+    return not probabilities or is_flat({"type": "choice", "probabilities": probabilities})
+
+
 def classify(ask: Ask, state: Any, tree: dict, *, beam: int = 2) -> Classification:
     """Classify `state` into one leaf of `tree`. `beam` groups are descended; 1 is the cheapest."""
     if not isinstance(beam, int) or beam < 1:
@@ -100,7 +105,7 @@ def classify(ask: Ask, state: Any, tree: dict, *, beam: int = 2) -> Classificati
     groups = tree["groups"]
     group_p = _choice(ask, state, instructions, _describe(groups), "group")
     passes = 1
-    if len(groups) > 1 and max(group_p.values(), default=0.0) - min(group_p.values(), default=0.0) < 1e-9:
+    if len(groups) > 1 and _flat(group_p):
         # Every group equally likely: the argmax would be the first group by accident.
         return Classification([], passes, group_probabilities=group_p, searched_groups=[])
     candidates = []
@@ -114,7 +119,7 @@ def classify(ask: Ask, state: Any, tree: dict, *, beam: int = 2) -> Classificati
             continue
         option_p = _choice(ask, state, instructions, _describe(options, "description"), "option")
         passes += 1
-        if is_flat({"type": "choice", "probabilities": option_p}):
+        if _flat(option_p):
             continue   # no model behind this group's answer: not a label at probability group_p/n
         for label in options:
             candidates.append({"label": label, "path": [name, label],

@@ -11,10 +11,10 @@ from collections import Counter
 from pathlib import Path
 
 from .bank import BANK
-from .teacher import LabelError, Teacher, UnpricedModelError, agreement, gemini_transport, load_key, mean_labels, price_of
+from .teacher import DEFAULT_CHEAP_MODELS, DEFAULT_REFERENCE_MODEL, LabelError, Teacher, UnpricedModelError, agreement, gemini_transport, load_key, mean_labels, price_of
 
-CHEAP = ["gemini-2.5-flash-lite", "gemini-3.1-flash-lite"]
-REFERENCE = "gemini-3.1-pro-preview"
+CHEAP = list(DEFAULT_CHEAP_MODELS)
+REFERENCE = DEFAULT_REFERENCE_MODEL
 
 
 def load_states(paths):

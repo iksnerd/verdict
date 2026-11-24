@@ -130,20 +130,15 @@ def served_checkpoint(backend: Any, name: str | None) -> str:
     what `measured_on` reads. `None`, `english` and the Jev alias are the served one;
     `multilingual` and `[model.extra]` names are the ones the backend maps them to; anything else
     is returned as given (an unknown name is refused by the backend, a literal path is a path)."""
-    from .backends.base import model_id_of
+    from .backends.base import checkpoint_for, model_id_of
 
-    # The precedence of `MlxBackend._resolve` and `api._model_name`: `english` is always the
-    # served one, `multilingual` beats an extra of the same name, and the Jev alias is the served
-    # checkpoint only when no `[model.extra]` entry claims the name.
-    served = str(model_id_of(backend, backend.name))
-    extras = getattr(backend, "extra_checkpoints", {})
-    if name is None or name == "english":
-        return served
-    if name == "multilingual" and getattr(backend, "multilingual_id", None):
-        return str(backend.multilingual_id)
-    if name == "jev-latest" and name not in extras:
-        return served
-    return str(extras.get(name, name))
+    named = checkpoint_for(name, getattr(backend, "extra_checkpoints", {}),
+                           getattr(backend, "multilingual_id", None))
+    if named is not None:
+        return str(named)
+    if name is None or name in ("english", "jev-latest"):   # `checkpoint_for` found no extra claiming it
+        return str(model_id_of(backend, backend.name))
+    return str(name)
 
 
 def as_choice(questions: dict[str, Any], keep_measured: bool = True

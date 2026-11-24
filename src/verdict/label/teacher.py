@@ -18,6 +18,10 @@ class LabelError(Exception):
     pass
 
 
+#: The default teachers: two cheap models asked repeatedly, one stronger reference.
+DEFAULT_CHEAP_MODELS = ("gemini-2.5-flash-lite", "gemini-3.1-flash-lite")
+DEFAULT_REFERENCE_MODEL = "gemini-3.1-pro-preview"
+
 PRICES = {  # USD per 1M tokens (input, output); from ai.google.dev pricing, 2026-09-19. Re-verify.
     "gemini-2.5-flash-lite": (0.10, 0.40),
     "gemini-2.5-flash": (0.30, 2.50),

@@ -158,6 +158,10 @@ def _label_stage(cfg, run_dir, transport, bank, preamble, plan) -> dict:
     # Built from the latest row per key: a key already relabelled has a current row and is done,
     # whatever older generations of it are still on disk.
     redo = {labels.key(r) for r in labels.latest() if r.get("label_digest", digest) != digest}
+
+    def pending(key) -> bool:
+        return key not in labels.done or key in redo   # reads `redo` live: it shrinks as keys are relabelled
+
     teachers = {m: Teacher(m, transport, preamble=preamble, prices=lc.prices) for m, _ in plan}
 
     def spent() -> float:
@@ -176,7 +180,7 @@ def _label_stage(cfg, run_dir, transport, bank, preamble, plan) -> dict:
             for model, reps in plan:
                 for rep in range(reps):
                     key = label_key(s["id"], model, rep)
-                    if key in labels.done and key not in redo:
+                    if not pending(key):
                         continue
                     total = spent() + failed_spend
                     if total >= lc.max_cost_usd:
@@ -199,8 +203,7 @@ def _label_stage(cfg, run_dir, transport, bank, preamble, plan) -> dict:
         rows = labels.latest()
         # States with a key still to ask for (missing or made under another digest).
         unlabelled = len({s["id"] for s in states for model, reps in plan for rep in range(reps)
-                          if (label_key(s["id"], model, rep)) not in labels.done
-                          or label_key(s["id"], model, rep) in redo})
+                          if pending(label_key(s["id"], model, rep))})
         counts = {"states": len(states), "label_rows": len(rows), "failures_this_run": failures,
                   "failed_spend_usd": round(failed_spend, 6)}
         # `spend_usd` stays what the rows on disk cost, every run included; `failed_spend_usd` is this run's only.

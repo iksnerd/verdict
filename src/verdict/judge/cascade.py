@@ -47,11 +47,22 @@ def _cuts(bank: dict, fits: dict | None) -> dict[str, float | None]:
     """The fitted cut of each yes/no question that has one."""
     fits = fits or {}
     for qid in bank:
-        if qid in fits and fits[qid].get("type") != bank[qid]["type"]:
-            raise QuestionError(f"the fit for {qid!r} is a {fits[qid].get('type')} fit but the "
-                                f"question is a {bank[qid]['type']}; fit it on the same type")
-    return {qid: (fits[qid].get("cut") if qid in fits and fits[qid].get("type") == "noul"
+        if qid in fits:
+            calibrate.validate_fit(qid, fits[qid], bank[qid]["type"], "question")
+    return {qid: (fits[qid]["cut"] if qid in fits and fits[qid]["type"] == "noul"
                   else None) for qid in bank}
+
+
+def _urgency(answer: dict, cut: float | None = None) -> float:
+    """Sort key for escalation: lowest first. A flat answer is no model, not a middling one, so it
+    is -1.0 (real confidences are >= 0) and goes before everything else."""
+    return -1.0 if is_flat(answer) else confidence(answer, cut)
+
+
+def _fail(row: dict, failed: list[tuple[int, str]], i: int, message: str) -> None:
+    """Record an escalation failure for state `i`: on its row and in the run's list, in step."""
+    row["escalation_error"] = message
+    failed.append((i, message))
 
 
 def _validate(share: float | None, below: float | None) -> None:
@@ -112,8 +123,7 @@ def run(states: Sequence[Any], bank: dict, primary: Ask, secondary: Ask, *,
     # A flat answer is no model, not a middling one: least sure of all, whatever the cut says.
     # -1.0 is the sentinel for that (real confidences are >= 0), so `below` always escalates flat
     # rows and `share` takes them first. `check` applies the same ordering.
-    chosen = {qid: select([-1.0 if is_flat(r["answers"][qid]) else confidence(r["answers"][qid], cuts[qid])
-                           for r in results],
+    chosen = {qid: select([_urgency(r["answers"][qid], cuts[qid]) for r in results],
                           share=share, below=below) for qid in bank}
     rows, failed, escalated = [], [], 0
     for i, (state, result) in enumerate(zip(states, results)):
@@ -125,33 +135,28 @@ def run(states: Sequence[Any], bank: dict, primary: Ask, secondary: Ask, *,
             try:
                 second = secondary(state, {qid: bank[qid] for qid in asked})["answers"]
             except errors as exc:
-                row["escalation_error"] = str(exc)
-                failed.append((i, str(exc)))
+                _fail(row, failed, i, str(exc))
             else:
                 missing = [qid for qid in asked if qid not in second]
                 if missing:
                     # An omitted question is an escalation failure for this state, not a crash
                     # that loses every row before it.
-                    message = f"the second backend did not answer {', '.join(missing)}"
-                    row["escalation_error"] = message
-                    failed.append((i, message))
-                    rows.append(row)
-                    continue
-                # A flat secondary answer is no model: it must not replace the primary's.
-                flat = [qid for qid in asked if is_flat(second[qid])]
-                taken = [qid for qid in asked if qid not in flat]
-                if flat:
-                    message = f"the second backend's answer for {', '.join(flat)} was flat"
-                    row["escalation_error"] = message
-                    failed.append((i, message))
-                for qid in taken:
-                    answers[qid] = {**second[qid], "tier": "escalated"}
-                    if cuts[qid] is not None and answers[qid].get("type") == "noul":
-                        # So a caller reads one field whichever tier answered; the second server's
-                        # own number is decided at 0.5, as `check` measures it.
-                        answers[qid].update(cut=0.5, decision=answers[qid]["noul"] >= 0.5)
-                row["escalated"] = taken
-                escalated += len(taken)
+                    _fail(row, failed, i, f"the second backend did not answer {', '.join(missing)}")
+                else:
+                    # A flat secondary answer is no model: it must not replace the primary's.
+                    flat = [qid for qid in asked if is_flat(second[qid])]
+                    taken = [qid for qid in asked if qid not in flat]
+                    if flat:
+                        _fail(row, failed, i,
+                              f"the second backend's answer for {', '.join(flat)} was flat")
+                    for qid in taken:
+                        answers[qid] = {**second[qid], "tier": "escalated"}
+                        if cuts[qid] is not None and answers[qid].get("type") == "noul":
+                            # So a caller reads one field whichever tier answered; the second server's
+                            # own number is decided at 0.5, as `check` measures it.
+                            answers[qid].update(cut=0.5, decision=answers[qid]["noul"] >= 0.5)
+                    row["escalated"] = taken
+                    escalated += len(taken)
         rows.append(row)
     return Cascade(rows, failed, len(states) * len(bank), escalated)
 
@@ -191,6 +196,8 @@ def check(states: Sequence[Any], bank: dict, labels: Sequence[dict], primary: As
         if holdout and q["type"] == "noul":
             fit = calibrate.fit_noul([first[i][qid]["noul"] for i in rows],
                                      [calibrate.as_bool(labels[i][qid]) for i in rows], holdout, seed)
+        elif fit:
+            calibrate.validate_fit(qid, fit, q["type"], "question")
         cut = fit["cut"] if fit and fit.get("type") == "noul" and q["type"] == "noul" else None
         if below is not None and cut is not None:
             raise QuestionError("with a fitted cut the uncertainty is a distance in logit units, not a "
@@ -199,8 +206,7 @@ def check(states: Sequence[Any], bank: dict, labels: Sequence[dict], primary: As
             evaluated = [rows[j] for j in sorted(calibrate.split(len(rows), holdout, seed)[1])]
         else:
             evaluated = rows
-        pick = {evaluated[j] for j in select([-1.0 if is_flat(first[i][qid]) else confidence(first[i][qid], cut)
-                                              for i in evaluated],
+        pick = {evaluated[j] for j in select([_urgency(first[i][qid], cut) for i in evaluated],
                                              share=share, below=below)}
         p = [_correct(first[i][qid], labels[i][qid], cut) for i in evaluated]
         raw = [_correct(first[i][qid], labels[i][qid]) for i in evaluated]

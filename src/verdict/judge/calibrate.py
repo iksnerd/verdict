@@ -84,8 +84,7 @@ def balanced_accuracy(scores: Sequence[float], labels: Sequence[bool], cut: floa
 def fit_cut(scores: Sequence[float], labels: Sequence[bool]) -> float:
     """Maximise balanced accuracy, including the always-yes and always-no classifiers."""
     _paired(scores, labels)
-    if any(not math.isfinite(p) or not 0 <= p <= 1 for p in scores):
-        raise ValueError("yes/no probabilities must be finite and between 0 and 1")
+    _check_unit_interval(scores)
     distinct = sorted(set(scores))
     candidates = [distinct[0], math.nextafter(distinct[-1], math.inf)]
     candidates += [(a + b) / 2 for a, b in zip(distinct, distinct[1:])]
@@ -123,8 +122,7 @@ def fit_temperature(rows: Sequence[dict[str, float]], labels: Sequence[str]) -> 
 def fit_noul(scores: list[float], labels: list[bool], heldout: float = 0.3,
              seed: int = 0) -> dict[str, Any]:
     _paired(scores, labels)
-    if any(not math.isfinite(p) or not 0 <= p <= 1 for p in scores):
-        raise ValueError("yes/no probabilities must be finite and between 0 and 1")
+    _check_unit_interval(scores)
     if all(labels) or not any(labels):
         raise ValueError(f"a yes/no cut needs both yes and no labels; all {len(labels)} are "
                          f"{'yes' if labels and labels[0] else 'no'}")
@@ -182,6 +180,20 @@ def fit_choice(rows: list[dict[str, float]], labels: list[str], heldout: float =
     }
 
 
+def validate_fit(qid: str, fit: dict[str, Any], expected_type: Any, noun: str) -> None:
+    """Refuse a fit that cannot be applied to a `noun` ("answer" or "question") of `expected_type`:
+    no `type`, a different type, or no `cut` (yes/no) or `temperature` (choice)."""
+    if "type" not in fit:
+        raise QuestionError(f"the fit for {qid!r} has no 'type'; refit it with `verdict calibrate`")
+    if fit["type"] != expected_type:
+        raise QuestionError(f"the fit for {qid!r} is a {fit['type']} fit but the {noun} is a "
+                            f"{expected_type}; fit it on the same type"
+                            f"{' of question' if noun == 'answer' else ''}")
+    key = {"noul": "cut", "choice": "temperature"}.get(fit["type"])
+    if key and key not in fit:
+        raise QuestionError(f"the fit for {qid!r} has no {key!r}; refit it with `verdict calibrate`")
+
+
 def apply(answers: dict[str, Any], fits: dict[str, Any]) -> dict[str, Any]:
     """Add each fit to its answer, without overwriting what the model said.
 
@@ -193,14 +205,8 @@ def apply(answers: dict[str, Any], fits: dict[str, Any]) -> dict[str, Any]:
     for qid, a in answers.items():
         fit = fits.get(qid)
         a = dict(a)
-        if fit and "type" not in fit:
-            raise QuestionError(f"the fit for {qid!r} has no 'type'; refit it with `verdict calibrate`")
-        if fit and fit["type"] != a.get("type"):
-            raise QuestionError(f"the fit for {qid!r} is a {fit['type']} fit but the answer is a "
-                                f"{a.get('type')}; fit it on the same type of question")
-        key = {"noul": "cut", "choice": "temperature"}.get(fit["type"]) if fit else None
-        if key and key not in fit:
-            raise QuestionError(f"the fit for {qid!r} has no {key!r}; refit it with `verdict calibrate`")
+        if fit:
+            validate_fit(qid, fit, a.get("type"), "answer")
         if fit and fit["type"] == "noul":
             a["cut"] = fit["cut"]
             # A flat answer is "no model", not unsure: never turn it into a boolean.
@@ -215,6 +221,11 @@ def apply(answers: dict[str, Any], fits: dict[str, Any]) -> dict[str, Any]:
 
 def _r(x: float | None) -> float | None:
     return None if x is None else round(x, 4)
+
+
+def _check_unit_interval(scores: Sequence[float]) -> None:
+    if any(not math.isfinite(p) or not 0 <= p <= 1 for p in scores):
+        raise ValueError("yes/no probabilities must be finite and between 0 and 1")
 
 
 def _paired(rows: Sequence, labels: Sequence) -> None:

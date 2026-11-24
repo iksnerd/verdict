@@ -3,10 +3,14 @@ from __future__ import annotations
 import httpx
 
 
+DEFAULT_MODEL = "gemma3:4b"
+DEFAULT_URL = "http://localhost:11434"
+
+
 class OllamaClient:
     """Local generation only. Never used to label: a 3-4B model's distributions are too noisy."""
 
-    def __init__(self, model: str = "gemma3:4b", url: str = "http://localhost:11434", temperature: float = 0.9):
+    def __init__(self, model: str = DEFAULT_MODEL, url: str = DEFAULT_URL, temperature: float = 0.9):
         self.model = model
         self.url = url.rstrip("/")
         self.temperature = temperature
