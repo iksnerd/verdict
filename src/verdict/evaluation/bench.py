@@ -299,4 +299,5 @@ def systemone_asker(base_url: str, model: str, key: str, *, attempts: int = 5,
             return JevAsker(base_url, model, key, attempts=attempts, backoff=backoff,
                             timeout=timeout, transport=transport)
     return SystemOneClient(base_url, model, key, attempts=attempts, backoff=backoff,
-                           timeout=timeout, transport=transport or _default_transport())
+                           timeout=timeout, transport=transport or _default_transport(),
+                           retry_unsafe=True)

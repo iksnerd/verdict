@@ -174,6 +174,9 @@ class NoulAnswer(BaseModel):
     #: Laya reports max(p, 1-p); Jev does not report this field. Never synthesize it on proxying.
     confidence: Optional[float] = None
     truncated: Optional[bool] = None
+    #: "choice" when a yes/no was asked as a no/yes choice (`library.as_yesno`); left out otherwise.
+    #: Verdict's own: `/v1/systemone` leaves it out like `truncated`.
+    asked_as: Optional[str] = None
 
 
 Answer = Annotated[Union[ChoiceAnswer, ScoreAnswer, NoulAnswer], Field(discriminator="type")]

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
+from typing import Optional
 
 from fastapi import FastAPI, HTTPException, Response
 from fastapi.responses import JSONResponse
@@ -67,9 +68,12 @@ class BatchRouteRequest(BaseModel):
 
 class BatchRouteItem(BaseModel):
     index: int
-    branch: str
-    reason: str
-    scores: dict[str, float]
+    branch: Optional[str] = None
+    reason: Optional[str] = None
+    scores: Optional[dict[str, float]] = None
+    #: Set only on a partial batch (status 207): the prompt that failed, and each one after it
+    #: ("not attempted"), which carry no branch, reason or scores.
+    error: Optional[str] = None
 
 
 class BatchRouteResponse(BaseModel):
@@ -193,8 +197,10 @@ def create_app(backend: Backend | None = None) -> FastAPI:
             # has no way to ask for the opt-out and its SDKs expect an answer.
             out = _prepared(to_decide_request(request, backend), allow_unmeasured=True,
                             yesno=False)
-        # `truncated` is verdict's own; Jev's strict answer types do not have it.
-        answers = {qid: a.model_copy(update={"truncated": None}) for qid, a in out.answers.items()}
+        # `truncated` and `asked_as` are verdict's own; Jev's strict answer types do not have them.
+        answers = {qid: a.model_copy(update={"truncated": None, **(
+                       {"asked_as": None} if a.type == "noul" else {})})
+                   for qid, a in out.answers.items()}
         return SystemOneResponse(model=out.model, answers=answers,
                                  usage=out.usage or Usage(input_tokens=0))
 
@@ -270,8 +276,8 @@ def create_app(backend: Backend | None = None) -> FastAPI:
             scores=branch.scores,
         )
 
-    @app.post("/v1/route/batch", response_model=BatchRouteResponse)
-    def route_batch(request: BatchRouteRequest) -> BatchRouteResponse:
+    @app.post("/v1/route/batch", response_model=BatchRouteResponse, response_model_exclude_none=True)
+    def route_batch(request: BatchRouteRequest, response: Response) -> BatchRouteResponse:
         """Route many prompts over one connection, in order.
 
         There is no cross-state batching underneath: each prompt is its own forward pass, so this
@@ -282,11 +288,26 @@ def create_app(backend: Backend | None = None) -> FastAPI:
 
         Results carry `index` so a caller can pair them up without relying on ordering, though
         ordering is preserved.
+
+        If a prompt fails after others have been routed, the results so far are kept: the
+        response is 207 and the failed prompt and every later one carry `error` (and no branch),
+        the later ones saying "not attempted". A failure on the first prompt is the plain error
+        status, as for `/v1/route`. A batch that succeeds has exactly the shape above.
         """
         results = []
         for i, prompt in enumerate(request.prompts):
-            with _backend_errors():
-                branch = BIG_SMALL.decide(_answers_for(prompt))
+            try:
+                with _backend_errors():
+                    branch = BIG_SMALL.decide(_answers_for(prompt))
+            except (HTTPException, Refused) as exc:
+                if not results:
+                    raise
+                message = exc.detail if isinstance(exc, HTTPException) else str(exc)
+                results.append(BatchRouteItem(index=i, error=str(message)))
+                results.extend(BatchRouteItem(index=j, error="not attempted: an earlier prompt failed")
+                               for j in range(i + 1, len(request.prompts)))
+                response.status_code = 207
+                break
             results.append(BatchRouteItem(
                 index=i, branch=branch.name, reason=branch.reason,
                 scores=branch.scores,

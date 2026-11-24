@@ -244,7 +244,8 @@ def ask(backend: Any, request: Any, *, allow_unmeasured: bool = False, yesno: bo
         return out
     dumped = as_yesno({qid: a.model_dump() for qid, a in out.answers.items()}, rewritten)
     answers = {qid: (NoulAnswer(noul=dumped[qid]["noul"], confidence=dumped[qid].get("confidence"),
-                                truncated=a.truncated)
+                                truncated=a.truncated,
+                                asked_as=dumped[qid].get("asked_as"))
                      if qid in rewritten else a)
                for qid, a in out.answers.items()}
     return DecideResponse(model=out.model, answers=answers, usage=out.usage)

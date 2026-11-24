@@ -52,6 +52,8 @@ def test_answers_match_v1_decide():
     c = uniform_client()
     jev = c.post("/v1/systemone", json=JEV).json()["answers"]
     ours = c.post("/v1/decide", json={"state": JEV["state"], "questions": QUESTIONS}).json()["answers"]
+    # `asked_as` is verdict's own marker, on /v1/decide only (like `truncated`)
+    ours = {q: {k: v for k, v in a.items() if k != "asked_as"} for q, a in ours.items()}
     assert jev == ours
 
 

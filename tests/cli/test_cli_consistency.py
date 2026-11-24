@@ -124,7 +124,7 @@ def test_the_api_asks_a_new_yes_no_as_a_choice_like_the_cli():
     body = api(seen).post("/v1/decide", json={"state": {"message": "refund"},
                                               "questions": json.loads(BANK)}).json()
     assert seen[-1]["q"]["type"] == "choice"
-    assert body["answers"]["q"] == noul(0.8)
+    assert body["answers"]["q"] == {**noul(0.8), "asked_as": "choice"}
 
 
 def test_the_api_yesno_param_sends_a_plain_yes_no():

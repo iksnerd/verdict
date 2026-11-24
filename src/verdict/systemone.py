@@ -109,7 +109,7 @@ class SystemOneClient:
 
     def __init__(self, base_url: str, model: str, key: str, *, attempts: int = 5,
                  backoff: float = 1., timeout: float = 30., transport=None,
-                 profile: str | None = None):
+                 profile: str | None = None, retry_unsafe: bool = False):
         if not isinstance(attempts, int) or attempts < 1:
             raise ValueError("attempts must be a positive integer")
         if not math.isfinite(backoff) or backoff < 0 or not math.isfinite(timeout) or timeout <= 0:
@@ -122,6 +122,9 @@ class SystemOneClient:
             raise ValueError("profile must be 'jev' or 'systemone'")
         self.base_url, self.model = base_url.rstrip("/"), model
         self.attempts, self.backoff = attempts, backoff
+        # True: re-send a POST after a read timeout or a 500/502/504 too. For offline measurement
+        # (`bench`), where a model that is still loading times out and a repeated call costs nothing.
+        self.retry_unsafe = retry_unsafe
         self.http = httpx.Client(base_url=self.base_url, timeout=timeout, transport=transport,
                                  headers={"Authorization": f"Bearer {key}"})
 
@@ -132,9 +135,11 @@ class SystemOneClient:
                                   noul_confidence="provider_defined"))
 
     def _request(self, method: str, path: str, **kwargs) -> httpx.Response:
-        # Note on retries: a POST is re-sent on 408/429/5xx and on a transport error, so an
-        # upstream that completed the first attempt (and billed it) before failing the response
-        # is asked again. Left as is on purpose; a caller who cannot afford it passes attempts=1.
+        # Retries: a GET is re-sent on any transient failure. A POST is re-sent only where the
+        # upstream provably did not process it: no connection was made (connect error or timeout,
+        # pool timeout) or it said so by convention (408, 429, 503, 529). A read timeout, any other
+        # transport error after the request left, or a 500/502/504 may mean it completed (and was
+        # billed), so those surface at once, and a caller can decide whether to ask again.
         if self.http.is_closed:
             raise UpstreamError(f"{self.base_url}{path}: the client is closed; make a new "
                                 "SystemOneClient (or keep it open with a `with` block)")
@@ -147,8 +152,15 @@ class SystemOneClient:
                         raise UpstreamError(f"{self.base_url}{path} answered {response.status_code}")
                     return response
                 reason = f"answered {response.status_code}"
+                if method != "GET" and not self.retry_unsafe and response.status_code in {500, 502, 504}:
+                    raise UpstreamError(f"{self.base_url}{path} {reason}; the request may have "
+                                        "been processed, so it was not re-sent")
             except httpx.TransportError as exc:
                 reason = exc.__class__.__name__
+                if method != "GET" and not self.retry_unsafe and not isinstance(
+                        exc, (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout)):
+                    raise UpstreamError(f"{self.base_url}{path} {reason}; the request may have "
+                                        "been processed, so it was not re-sent") from exc
             if attempt == self.attempts - 1:
                 raise UpstreamError(f"{self.base_url}{path} {reason} after {self.attempts} attempts; "
                                     "it may still be loading or unavailable")
