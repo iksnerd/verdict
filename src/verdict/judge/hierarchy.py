@@ -33,16 +33,17 @@ class Classification:
         self.searched_groups = list(searched_groups or [])
 
     @property
-    def label(self) -> str:
-        return self.candidates[0]["label"]
+    def label(self) -> str | None:
+        """The best leaf, or None when the model gave no information (a flat group answer)."""
+        return self.candidates[0]["label"] if self.candidates else None
 
     @property
     def path(self) -> list[str]:
-        return self.candidates[0]["path"]
+        return self.candidates[0]["path"] if self.candidates else []
 
     @property
     def probability(self) -> float:
-        return self.candidates[0]["probability"]
+        return self.candidates[0]["probability"] if self.candidates else 0.0
 
     def as_dict(self) -> dict:
         return {"label": self.label, "path": self.path, "probability": round(self.probability, 4),
@@ -98,6 +99,9 @@ def classify(ask: Ask, state: Any, tree: dict, *, beam: int = 2) -> Classificati
     groups = tree["groups"]
     group_p = _choice(ask, state, instructions, _describe(groups), "group")
     passes = 1
+    if len(groups) > 1 and max(group_p.values(), default=0.0) - min(group_p.values(), default=0.0) < 1e-9:
+        # Every group equally likely: the argmax would be the first group by accident.
+        return Classification([], passes, group_probabilities=group_p, searched_groups=[])
     candidates = []
     searched_groups = sorted(groups, key=lambda g: group_p.get(g, 0.0), reverse=True)[:beam]
     for name in searched_groups:

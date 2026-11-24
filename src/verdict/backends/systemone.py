@@ -23,20 +23,24 @@ class SystemOneBackend:
 
     def __init__(self, base_url: str, model: str = "jev-latest", key: str = "local", **ask_kwargs: Any):
         self.base_url, self.model = base_url, model
+        self._closed = False
         self.name = f"systemone:{model}@{base_url}"
         self._ask = SystemOneClient(base_url, model, key, **ask_kwargs)
 
     def capabilities(self, model: str | None = None):
         return self._ask.capabilities(model)
 
-    def models(self) -> list[dict[str, Any]]:
-        """Forward the upstream list. Unavailable or malformed listings degrade to an empty list."""
+    def models(self) -> list[dict[str, Any]] | None:
+        """Forward the upstream list: [] when it answered with none, None when it could not be
+        asked or answered badly, so the caller describes the models itself."""
         try:
             return self._ask.models()
         except UpstreamError:
-            return []
+            return None
 
     def decide(self, request: DecideRequest) -> DecideResponse:
+        if self._closed:
+            raise RuntimeError(f"{self.name} is closed")
         questions = {qid: q.model_dump(exclude_none=True) for qid, q in request.questions.items()}
         raw = self._ask(request.state, questions, model=request.model)
         result = DecideResponse.model_validate(raw)
@@ -47,6 +51,7 @@ class SystemOneBackend:
         return result
 
     def close(self) -> None:
+        self._closed = True
         self._ask.close()
 
     def __enter__(self):

@@ -18,6 +18,7 @@ import math
 from typing import Any, Callable, Sequence
 
 from . import calibrate
+from ..answers import is_flat
 from ..errors import QuestionError
 
 Ask = Callable[[Any, dict], dict]
@@ -46,8 +47,12 @@ def confidence(answer: dict, cut: float | None = None) -> float:
 def _cuts(bank: dict, fits: dict | None) -> dict[str, float | None]:
     """The fitted cut of each yes/no question that has one."""
     fits = fits or {}
+    for qid in bank:
+        if qid in fits and fits[qid].get("type") != bank[qid]["type"]:
+            raise QuestionError(f"the fit for {qid!r} is a {fits[qid].get('type')} fit but the "
+                                f"question is a {bank[qid]['type']}; fit it on the same type")
     return {qid: (fits[qid].get("cut") if qid in fits and fits[qid].get("type") == "noul"
-                  and bank[qid]["type"] == "noul" else None) for qid in bank}
+                  else None) for qid in bank}
 
 
 def _validate(share: float | None, below: float | None) -> None:
@@ -105,7 +110,9 @@ def run(states: Sequence[Any], bank: dict, primary: Ask, secondary: Ask, *,
     if fits:
         for result in results:
             result["answers"] = calibrate.apply(result["answers"], fits)
-    chosen = {qid: select([confidence(r["answers"][qid], cuts[qid]) for r in results],
+    # A flat answer is no model, not a middling one: least sure of all, whatever the cut says.
+    chosen = {qid: select([-1.0 if is_flat(r["answers"][qid]) else confidence(r["answers"][qid], cuts[qid])
+                           for r in results],
                           share=share, below=below) for qid in bank}
     rows, failed, escalated = [], [], 0
     for i, (state, result) in enumerate(zip(states, results)):
@@ -120,6 +127,15 @@ def run(states: Sequence[Any], bank: dict, primary: Ask, secondary: Ask, *,
                 row["escalation_error"] = str(exc)
                 failed.append((i, str(exc)))
             else:
+                missing = [qid for qid in asked if qid not in second]
+                if missing:
+                    # An omitted question is an escalation failure for this state, not a crash
+                    # that loses every row before it.
+                    message = f"the second backend did not answer {', '.join(missing)}"
+                    row["escalation_error"] = message
+                    failed.append((i, message))
+                    rows.append(row)
+                    continue
                 for qid in asked:
                     answers[qid] = {**second[qid], "tier": "escalated"}
                     if cuts[qid] is not None and answers[qid].get("type") == "noul":

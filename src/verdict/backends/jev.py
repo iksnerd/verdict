@@ -74,6 +74,7 @@ class JevBackend:
                  base_url: str | None = None, retry: sdk.RetryPolicy | None = None,
                  **client_options: Any):
         self.model = model
+        self._closed = False
         self._client = sdk.TypeSafeClient(api_key=api_key, base_url=base_url, model=model,
                                           retry=retry, **client_options)
         # Where the SDK will actually send: an explicit argument, else $TYPESAFE_BASE_URL, else the
@@ -87,15 +88,18 @@ class JevBackend:
     def capabilities(self, model: str | None = None) -> Capabilities:
         return jev_capabilities(model or self.model)
 
-    def models(self) -> list[dict[str, Any]]:
-        """What the service lists; unavailable or malformed listings degrade to an empty list."""
+    def models(self) -> list[dict[str, Any]] | None:
+        """What the service lists: [] when it answered with none, None when it could not be asked
+        (so the caller describes the models itself instead of serving an empty list)."""
         try:
             listed = self._client.models.list()
         except sdk.TypeSafeError:
-            return []
+            return None
         return [m.model_dump(mode="json", exclude_none=True) for m in listed.models]
 
     def decide(self, request: DecideRequest) -> DecideResponse:
+        if self._closed:
+            raise RuntimeError(f"{self.name} is closed")
         model = request.model or self.model
         self.capabilities(model).validate_request(request)
         questions = {qid: sdk_question(q) for qid, q in request.questions.items()}
@@ -111,6 +115,7 @@ class JevBackend:
         return validate_response(raw, request, precision=JEV_PRECISION)
 
     def close(self) -> None:
+        self._closed = True
         self._client.close()
 
     def __enter__(self):

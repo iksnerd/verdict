@@ -13,6 +13,7 @@ short states should not pay for it.
 """
 from __future__ import annotations
 
+import threading
 from typing import Any
 
 #: Pre-converted FP16 of `convaiinnovations/laya`, published by the port's author on Hugging Face.
@@ -23,6 +24,9 @@ DEFAULT_MODEL = "aac6fef/laya-mlx"
 #: Clipping the state is the main latency lever (FINDINGS §11): 512 tokens costs 87 ms per question
 #: against 36 ms at 128, and a request's intent is nearly always stated up front.
 PROMPT_TOKEN_BUDGET = 128
+
+#: Laya's own context length, used when the loaded agent does not report one.
+LAYA_MAX_LEN = 512
 
 #: `build_sequence` truncates every rendered option to this many tokens, silently. Not ours to
 #: change (it is laya's format), but `Engine.option_overflow` will tell you when you cross it.
@@ -87,6 +91,9 @@ class Engine:
         #: whatever `bits` says, so the name must not claim a width nobody applied.
         self._quantizes = bits != 16 and agent is None
         self._tokenizer: Any = None
+        #: One lock per lazy cache: two first requests on the threadpool must not both load.
+        self._agent_lock = threading.Lock()
+        self._tokenizer_lock = threading.Lock()
 
     @property
     def name(self) -> str:
@@ -96,14 +103,16 @@ class Engine:
     def agent(self) -> Any:
         """The underlying `laya_mlx` agent. Imported here so the API starts without MLX installed."""
         if self._agent is None:
-            import laya_mlx
+            with self._agent_lock:
+                if self._agent is None:
+                    import laya_mlx
 
-            agent = laya_mlx.load(self.model_id, **self.load_options)
-            if self._quantizes:
-                # Cached only once quantized: if this raises, the next access loads and tries
-                # again instead of serving the FP16 agent under a q8 name.
-                quantize(agent, self.bits)
-            self._agent = agent
+                    agent = laya_mlx.load(self.model_id, **self.load_options)
+                    if self._quantizes:
+                        # Cached only once quantized: if this raises, the next access loads and
+                        # tries again instead of serving the FP16 agent under a q8 name.
+                        quantize(agent, self.bits)
+                    self._agent = agent
         return self._agent
 
     @property
@@ -118,15 +127,18 @@ class Engine:
         clipped. Nothing caught it because every caller passes the local path.
         """
         if self._tokenizer is None:
-            from pathlib import Path
+            with self._tokenizer_lock:
+                if self._tokenizer is None:
+                    from pathlib import Path
 
-            from transformers import AutoTokenizer
+                    from transformers import AutoTokenizer
 
-            local = Path(self.model_id) / "tokenizer"
-            if local.is_dir():
-                self._tokenizer = AutoTokenizer.from_pretrained(str(local))
-            else:
-                self._tokenizer = AutoTokenizer.from_pretrained(self.model_id, subfolder="tokenizer")
+                    local = Path(self.model_id) / "tokenizer"
+                    if local.is_dir():
+                        tokenizer = AutoTokenizer.from_pretrained(str(local))
+                    else:
+                        tokenizer = AutoTokenizer.from_pretrained(self.model_id, subfolder="tokenizer")
+                    self._tokenizer = tokenizer
         return self._tokenizer
 
     def clip_state(self, state: Any, budget: int | None = PROMPT_TOKEN_BUDGET) -> Any:
@@ -149,6 +161,17 @@ class Engine:
         text = json.dumps(state, ensure_ascii=False)
         clipped = self.clip(text, budget)
         return state if clipped == text else clipped
+
+    def exceeds_context(self, state: Any) -> bool:
+        """True when `state` alone is longer than laya's own context, so the model cuts it even
+        with no budget. Only answers when the tokenizer is already loaded: this never loads one."""
+        if self._tokenizer is None:
+            return False
+        import json
+
+        text = state if isinstance(state, str) else json.dumps(state, ensure_ascii=False)
+        limit = (getattr(self._agent, "cfg", None) or {}).get("max_len") or LAYA_MAX_LEN
+        return len(self._tokenizer(text)["input_ids"]) > limit
 
     def predict(self, state: Any, questions: dict[str, Any]) -> dict[str, Any]:
         """Raw answers, keyed by question id. No pydantic: bulk callers do not need it."""

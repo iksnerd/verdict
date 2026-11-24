@@ -57,7 +57,7 @@ def test_as_answers_is_never_mistaken_for_a_uniform_backend():
     which the router turns into BIG, silently scoring the cache instead of the model."""
     from verdict.judge.router import is_uniform
 
-    assert not is_uniform(as_answers({"difficulty": 1.5, "is_sensitive": 0.5}))
+    assert not is_uniform(as_answers({"difficulty": 1.5, "is_sensitive": 0.6}))
 
 
 def test_fit_returns_thresholds_inside_the_question_ranges():

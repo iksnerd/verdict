@@ -141,16 +141,16 @@ def test_a_persistently_unreachable_upstream_is_a_502_not_a_500(monkeypatch):
     assert "loading" in r.json()["detail"]
 
 
-def test_models_degrades_to_empty_when_the_upstream_is_unreachable(monkeypatch):
+def test_models_is_unknown_when_the_upstream_is_unreachable(monkeypatch):
     monkeypatch.setattr("time.sleep", lambda s: None)
     def handler(req: httpx.Request) -> httpx.Response:
         raise httpx.ConnectError("connection refused")
 
     backend = SystemOneBackend("https://kev.example", "kev-latest", "k",
                                transport=httpx.MockTransport(handler))
-    assert backend.models() == []
+    assert backend.models() is None   # down is not "has none": the cards describe it instead
     body = TestClient(create_app(backend)).get("/v1/models").json()
-    assert body["models"] == []
+    assert body["models"], "falls back to the descriptive cards"
 
 
 def test_decide_endpoints_turn_an_upstream_failure_into_a_502(monkeypatch):

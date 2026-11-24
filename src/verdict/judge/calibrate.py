@@ -24,6 +24,9 @@ import math
 import random
 from typing import Any, Sequence
 
+from ..answers import is_flat
+from ..errors import QuestionError
+
 TRUE = {True, 1, "1", "true", "yes", "y", "t"}
 FALSE = {False, 0, "0", "false", "no", "n", "f"}
 
@@ -190,10 +193,14 @@ def apply(answers: dict[str, Any], fits: dict[str, Any]) -> dict[str, Any]:
     for qid, a in answers.items():
         fit = fits.get(qid)
         a = dict(a)
-        if fit and fit["type"] == "noul" and a.get("type") == "noul":
+        if fit and fit["type"] != a.get("type"):
+            raise QuestionError(f"the fit for {qid!r} is a {fit['type']} fit but the answer is a "
+                                f"{a.get('type')}; fit it on the same type of question")
+        if fit and fit["type"] == "noul":
             a["cut"] = fit["cut"]
-            a["decision"] = a["noul"] >= fit["cut"]
-        elif fit and fit["type"] == "choice" and a.get("type") == "choice":
+            # A flat answer is "no model", not unsure: never turn it into a boolean.
+            a["decision"] = None if is_flat(a) else a["noul"] >= fit["cut"]
+        elif fit and fit["type"] == "choice":
             cal = temper(a["probabilities"], fit["temperature"])
             a["calibrated"] = {k: round(v, 4) for k, v in cal.items()}
             a["calibrated_confidence"] = round(max(cal.values()), 4)

@@ -76,7 +76,8 @@ def known_models(backend: Backend) -> set[str]:
 
 
 def listed_models(backend: Backend) -> list[dict[str, Any]] | None:
-    """The backend's own model list, or None when it has none and the caller describes it."""
+    """The backend's own model list, or None when it has none, or could not be reached, and the
+    caller describes it. An empty list means the service answered with no models."""
     return backend.models() if hasattr(backend, "models") else None
 
 
@@ -84,7 +85,7 @@ def capabilities_of(backend: Backend, model: str | None = None) -> Capabilities:
     """The backend's limits, or an `unknown` family (`uniform` for the uniform backend)."""
     if hasattr(backend, "capabilities"):
         return backend.capabilities(model)
-    return Capabilities(family="uniform" if backend.name == "uniform" else "unknown",
+    return Capabilities(family="uniform" if isinstance(backend, UniformBackend) else "unknown",
                         model=backend.name)
 
 

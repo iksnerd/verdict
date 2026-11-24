@@ -224,8 +224,8 @@ def test_classify_walks_a_tree_through_the_clients_own_decide(uniform):
             "groups": {"a": {"options": {"a1": None, "a2": None}},
                        "b": {"options": {"b1": None, "b2": None}}}}
     r = uniform.classify("hello", tree, beam=2)
-    assert r.label in {"a1", "a2", "b1", "b2"} and r.passes == 3
-    assert abs(r.probability - 0.25) < 1e-6   # uniform: 1/2 * 1/2
+    # A uniform backend has no model: every group is flat, so there is no label to give.
+    assert r.label is None and r.path == [] and r.probability == 0.0
 
 
 def test_classify_reports_a_too_wide_tree_as_a_verdict_error(uniform):

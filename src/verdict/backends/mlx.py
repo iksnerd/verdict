@@ -15,10 +15,11 @@ against the PyTorch original on the frozen test split, max probability differenc
 """
 from __future__ import annotations
 
+import threading
 from typing import Any
 
 from .base import UnknownModel
-from .engine import DEFAULT_MODEL, Engine, load
+from .engine import DEFAULT_MODEL, LAYA_MAX_LEN, Engine, load
 from ..schema import (ChoiceAnswer, DecideRequest, DecideResponse, NoulAnswer, ScoreAnswer, Usage,
                      laya_questions)
 
@@ -38,6 +39,9 @@ class MlxBackend:
         )
         self.model_id = model_id
         self.name = self.engine.name
+        #: Fixed at construction: an injected agent's own context length, else laya's 512. Never
+        #: read off an agent loaded later, so `capabilities()` does not change with load order.
+        self._max_len = (getattr(agent, "cfg", None) or {}).get("max_len") or LAYA_MAX_LEN
         self.multilingual_id = multilingual_id
         #: Further named checkpoints a request can select (config.py's [model.extra]). Named
         #: separately from `multilingual`, which keeps its own dedicated config key and
@@ -49,6 +53,7 @@ class MlxBackend:
         #: Lazily loaded and cached by name, `multilingual` included: loading any of these at
         #: startup would put a second model on the GPU for traffic that may never ask for it.
         self._loaded: dict[str, Engine] = {}
+        self._loaded_lock = threading.Lock()
 
     def known_models(self) -> set[str]:
         """Names besides the served checkpoint that a request may select."""
@@ -62,10 +67,10 @@ class MlxBackend:
         from .engine import OPTION_TOKEN_CAP
         from ..library import MAX_OPTIONS
 
-        engine = self.engine_for(model)  # constructs a lazy Engine; does not load weights
-        cfg = getattr(engine._agent, "cfg", {})
+        # A throwaway lazy Engine for a named checkpoint: no weights, and the cache is untouched.
+        engine = self._resolve(model, cache=False)
         return Capabilities(
-            family="laya", model=engine.name, max_state_and_question_tokens=cfg.get("max_len"),
+            family="laya", model=engine.name, max_state_and_question_tokens=self._max_len,
             state_token_budget=self.budget or None, recommended_choice_options=MAX_OPTIONS,
             option_token_cap=OPTION_TOKEN_CAP, question_execution="per_question",
             noul_confidence="max_probability", choice_score_confidence="one_minus_normalized_entropy",
@@ -78,6 +83,9 @@ class MlxBackend:
 
     def engine_for(self, model: str | None) -> Engine:
         """The engine a request names, loading and caching it on first use."""
+        return self._resolve(model, cache=True)
+
+    def _resolve(self, model: str | None, *, cache: bool) -> Engine:
         if model is None or model == "english":
             return self.engine
         checkpoint_id = self.extra_checkpoints.get(model)
@@ -88,15 +96,23 @@ class MlxBackend:
             raise UnknownModel(f"this server does not know a checkpoint named {model!r}; "
                                f"known extra checkpoints: {known}. Set [model.extra] or "
                                "[model].multilingual in verdict.toml and restart it")
-        if checkpoint_id not in self._loaded:
-            self._loaded[checkpoint_id] = load(checkpoint_id, **self.load_options)
-        return self._loaded[checkpoint_id]
+        if checkpoint_id in self._loaded:
+            return self._loaded[checkpoint_id]
+        if not cache:
+            return load(checkpoint_id, **self.load_options)
+        with self._loaded_lock:
+            if checkpoint_id not in self._loaded:
+                self._loaded[checkpoint_id] = load(checkpoint_id, **self.load_options)
+            return self._loaded[checkpoint_id]
 
     def decide(self, request: DecideRequest) -> DecideResponse:
         questions = laya_questions(request.questions)
         engine = self.engine_for(request.model)
         state = engine.clip_state(request.state, self.budget)
-        truncated = state is not request.state
+        # Past laya's own context the model cuts the state too, budget or not; only checked when
+        # a tokenizer is already loaded, because loading one costs more than the decision.
+        truncated = state is not request.state or (
+            not self.budget and engine.exceeds_context(request.state))
         result = engine.run(state, questions)
         raw = result["answers"]
         answers: dict[str, Any] = {}

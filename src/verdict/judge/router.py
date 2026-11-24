@@ -68,14 +68,16 @@ CASES = {
 
 
 def is_uniform(answers: Mapping[str, Any]) -> bool:
-    """True when every answer is maximum uncertainty, i.e. there is no model behind this.
+    """True when any router answer is maximum uncertainty, i.e. there is no model behind this.
+
+    Any, not all: a flat `difficulty` scores 1.5 whatever else was answered, which routes SMALL.
 
     This matters more than it looks. A uniform `difficulty` answer scores 1.5, which is *below*
     `T_DIFFICULTY`, so without this check a backend with no model behind it would route every
     prompt to the small model, which is the expensive direction. `answers.is_flat` explains why
     the check reads the distribution rather than `confidence`.
     """
-    return all(is_flat(answers[qid]) for qid in ROUTER_BANK)
+    return any(is_flat(answers[qid]) for qid in ROUTER_BANK)
 
 
 def make_selector(t_difficulty: float = T_DIFFICULTY, t_sensitive: float = T_SENSITIVE):
