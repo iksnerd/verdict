@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from typing import Any, Callable
 
+from ..answers import is_flat
 from ..errors import QuestionError
 
 #: Conservative default for each level, matching `library.lint`; not a measured accuracy cliff.
@@ -113,9 +114,13 @@ def classify(ask: Ask, state: Any, tree: dict, *, beam: int = 2) -> Classificati
             continue
         option_p = _choice(ask, state, instructions, _describe(options, "description"), "option")
         passes += 1
+        if is_flat({"type": "choice", "probabilities": option_p}):
+            continue   # no model behind this group's answer: not a label at probability group_p/n
         for label in options:
             candidates.append({"label": label, "path": [name, label],
                                "probability": group_p.get(name, 0.0) * option_p.get(label, 0.0)})
+    if not candidates:
+        return Classification([], passes, group_probabilities=group_p, searched_groups=[])
     candidates.sort(key=lambda c: c["probability"], reverse=True)
     return Classification(candidates[:5], passes, group_probabilities=group_p,
                           searched_groups=searched_groups)

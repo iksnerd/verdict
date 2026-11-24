@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from .base import BackendClosed
 from ..schema import DecideRequest, DecideResponse, Usage
 from ..systemone import SystemOneClient, UpstreamError
 
@@ -33,6 +34,8 @@ class SystemOneBackend:
     def models(self) -> list[dict[str, Any]] | None:
         """Forward the upstream list: [] when it answered with none, None when it could not be
         asked or answered badly, so the caller describes the models itself."""
+        if self._closed:
+            return None
         try:
             return self._ask.models()
         except UpstreamError:
@@ -40,7 +43,7 @@ class SystemOneBackend:
 
     def decide(self, request: DecideRequest) -> DecideResponse:
         if self._closed:
-            raise RuntimeError(f"{self.name} is closed")
+            raise BackendClosed(f"{self.name} is closed")
         questions = {qid: q.model_dump(exclude_none=True) for qid, q in request.questions.items()}
         raw = self._ask(request.state, questions, model=request.model)
         result = DecideResponse.model_validate(raw)
@@ -51,8 +54,8 @@ class SystemOneBackend:
         return result
 
     def close(self) -> None:
-        self._closed = True
         self._ask.close()
+        self._closed = True
 
     def __enter__(self):
         return self

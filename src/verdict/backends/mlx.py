@@ -19,7 +19,7 @@ import threading
 from typing import Any
 
 from .base import UnknownModel
-from .engine import DEFAULT_MODEL, LAYA_MAX_LEN, Engine, load
+from .engine import DEFAULT_MODEL, Engine, load
 from ..schema import (ChoiceAnswer, DecideRequest, DecideResponse, NoulAnswer, ScoreAnswer, Usage,
                      laya_questions)
 
@@ -41,7 +41,7 @@ class MlxBackend:
         self.name = self.engine.name
         #: Fixed at construction: an injected agent's own context length, else laya's 512. Never
         #: read off an agent loaded later, so `capabilities()` does not change with load order.
-        self._max_len = (getattr(agent, "cfg", None) or {}).get("max_len") or LAYA_MAX_LEN
+        self._max_len = self.engine.max_len
         self.multilingual_id = multilingual_id
         #: Further named checkpoints a request can select (config.py's [model.extra]). Named
         #: separately from `multilingual`, which keeps its own dedicated config key and
@@ -109,10 +109,11 @@ class MlxBackend:
         questions = laya_questions(request.questions)
         engine = self.engine_for(request.model)
         state = engine.clip_state(request.state, self.budget)
-        # Past laya's own context the model cuts the state too, budget or not. A short state is
-        # ruled out by length alone; only a long one loads the tokenizer (once).
-        truncated = state is not request.state or (
-            not self.budget and engine.exceeds_context(request.state))
+        # Past laya's own context the model cuts the state too, even when a budget larger than the
+        # context left our clip with nothing to cut. A short state is ruled out by length alone;
+        # only a long one loads the tokenizer (once). This measures the state alone, though
+        # instructions and options share the context: a lower bound, so it can miss a cut.
+        truncated = state is not request.state or engine.exceeds_context(request.state)
         result = engine.run(state, questions)
         raw = result["answers"]
         answers: dict[str, Any] = {}

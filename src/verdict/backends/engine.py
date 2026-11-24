@@ -13,6 +13,7 @@ short states should not pay for it.
 """
 from __future__ import annotations
 
+import logging
 import threading
 from typing import Any
 
@@ -20,6 +21,8 @@ from typing import Any
 #: The port itself is the `mizorewww/laya-mlx` project on GitHub; there is no model repo under that
 #: name and that path 401s (FINDINGS §13).
 DEFAULT_MODEL = "aac6fef/laya-mlx"
+
+log = logging.getLogger(__name__)
 
 #: Clipping the state is the main latency lever (FINDINGS §11): 512 tokens costs 87 ms per question
 #: against 36 ms at 128, and a request's intent is nearly always stated up front.
@@ -91,6 +94,12 @@ class Engine:
         #: whatever `bits` says, so the name must not claim a width nobody applied.
         self._quantizes = bits != 16 and agent is None
         self._tokenizer: Any = None
+        #: Set once the tokenizer failed to load inside `exceeds_context`, so it is not retried.
+        self._tokenizer_failed = False
+        #: The one place that says what this engine's context limit is: the injected agent's own
+        #: `max_len`, else laya's 512. Fixed here, never read off an agent loaded later, so the
+        #: answer does not depend on load order.
+        self.max_len: int = (getattr(agent, "cfg", None) or {}).get("max_len") or LAYA_MAX_LEN
         #: One lock per lazy cache: two first requests on the threadpool must not both load.
         self._agent_lock = threading.Lock()
         self._tokenizer_lock = threading.Lock()
@@ -171,10 +180,20 @@ class Engine:
         import json
 
         text = state if isinstance(state, str) else json.dumps(state, ensure_ascii=False)
-        limit = (getattr(self._agent, "cfg", None) or {}).get("max_len") or LAYA_MAX_LEN
+        limit = self.max_len
         if len(text) + 2 <= limit:
             return False
-        return len(self.tokenizer(text)["input_ids"]) > limit
+        if self._tokenizer_failed:
+            return False
+        try:
+            tokenizer = self.tokenizer
+        except Exception as exc:
+            # Truncation is then unknown: do not mark, do not fail the request, do not retry.
+            self._tokenizer_failed = True
+            log.warning("tokenizer for %s did not load (%s); truncation cannot be checked",
+                        self.model_id, exc)
+            return False
+        return len(tokenizer(text)["input_ids"]) > limit
 
     def predict(self, state: Any, questions: dict[str, Any]) -> dict[str, Any]:
         """Raw answers, keyed by question id. No pydantic: bulk callers do not need it."""

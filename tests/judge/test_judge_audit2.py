@@ -102,7 +102,9 @@ def test_secondary_omitting_a_question_fails_that_state_only():
         calls.append(state)
         if state == "bad":
             return {"answers": {}}
-        return {"answers": {q: primary(state, bank)["answers"][q] for q in questions}}
+        sharp = {"type": "choice", "choice": "a", "probabilities": {"a": .9, "b": .1}, "confidence": .9}
+        return {"answers": {q: (sharp if q == "dept" else primary(state, bank)["answers"][q])
+                            for q in questions}}
 
     run = cascade.run(["ok", "bad"], bank, primary, secondary, share=1.0)
     assert len(run.rows) == 2

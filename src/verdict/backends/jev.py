@@ -19,14 +19,13 @@ except ImportError as exc:  # pragma: no cover - the message is the point
                       "verdict from GitHub with the jev extra; `verdict` on PyPI is a different "
                       "project)") from exc
 
-from .capabilities import Capabilities, jev_capabilities
+from .capabilities import JEV_PRECISION, Capabilities, jev_capabilities
 from ..errors import QuestionError
 from ..schema import ChoiceQuestion, DecideRequest, DecideResponse, NoulQuestion, ScoreQuestion
 from ..systemone import UpstreamError, validate_response
+from .base import BackendClosed
 
 DEFAULT_MODEL = "jev-latest"
-#: Jev rounds each probability to two decimals and adjusts them to sum to 1 (FINDINGS §48).
-JEV_PRECISION = 0.01
 
 
 def sdk_question(question: Any) -> sdk.Question:
@@ -91,6 +90,8 @@ class JevBackend:
     def models(self) -> list[dict[str, Any]] | None:
         """What the service lists: [] when it answered with none, None when it could not be asked
         (so the caller describes the models itself instead of serving an empty list)."""
+        if self._closed:
+            return None
         try:
             listed = self._client.models.list()
         except sdk.TypeSafeError:
@@ -99,7 +100,7 @@ class JevBackend:
 
     def decide(self, request: DecideRequest) -> DecideResponse:
         if self._closed:
-            raise RuntimeError(f"{self.name} is closed")
+            raise BackendClosed(f"{self.name} is closed")
         model = request.model or self.model
         self.capabilities(model).validate_request(request)
         questions = {qid: sdk_question(q) for qid, q in request.questions.items()}
@@ -115,8 +116,8 @@ class JevBackend:
         return validate_response(raw, request, precision=JEV_PRECISION)
 
     def close(self) -> None:
-        self._closed = True
         self._client.close()
+        self._closed = True
 
     def __enter__(self):
         return self

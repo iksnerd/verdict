@@ -46,7 +46,7 @@ def fake(group_p, option_p):
 
 
 OPTION_P = {
-    ("card_lost", "card_late"): {"card_lost": 0.5, "card_late": 0.5},
+    ("card_lost", "card_late"): {"card_lost": 0.55, "card_late": 0.45},
     ("transfer_failed", "transfer_fee"): {"transfer_failed": 0.95, "transfer_fee": 0.05},
 }
 
@@ -64,7 +64,7 @@ def test_a_wider_beam_recovers_when_the_top_group_is_wrong_but_the_best_leaf_is_
     ask = fake(group, OPTION_P)
     narrow = hierarchy.classify(ask, "x", TREE, beam=1)
     wide = hierarchy.classify(fake(group, OPTION_P), "x", TREE, beam=2)
-    assert narrow.label in {"card_lost", "card_late"} and narrow.probability == pytest.approx(0.25)
+    assert narrow.label in {"card_lost", "card_late"} and narrow.probability == pytest.approx(0.275)
     assert wide.label == "transfer_failed" and wide.probability == pytest.approx(0.45 * 0.95)
     assert wide.passes == 3
 

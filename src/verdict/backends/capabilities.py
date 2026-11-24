@@ -12,6 +12,9 @@ from pydantic import BaseModel
 from ..errors import QuestionError
 from ..schema import ChoiceQuestion, DecideRequest, ScoreQuestion
 
+#: Jev rounds each probability to two decimals and adjusts them to sum to 1 (FINDINGS §48).
+JEV_PRECISION = 0.01
+
 
 class Capabilities(BaseModel):
     model_config = {"frozen": True}
@@ -53,7 +56,7 @@ def jev_capabilities(model: str) -> Capabilities:
     return Capabilities(
         family="jev", model=model, max_request_tokens=64000,
         max_state_and_question_tokens=32000, max_choice_options=255, max_score_levels=10,
-        question_execution="parallel", noul_confidence="absent", precision=0.01,
+        question_execution="parallel", noul_confidence="absent", precision=JEV_PRECISION,
         notes=("TypeSafe documentation snapshot: 2026-09-27; upstream enforces token limits.",
                "No local clipping or Laya question rewriting; refit thresholds when changing models."),
     )

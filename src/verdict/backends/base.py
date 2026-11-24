@@ -22,10 +22,15 @@ from ..schema import (
     ScoreQuestion,
     Usage,
 )
+from ..systemone import UpstreamError
 
 
 class UnknownModel(ValueError):
     """A request named a checkpoint (`DecideRequest.model`) this backend cannot serve."""
+
+
+class BackendClosed(RuntimeError, UpstreamError):
+    """A closed backend was asked. An UpstreamError, so the API answers 502 and a cascade carries on."""
 
 
 class Backend(Protocol):

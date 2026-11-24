@@ -97,10 +97,17 @@ def rank(rows: list[dict[str, Any]], weights: dict[str, float]) -> list[dict[str
     unknown = [w for w in weights if w not in known]
     if unknown:
         raise ValueError(f"no dimension {', '.join(unknown)}; the file has {', '.join(known)}")
-    scaled = {d: percentiles([v.get(d, 0.0) for v in vectors]) for d in weights}
+    # A row without a dimension (an errored row, an omitted question) is unknown there, not a low
+    # value: percentiles are taken over the rows that have it, and a row with any unknown weighted
+    # dimension is listed in `unknown` and sorts after every fully known row.
+    scaled = {}
+    for d in weights:
+        have = [i for i, v in enumerate(vectors) if d in v]
+        scaled[d] = dict(zip(have, percentiles([vectors[i][d] for i in have])))
     out = []
     for i, row in enumerate(rows):
-        contributions = {d: w * scaled[d][i] for d, w in weights.items()}
+        contributions = {d: w * scaled[d][i] for d, w in weights.items() if i in scaled[d]}
         out.append({"state": row.get("state"), "score": sum(contributions.values()),
-                    "contributions": contributions})
-    return sorted(out, key=lambda r: -r["score"])
+                    "contributions": contributions,
+                    "unknown": [d for d in weights if i not in scaled[d]]})
+    return sorted(out, key=lambda r: (bool(r["unknown"]), -r["score"]))

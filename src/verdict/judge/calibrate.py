@@ -193,9 +193,14 @@ def apply(answers: dict[str, Any], fits: dict[str, Any]) -> dict[str, Any]:
     for qid, a in answers.items():
         fit = fits.get(qid)
         a = dict(a)
+        if fit and "type" not in fit:
+            raise QuestionError(f"the fit for {qid!r} has no 'type'; refit it with `verdict calibrate`")
         if fit and fit["type"] != a.get("type"):
             raise QuestionError(f"the fit for {qid!r} is a {fit['type']} fit but the answer is a "
                                 f"{a.get('type')}; fit it on the same type of question")
+        key = {"noul": "cut", "choice": "temperature"}.get(fit["type"]) if fit else None
+        if key and key not in fit:
+            raise QuestionError(f"the fit for {qid!r} has no {key!r}; refit it with `verdict calibrate`")
         if fit and fit["type"] == "noul":
             a["cut"] = fit["cut"]
             # A flat answer is "no model", not unsure: never turn it into a boolean.
