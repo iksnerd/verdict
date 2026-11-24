@@ -15,7 +15,7 @@ from ..gen.generate import generate_cases
 from ..label.teacher import DEFAULT_PREAMBLE, LabelError, Teacher, cost_of, price_of
 from .audit import split_stats, text_of, topic_of
 from .config import PipelineConfig
-from .store import JsonlStore, run_lock, sha256_file, write_json_atomic
+from .store import label_key, labels_store, run_lock, states_store, sha256_file, write_json_atomic
 
 
 def _git_commit() -> str | None:
@@ -92,7 +92,7 @@ def gen_stage(cfg: PipelineConfig, run_dir: Path, client, domain: Domain) -> int
 
 
 def _gen_stage(cfg: PipelineConfig, run_dir: Path, client, domain: Domain) -> int:
-    store = JsonlStore(run_dir / "states.jsonl", key=lambda r: r["id"])
+    store = states_store(run_dir)
     have = len(store.latest())
     need = cfg.gen.n - have
     # The generator's tokens are billed whether or not the text is kept. They are in the client's
@@ -149,8 +149,8 @@ def label_stage(cfg: PipelineConfig, run_dir: Path, transport, bank: dict, pream
 
 def _label_stage(cfg, run_dir, transport, bank, preamble, plan) -> dict:
     require_fresh(run_dir, "label")
-    states = JsonlStore(run_dir / "states.jsonl", key=lambda r: r["id"]).latest()
-    labels = JsonlStore(run_dir / "labels.jsonl", key=lambda r: f'{r["id"]}|{r["model"]}|{r["repeat"]}')
+    states = states_store(run_dir).latest()
+    labels = labels_store(run_dir)
     lc = cfg.label
     digest = label_digest(cfg, bank, preamble)
     # A row made under another bank, preamble or domain is not done: it is asked again, and the
@@ -170,7 +170,7 @@ def _label_stage(cfg, run_dir, transport, bank, preamble, plan) -> dict:
         for s in states:
             for model, reps in plan:
                 for rep in range(reps):
-                    key = f'{s["id"]}|{model}|{rep}'
+                    key = label_key(s["id"], model, rep)
                     if key in labels.done and key not in redo:
                         continue
                     total = spent() + failed_spend
@@ -226,7 +226,7 @@ def split_stage(cfg: PipelineConfig, run_dir: Path) -> dict:
     is refused for the same reason; delete `split.json` to split afresh on purpose."""
     run_dir = Path(run_dir)
     require_fresh(run_dir, "split")
-    states = JsonlStore(run_dir / "states.jsonl", key=lambda r: r["id"]).latest()
+    states = states_store(run_dir).latest()
     sp = cfg.split
     seed = sp.seed
     recorded = run_dir / "split.json"

@@ -19,13 +19,13 @@ import fcntl
 import hashlib
 import json
 import os
-import tempfile
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterable, Sequence
 
 from .metrics import auc, bootstrap_ci
 from ..backends.engine import PROMPT_TOKEN_BUDGET
+from ..pipeline.store import write_json_atomic
 from ..judge.router import BIG, ROUTER_BANK, SMALL, T_DIFFICULTY, T_SENSITIVE, route
 
 EVALS = Path("bench/router_prompts.jsonl")
@@ -66,16 +66,7 @@ def fingerprint(prompt: str) -> str:
 def _write_cache(cache: Path, store: dict) -> None:
     """Through a temp file in the same directory and a rename, so a kill mid-write leaves the
     previous file whole instead of a torn one."""
-    cache = Path(cache)
-    cache.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp = tempfile.mkstemp(dir=cache.parent, prefix=cache.name + ".", suffix=".tmp")
-    try:
-        with os.fdopen(fd, "w") as f:
-            f.write(json.dumps(store, indent=1, sort_keys=True))
-        os.replace(tmp, cache)
-    except BaseException:
-        Path(tmp).unlink(missing_ok=True)
-        raise
+    write_json_atomic(cache, store)
 
 
 def _cache_key(model: str) -> str:

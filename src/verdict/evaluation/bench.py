@@ -23,7 +23,7 @@ from typing import Any, Callable, Optional
 
 from ..judge import calibrate
 from .. import inputs
-from .metrics import bootstrap_ci
+from .metrics import bootstrap_ci, mean_ci
 
 SUITES_FILE = Path(__file__).with_name("bench_suites.json")
 
@@ -165,7 +165,7 @@ def score(s: Suite, items: list[tuple[str, str]], ask: Ask) -> dict[str, Any]:
         }
     fit = calibrate.fit_choice([a["probabilities"] for a in answers], truth)
     hits = [a["choice"] == c for a, c in zip(answers, truth)]
-    lo, hi = bootstrap_ci(hits, lambda h: sum(h) / len(h), iters=1000)
+    lo, hi = mean_ci(hits, iters=1000)
     out = {
         "metric": "accuracy", "value": round(sum(hits) / len(hits), 4),
         "ci": [round(lo, 4), round(hi, 4)], "n": len(items),

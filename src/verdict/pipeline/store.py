@@ -21,14 +21,12 @@ def sha256_file(path: str | Path) -> str:
 
 
 def write_json_atomic(path: str | Path, obj: Any) -> None:
-    path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_name(path.name + ".tmp")
-    with open(tmp, "w") as f:
-        json.dump(obj, f, indent=1, sort_keys=True)
-        f.flush()
-        os.fsync(f.fileno())
-    os.replace(tmp, path)
+    write_text_atomic(path, json.dumps(obj, indent=1, sort_keys=True))
+
+
+def jsonl_text(rows) -> str:
+    """One JSON object per line, each ending in a newline, non-ASCII kept as is."""
+    return "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows)
 
 
 def write_text_atomic(path: str | Path, text: str) -> None:
@@ -87,9 +85,7 @@ class JsonlStore:
                     raise
         self._rows = good
         if torn:  # rewrite without the partial tail so the next append starts on a fresh line
-            tmp = self.path.with_name(self.path.name + ".tmp")
-            tmp.write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in good))
-            os.replace(tmp, self.path)
+            write_text_atomic(self.path, jsonl_text(good))
 
     def append(self, row: dict) -> None:
         with open(self.path, "a") as f:
@@ -110,3 +106,18 @@ class JsonlStore:
         for r in self._rows:
             by_key[self.key(r)] = r
         return list(by_key.values())
+
+
+def states_store(run_dir: str | Path) -> JsonlStore:
+    """The run's `states.jsonl`, keyed by state id."""
+    return JsonlStore(Path(run_dir) / "states.jsonl", key=lambda r: r["id"])
+
+
+def label_key(id: str, model: str, repeat: int) -> str:
+    return f"{id}|{model}|{repeat}"
+
+
+def labels_store(run_dir: str | Path, path: str | Path | None = None) -> JsonlStore:
+    """The run's `labels.jsonl` (or `path`), keyed by state id, teacher model and repeat."""
+    return JsonlStore(path if path is not None else Path(run_dir) / "labels.jsonl",
+                      key=lambda r: label_key(r["id"], r["model"], r["repeat"]))

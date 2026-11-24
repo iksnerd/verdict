@@ -11,6 +11,8 @@ from typing import Any, Callable
 
 import httpx
 
+GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+
 
 class LabelError(Exception):
     pass
@@ -128,7 +130,7 @@ def gemini_transport(key: str, temperature: float = 0.7) -> Transport:
     def call(model: str, prompt: str):
         try:
             r = httpx.post(
-                f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
+                GEMINI_URL.format(model=model),
                 headers={"x-goog-api-key": key},
                 json={
                     "contents": [{"parts": [{"text": prompt}]}],

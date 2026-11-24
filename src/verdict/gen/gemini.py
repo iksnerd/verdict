@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import httpx
 
-from ..label.teacher import cost_of
+from ..label.teacher import GEMINI_URL, cost_of
 
 
 class GenError(RuntimeError):
@@ -22,7 +22,7 @@ class GeminiGenClient:
     def generate(self, prompt: str, seed: int) -> str:
         try:
             r = httpx.post(
-                f"https://generativelanguage.googleapis.com/v1beta/models/{self.model}:generateContent",
+                GEMINI_URL.format(model=self.model),
                 headers={"x-goog-api-key": self.key},
                 json={"contents": [{"parts": [{"text": prompt}]}],
                       "generationConfig": {"temperature": self.temperature, "maxOutputTokens": 500, "seed": seed}},

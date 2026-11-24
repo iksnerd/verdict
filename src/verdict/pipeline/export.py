@@ -17,10 +17,10 @@ from pathlib import Path
 
 from ..answers import noul_probs
 from ..label.teacher import mean_labels
-from .audit import held_out_leak
+from .audit import SPLITS, held_out_leak, split_of
 from .config import PipelineConfig
 from .stages import label_digest, require_fresh, write_manifest
-from .store import JsonlStore, write_text_atomic
+from .store import jsonl_text, labels_store, states_store, write_text_atomic
 
 
 def _gold(bank: dict, mean: dict) -> dict:
@@ -38,12 +38,12 @@ def export_stage(cfg: PipelineConfig, run_dir: Path, bank: dict, salt: str = "0"
     require_fresh(run_dir, "export")
     # One row per key, the last winning: a relabelled row replaces the old one, and a key written
     # twice by two runs is not weighted double.
-    states = JsonlStore(run_dir / "states.jsonl", key=lambda r: r["id"]).latest()
+    states = states_store(run_dir).latest()
     split = json.loads((run_dir / "split.json").read_text())
     digest = label_digest(cfg, bank, preamble)
     per: dict = defaultdict(lambda: defaultdict(list))
     wrong = 0
-    label_rows = JsonlStore(run_dir / "labels.jsonl", key=lambda r: f'{r["id"]}|{r["model"]}|{r["repeat"]}').latest()
+    label_rows = labels_store(run_dir).latest()
     for r in sorted(label_rows, key=lambda r: r["repeat"]):
         # the reference is excluded on purpose; a repeat past `repeats` is left over from a larger setting
         if r["model"] in cfg.label.models and r["repeat"] < cfg.label.repeats:
@@ -55,7 +55,7 @@ def export_stage(cfg: PipelineConfig, run_dir: Path, bank: dict, salt: str = "0"
         raise SystemExit(f"{wrong} label rows in {run_dir / 'labels.jsonl'} were made under a different domain, "
                          "bank or preamble than this export has. Rerun `--stage label` (it asks those again) "
                          "or pass the preamble the labels were made with.")
-    assigned = {i for name in ("train", "holdout", "test") for i in split.get(name, [])}
+    assigned = set(split_of(split))
     unassigned = sorted(s["id"] for s in states if s["id"] not in assigned)
     if unassigned:
         print(f"export: {len(unassigned)} states in states.jsonl are in no split and are left out "
@@ -65,7 +65,7 @@ def export_stage(cfg: PipelineConfig, run_dir: Path, bank: dict, salt: str = "0"
     by_id = {s["id"]: s for s in states}
     counts, excluded = {}, {"leaked": len(leaked), "unlabelled": 0, "unassigned": len(unassigned)}
     texts = {}
-    for name in ("train", "holdout", "test"):
+    for name in SPLITS:
         rows = []
         for i in split[name]:
             if (name == "train" and i in leaked):
@@ -78,12 +78,12 @@ def export_stage(cfg: PipelineConfig, run_dir: Path, bank: dict, salt: str = "0"
             rows.append({"id": i, "workflow": cfg.domain, "state": json.dumps(by_id[i]["state"], ensure_ascii=False),
                          "questions": questions, "gold": json.dumps(_gold(bank, mean))})
         rows.sort(key=lambda r: hashlib.sha256(f"{salt}|{r['id']}".encode()).hexdigest())
-        texts[name] = "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows)
+        texts[name] = jsonl_text(rows)
         counts[name] = len(rows)
     # Every file whole or not at all, and the manifest after all three: a kill in between leaves a
     # manifest that does not describe the new files, which `require_fresh` and the sha256s expose.
     for name, text in texts.items():
         write_text_atomic(run_dir / "export" / f"{name}.jsonl", text)
     write_manifest(run_dir, "export", cfg, ["states.jsonl", "labels.jsonl", "split.json"],
-                   [f"export/{n}.jsonl" for n in ("train", "holdout", "test")], counts, excluded=excluded, salt=salt)
+                   [f"export/{n}.jsonl" for n in SPLITS], counts, excluded=excluded, salt=salt)
     return counts

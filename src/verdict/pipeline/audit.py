@@ -18,13 +18,21 @@ def author_of(s: dict) -> str:
     return s.get("author") or s["state"].get("author", "")
 
 
+SPLITS = ("train", "holdout", "test")
+
+
+def split_of(split: dict) -> dict[str, str]:
+    """{state id: split name} for every id a split.json assigns."""
+    return {i: name for name in SPLITS for i in split.get(name, [])}
+
+
 def text_of(s: dict) -> str:
     st = s["state"]
     return st.get("message") or st.get("text") or st.get("issue", "")
 
 
 def split_stats(states: list[dict], split: dict) -> dict:
-    where = {i: name for name in ("train", "holdout", "test") for i in split.get(name, [])}
+    where = split_of(split)
     stats: dict = {"intended_type": {}, "author": {}, "room_topic": {}}
     for s in states:
         name = where.get(s["id"], "unassigned")
