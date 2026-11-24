@@ -45,12 +45,19 @@ class Case:
     author: str = ""
 
 
-def plan_seeds(domain: Domain, n: int, rng: random.Random) -> list[Seed]:
-    types = list(domain.types)
-    rng.shuffle(types)
+def plan_seeds(domain: Domain, n: int, rng: random.Random, type_order: list[str] | None = None,
+               start: int = 0) -> list[Seed]:
+    """With `type_order` the type of seed i is `type_order[(start + i) % len]`, a function of the
+    index alone: a run resumed at `start` continues the same cycle instead of reshuffling and
+    over-representing whatever came first. Without it the types are shuffled by `rng`."""
+    if type_order is None:
+        types = list(domain.types)
+        rng.shuffle(types)
+    else:
+        types = list(type_order)
     seeds = []
     for i in range(n):
-        t = types[i % len(types)]
+        t = types[(start + i) % len(types)]
         ambiguous = rng.random() < AMBIGUOUS_RATE
         seeds.append(
             Seed(
@@ -135,6 +142,8 @@ def generate_cases(
     seen: list[str] | None = None,
     on_case=None,
     workers: int = 1,
+    type_order: list[str] | None = None,
+    start: int = 0,
 ) -> list[Case]:
     """Rounds: every seed still without an accepted text gets one call (in parallel when workers > 1),
     then acceptance runs in seed order, so the result does not depend on which call finished first."""
@@ -142,7 +151,7 @@ def generate_cases(
 
     generator = getattr(client, "model", "unknown")
     accepted: list[str] = list(seen or [])
-    seeds = plan_seeds(domain, n, rng)
+    seeds = plan_seeds(domain, n, rng, type_order=type_order, start=start)
     prompts = [build_prompt(domain, s) for s in seeds]
     done: dict[int, Case] = {}
     for _ in range(max_attempts_factor):

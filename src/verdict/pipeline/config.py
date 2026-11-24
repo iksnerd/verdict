@@ -20,6 +20,7 @@ class LabelCfg(BaseModel):
     reference: str | None = "gemini-3.1-pro-preview"
     repeats: int = 2
     max_cost_usd: float = 1.0
+    prices: dict[str, tuple[float, float]] = Field(default_factory=dict)  # model -> (input, output) USD per 1M tokens; for a model not in PRICES
     key_file: str | None = None  # path to an env file; only GOOGLE_API_KEY/GEMINI_API_KEY is read from it
 
 

@@ -150,14 +150,31 @@ def gemini_transport(key: str, temperature: float = 0.7) -> Transport:
     return call
 
 
-def cost_of(model: str, tokens_in: int, tokens_out: int) -> float:
-    pin, pout = PRICES.get(model, (0.0, 0.0))
+class UnpricedModelError(ValueError):
+    """A model with no price: counted as free, the spend cap could never trip on it."""
+
+
+def price_of(model: str, prices: dict | None = None) -> tuple[float, float]:
+    """USD per 1M tokens (input, output): an explicit price first, then `PRICES`. An unknown model
+    is an error, never $0."""
+    if prices and model in prices:
+        pin, pout = prices[model]
+        return float(pin), float(pout)
+    if model in PRICES:
+        return PRICES[model]
+    raise UnpricedModelError(f"no price for model {model!r}: add it to PRICES in verdict/label/teacher.py "
+                             "or state it in the config as label.prices, {\"model\": [input, output]} "
+                             "USD per 1M tokens. An unpriced model would cost $0 and the spend cap could never trip.")
+
+
+def cost_of(model: str, tokens_in: int, tokens_out: int, prices: dict | None = None) -> float:
+    pin, pout = price_of(model, prices)
     return (tokens_in * pin + tokens_out * pout) / 1e6
 
 
 class Teacher:
-    def __init__(self, model: str, transport: Transport, preamble: str | None = None):
-        self.model, self.transport, self.preamble = model, transport, preamble
+    def __init__(self, model: str, transport: Transport, preamble: str | None = None, prices: dict | None = None):
+        self.model, self.transport, self.preamble, self.prices = model, transport, preamble, prices
         self.tokens_in = self.tokens_out = self.calls = 0
         self.last_in = self.last_out = 0  # tokens spent by the most recent label() call, retries included
 
@@ -185,5 +202,4 @@ class Teacher:
         raise LabelError(f"{self.model}: gave up after 2 tries: {last}")
 
     def cost_usd(self) -> float:
-        pin, pout = PRICES.get(self.model, (0.0, 0.0))
-        return (self.tokens_in * pin + self.tokens_out * pout) / 1e6
+        return cost_of(self.model, self.tokens_in, self.tokens_out, self.prices)

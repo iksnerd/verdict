@@ -11,7 +11,8 @@ from verdict.pipeline.store import JsonlStore, sha256_file, write_json_atomic
 
 
 def cfg(**over):
-    base = {"name": "t", "gen": {"n": 6, "seed": 0}, "label": {"models": ["m1", "m2"], "reference": "ref", "repeats": 2, "max_cost_usd": 5.0}, "split": {"test_frac": 0.3, "seed": 0}}
+    base = {"name": "t", "gen": {"n": 6, "seed": 0}, "label": {"models": ["m1", "m2"], "reference": "ref", "repeats": 2, "max_cost_usd": 5.0,
+                                                                                    "prices": {"m1": [0.1, 0.4], "m2": [0.1, 0.4], "ref": [0.1, 0.4]}}, "split": {"test_frac": 0.3, "seed": 0}}
     for k, v in over.items():
         base[k] = {**base.get(k, {}), **v} if isinstance(v, dict) else v
     return PipelineConfig.model_validate(base)

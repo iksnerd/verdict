@@ -35,7 +35,8 @@ def transport(model, prompt):
 
 
 def cfg():
-    return PipelineConfig.model_validate({"name": "t", "gen": {"n": 60}, "label": {"models": ["m1", "m2"], "reference": None, "repeats": 2, "max_cost_usd": 5},
+    return PipelineConfig.model_validate({"name": "t", "gen": {"n": 60}, "label": {"models": ["m1", "m2"], "reference": None, "repeats": 2, "max_cost_usd": 5,
+                                                    "prices": {"m1": [0.1, 0.4], "m2": [0.1, 0.4]}},
                                           "split": {"test_frac": 0.2, "holdout_frac": 0.2}})
 
 

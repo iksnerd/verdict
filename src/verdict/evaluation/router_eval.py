@@ -15,10 +15,12 @@ Two things here are deliberate and are the reason §12's 83.3% was worthless:
 """
 from __future__ import annotations
 
+import fcntl
 import hashlib
 import json
 import os
 import tempfile
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterable, Sequence
 
@@ -76,14 +78,44 @@ def _write_cache(cache: Path, store: dict) -> None:
         raise
 
 
+def _cache_key(model: str) -> str:
+    """The cache's outer key. A Hub id names a revision this code cannot see, so it stays as is.
+    A local path is the model's weights on disk, which can be replaced under the same name: it
+    carries the size and mtime of its weight files, so retrained weights miss every entry."""
+    path = Path(model).expanduser()
+    if not path.exists():
+        return model
+    files = sorted(path.glob("*.safetensors")) if path.is_dir() else [path]
+    stats = [f.stat() for f in (files or [path])]
+    return f"{model}@{sum(st.st_size for st in stats)}-{max(st.st_mtime_ns for st in stats)}"
+
+
+@contextmanager
+def _cache_lock(cache: Path):
+    cache = Path(cache)
+    cache.parent.mkdir(parents=True, exist_ok=True)
+    fd = os.open(cache.parent, os.O_RDONLY)  # the directory, so no lock file is left beside the cache
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        yield
+    finally:
+        os.close(fd)
+
+
+def _read_cache(cache: Path) -> dict:
+    return json.loads(Path(cache).read_text()) if Path(cache).exists() else {}
+
+
 def measure(rows: Sequence[dict], model: str = DEFAULT_MODEL, cache: Path = CACHE) -> tuple[dict, list[float]]:
     """Model outputs per prompt id, measuring only what the cache is missing.
 
     An entry counts only if its fingerprint matches this run's prompt text, bank and budget. The
-    file is rewritten after each prompt, so an interrupted run keeps what it measured.
+    file is rewritten after each prompt, so an interrupted run keeps what it measured. Each write
+    re-reads the file under a lock and changes only this model's entry, so another run's bucket,
+    written meanwhile, is not lost.
     """
-    store = json.loads(Path(cache).read_text()) if Path(cache).exists() else {}
-    bucket = store.setdefault(model, {})
+    key = _cache_key(model)
+    bucket = _read_cache(cache).get(key, {})
     fps = {r["id"]: fingerprint(r["prompt"]) for r in rows}
     todo = [r for r in rows if bucket.get(r["id"], {}).get("fp") != fps[r["id"]]]
     times: list[float] = []
@@ -97,10 +129,13 @@ def measure(rows: Sequence[dict], model: str = DEFAULT_MODEL, cache: Path = CACH
             t0 = time.perf_counter()
             ans = eng.predict(eng.clip(r["prompt"], PROMPT_TOKEN_BUDGET), ROUTER_BANK)
             times.append((time.perf_counter() - t0) * 1000)
-            bucket[r["id"]] = {"difficulty": ans["difficulty"]["score"],
-                               "is_sensitive": ans["is_sensitive"]["noul"],
-                               "fp": fps[r["id"]]}
-            _write_cache(Path(cache), store)
+            with _cache_lock(cache):
+                store = _read_cache(cache)
+                store.setdefault(key, {})[r["id"]] = {"difficulty": ans["difficulty"]["score"],
+                                                       "is_sensitive": ans["is_sensitive"]["noul"],
+                                                       "fp": fps[r["id"]]}
+                _write_cache(Path(cache), store)
+        bucket = _read_cache(cache).get(key, {})
     return bucket, times
 
 

@@ -8,10 +8,17 @@ from pathlib import Path
 from ..domains import get_domain
 from ..gen.gemini import GeminiGenClient
 from ..gen.ollama import OllamaClient
-from ..label.teacher import gemini_transport, load_key
+from ..label.teacher import UnpricedModelError, gemini_transport, load_key
 from .config import PipelineConfig
 from .export import export_stage
 from .stages import gen_stage, label_stage, split_stage
+
+
+def _spend(client) -> str:
+    try:
+        return f"${client.cost_usd():.4f}"
+    except UnpricedModelError as e:  # gen has no cost cap; an unpriced generator is reported, not fatal
+        return f"unknown ({e})"
 
 
 def main() -> int:
@@ -31,7 +38,7 @@ def main() -> int:
         else:
             client = OllamaClient(cfg.gen.model)
         n = gen_stage(cfg, a.run_dir, client, spec.domain)
-        print(f"gen: {n}/{cfg.gen.n} states" + (f"  (generator spend ${client.cost_usd():.4f})" if hasattr(client, "cost_usd") else "")
+        print(f"gen: {n}/{cfg.gen.n} states" + (f"  (generator spend {_spend(client)})" if hasattr(client, "cost_usd") else "")
               + (f"  ({client.failures} calls failed and were retried)" if getattr(client, "failures", 0) else ""))
     failed = 0
     if "label" in stages:
@@ -42,7 +49,7 @@ def main() -> int:
         s = split_stage(cfg, a.run_dir)
         print(f"split: train {len(s['train'])}  holdout {len(s['holdout'])}  test {len(s['test'])}  (seed used {s['seed_used']})")
     if "export" in stages:
-        print("export:", export_stage(cfg, a.run_dir, spec.bank))
+        print("export:", export_stage(cfg, a.run_dir, spec.bank, preamble=spec.preamble))
     if failed:  # the later stages ran on what was labelled; the exit code says the run is incomplete
         print(f"label: {failed} labels failed in this run; rerun to fill them", file=sys.stderr)
         return 1

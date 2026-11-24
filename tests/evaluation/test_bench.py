@@ -108,7 +108,8 @@ def test_noul_suite_needs_a_target_class():
 
 
 def card(value, lo, hi, model="m1"):
-    return {"model": model, "suites": {"toy": {"metric": "auc", "value": value, "ci": [lo, hi]}}}
+    return {"model": model, "bits": 16, "budget": 128,
+            "suites": {"toy": {"metric": "auc", "value": value, "ci": [lo, hi]}}}
 
 
 def test_verify_passes_when_within_the_previous_interval():
@@ -498,7 +499,6 @@ def test_previous_matches_bits_and_budget_as_well_as_the_model(tmp_path):
     assert bench.previous(tmp_path, "0.8.0", like=like).stem == "v0.5.0"
     assert bench.previous(tmp_path, "0.8.0", like={**like, "bits": 8}).stem == "v0.6.0"
     assert bench.previous(tmp_path, "0.8.0", like={**like, "bits": 8, "budget": 512}) is None
-    assert bench.previous(tmp_path, "0.8.0", like={"model": "m1", "suites": {}}).stem == "v0.7.0"
 
 
 def test_verify_fails_when_a_suite_changed_its_metric():

@@ -10,6 +10,7 @@ import json
 from collections import Counter, defaultdict
 from pathlib import Path
 
+from .stages import require_fresh
 from .store import JsonlStore
 
 _STATE_KEYS = ("domain", "intended_type", "ambiguous", "confusable", "generator", "state")
@@ -18,15 +19,16 @@ _STATE_KEYS = ("domain", "intended_type", "ambiguous", "confusable", "generator"
 def compile_runs(run_dirs: list[Path]) -> list[dict]:
     rows = []
     for run_dir in map(Path, run_dirs):
+        require_fresh(run_dir, "compile")
         split_path = run_dir / "split.json"
         split = json.loads(split_path.read_text()) if split_path.exists() else {}
         where = {i: name for name in ("train", "holdout", "test") for i in split.get(name, [])}
         teachers = defaultdict(list)
         labels_path = run_dir / "labels.jsonl"
         if labels_path.exists():
-            for r in JsonlStore(labels_path, key=lambda r: f'{r["id"]}|{r["model"]}|{r["repeat"]}').rows():
+            for r in JsonlStore(labels_path, key=lambda r: f'{r["id"]}|{r["model"]}|{r["repeat"]}').latest():
                 teachers[r["id"]].append({"model": r["model"], "repeat": r["repeat"], "labels": r["labels"]})
-        for s in JsonlStore(run_dir / "states.jsonl", key=lambda r: r["id"]).rows():
+        for s in JsonlStore(run_dir / "states.jsonl", key=lambda r: r["id"]).latest():
             rows.append({"run": run_dir.name, "id": s["id"], **{k: s.get(k) for k in _STATE_KEYS},
                          "split": where.get(s["id"]),
                          "teachers": sorted(teachers[s["id"]], key=lambda t: (t["model"], t["repeat"]))})

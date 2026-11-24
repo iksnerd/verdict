@@ -16,6 +16,7 @@ from __future__ import annotations
 import hashlib
 import json
 import random
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Optional
@@ -179,11 +180,31 @@ def score(s: Suite, items: list[tuple[str, str]], ask: Ask) -> dict[str, Any]:
     return out
 
 
-def verify(current: dict, previous: Optional[dict]) -> list[str]:
-    """Regressions against the previous scorecard: a suite that vanished, or a value below the
-    previous run's interval. Inside the interval is noise at these sample sizes, not a change."""
+def verify_notes(current: dict, previous: Optional[dict]) -> list[str]:
+    """What `verify` could not compare: a suite whose sample fingerprint one of the two cards does
+    not carry. The values are still compared, but nothing says they were measured on the same items."""
     if previous is None:
         return []
+    notes = []
+    for name, prev in previous["suites"].items():
+        cur = current["suites"].get(name)
+        if cur is None:
+            continue
+        lacking = [side for side, card in (("previous", prev), ("current", cur)) if not card.get("sample_sha256")]
+        if lacking:
+            notes.append(f"{name}: the {' and '.join(lacking)} scorecard has no sample_sha256, so the "
+                         "sample was not compared; the numbers may come from different items")
+    return notes
+
+
+def verify(current: dict, previous: Optional[dict]) -> list[str]:
+    """Regressions against the previous scorecard: a suite that vanished, or a value below the
+    previous run's interval. Inside the interval is noise at these sample sizes, not a change.
+    A suite with no `sample_sha256` on either card is still compared, and says so on stderr."""
+    if previous is None:
+        return []
+    for note in verify_notes(current, previous):
+        print(f"verdict bench: note: {note}", file=sys.stderr)
     problems = []
     for name, prev in previous["suites"].items():
         cur = current["suites"].get(name)
@@ -225,14 +246,31 @@ def previous(directory: Path, version: str, model: Optional[str] = None,
     against a fine-tune card would "regress" on exactly what the fine-tune was made for (SST-2
     yes/no, FINDINGS §35). The first card of a model has no predecessor and is its own baseline.
     With `like` (the current scorecard), the newest older one that agrees with it on every
-    `SAME_MEASUREMENT` field the current card states."""
+    `SAME_MEASUREMENT` field. A card (the current one, or an older one that is being compared) that
+    lacks one of those fields is an error, not a baseline: a card that gained or lost a field would
+    otherwise slip out of the gate by matching nothing."""
     mine = _version_key(Path(f"v{version}.json"))
     older = [p for p in scorecards(directory) if _version_key(p) < mine]
     want = {"model": model} if model is not None else {}
-    want.update({k: like[k] for k in SAME_MEASUREMENT if like and k in like})
+    if like is not None:
+        missing = [k for k in SAME_MEASUREMENT if k not in like]
+        if missing:
+            raise ValueError(f"the scorecard has no {', '.join(missing)}: it cannot be matched with an earlier "
+                             "one, and treating it as a baseline would skip the regression gate. "
+                             "Rerun `verdict bench` to write one that records them")
+        want.update({k: like[k] for k in SAME_MEASUREMENT})
     if want:
-        older = [p for p in older
-                 if all(json.loads(p.read_text()).get(k) == v for k, v in want.items())]
+        kept = []
+        for p in older:
+            card = json.loads(p.read_text())
+            if like is not None:
+                lacking = [k for k in SAME_MEASUREMENT if k not in card]
+                if lacking:
+                    raise ValueError(f"{p.name} has no {', '.join(lacking)}, so it cannot be told apart from "
+                                     "the current measurement; add the fields or delete the card")
+            if all(card.get(k) == v for k, v in want.items()):
+                kept.append(p)
+        older = kept
     return older[-1] if older else None
 
 

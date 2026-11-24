@@ -13,6 +13,7 @@ run is budgeted from a measurement instead of a guess (an earlier project measur
 bf16 down on one loop and both up on another; nothing transfers without its own probe).
 """
 import json
+import os
 import subprocess
 import sys
 
@@ -45,6 +46,35 @@ def _run(args: list[str]) -> None:
     subprocess.run([sys.executable, "-u", *args], check=True)
 
 
+def _run_committing(args: list[str], ckpt: str, commit=None, poll: float = 60.0) -> None:
+    """`_run`, but the volume is committed whenever `ckpt` has a new version while the script runs.
+    `train` committed only after the script returned, so a timeout kill lost every epoch's
+    checkpoint with it. The script replaces `ckpt` atomically, so a commit sees a whole file."""
+    commit = commit or vol.commit
+    print("+", " ".join(args), flush=True)
+    proc = subprocess.Popen([sys.executable, "-u", *args])
+    seen = os.path.getmtime(ckpt) if os.path.exists(ckpt) else None
+    try:
+        while True:
+            try:
+                proc.wait(timeout=poll)
+                break
+            except subprocess.TimeoutExpired:
+                pass
+            now = os.path.getmtime(ckpt) if os.path.exists(ckpt) else None
+            if now != seen:
+                seen = now
+                commit()
+    finally:
+        if proc.poll() is None:
+            proc.kill()
+            proc.wait()
+    if os.path.exists(ckpt) and os.path.getmtime(ckpt) != seen:
+        commit()  # the last epoch's checkpoint can land between the last poll and the exit
+    if proc.returncode:
+        raise subprocess.CalledProcessError(proc.returncode, args)
+
+
 @app.function(image=image, gpu="A10G", volumes={"/data": vol}, timeout=30 * 60)
 def probe(precisions: str = "fp16,bf16,tf32", steps: int = 30) -> list[dict]:
     md = _model_dir()
@@ -66,7 +96,7 @@ def train(run: str = "v1", precision: str = "fp16", epochs: int = 4, resume: boo
             "--out", f"{d}/model", "--precision", precision, "--epochs", str(epochs), "--model-name", f"verdict-{run}"]
     if resume:
         args.append("--resume")
-    _run(args)
+    _run_committing(args, f"{d}/model/ckpt.pt")
     vol.commit()
     return f"{d}/model"
 

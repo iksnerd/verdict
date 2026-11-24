@@ -32,6 +32,44 @@ def _sha256(path):
     return h.hexdigest()
 
 
+def epoch_order(n, epoch, seed=42):
+    """The visiting order of epoch `epoch`: a function of (seed, epoch) alone. Shuffling `items` in
+    place made epoch e depend on the epochs before it, so a run resumed at epoch e started from the
+    unshuffled list and saw an order no uninterrupted run would."""
+    order = list(range(n))
+    random.Random(seed + epoch).shuffle(order)
+    return order
+
+
+def resume_mismatch(was, now):
+    """What differs between the recorded and the current `made_from`, as readable lines."""
+    return [f"{k}: checkpoint {was.get(k, '<not recorded>')!r}, this run {now.get(k)!r}"
+            for k in sorted(set(was) | set(now)) if was.get(k, object()) != now.get(k)]
+
+
+def calibration_note(n_calib, per_type):
+    """One honest line about the temperatures: what they were fitted on, and what fell back."""
+    if n_calib == 0:
+        return ("WARNING: --calib-items holds 0 items (a holdout_frac of 0 exports an empty holdout), so nothing "
+                "was fitted: temperatures stay at the 1.2 fallback; do not trust the probabilities")
+    names = ("choice", "score", "noul")
+    thin = [f"{names[i]} ({per_type.get(i, 0)})" for i in range(3) if per_type.get(i, 0) < 10]
+    note = f"temperatures fitted on {n_calib} HELD-OUT items (choice, score, noul)"
+    if thin:
+        note += ("; fewer than 10 items for " + ", ".join(thin) +
+                 ", so those keep the fallback (1.2 with no items, 1.0 with a few): do not trust them")
+    return note
+
+
+def write_json_atomic(path, obj):
+    tmp = path + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(obj, f, indent=2)
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp, path)
+
+
 def collate_train_batch(items, pad_id):
     n, L = len(items), max(len(it["ids"]) for it in items)
     kmax = max(len(it["markers"]) for it in items)
@@ -125,34 +163,47 @@ def main():
     start_epoch = 0
     # What a checkpoint belongs to. Without it, new items uploaded under an old run name resume the
     # old run: the loop is skipped and the old weights are saved again as the new model.
-    made_from = {"items_sha256": _sha256(a.items), "precision": a.precision}
+    # Everything that changes what the next epoch computes. `total_updates` (the cosine schedule's
+    # T_max, which `scheduler.load_state_dict` restores from the checkpoint) follows from epochs,
+    # batch sizes and the items, so a changed value is refused here rather than resumed on a
+    # schedule that no longer matches.
+    wfile = os.path.join(a.model_dir, "model.safetensors")
+    made_from = {"items_sha256": _sha256(a.items), "precision": a.precision, "epochs": a.epochs,
+                 "lr_encoder": a.lr_encoder, "lr_head": a.lr_head, "micro_batch": a.micro_batch,
+                 "grad_accum": a.grad_accum,
+                 "base_model": {"dir": os.path.basename(os.path.realpath(a.model_dir)),
+                                "weights_bytes": os.path.getsize(wfile) if os.path.exists(wfile) else None}}
+    step = 0
     if a.resume and os.path.exists(ckpt_path):
         ck = torch.load(ckpt_path, map_location="cpu", weights_only=False)
         was = ck.get("made_from")
         if was is None:
             print("WARNING: this checkpoint does not record its items; resuming on trust", flush=True)
         elif was != made_from:
-            raise SystemExit(f"{ckpt_path} was made from {was}, and this run has {made_from}. "
+            diff = "\n  ".join(resume_mismatch(was, made_from))
+            raise SystemExit(f"{ckpt_path} was not made by this run:\n  {diff}\n"
                              "Resuming would save the old run's weights under this run's name. "
-                             "Train without --resume, or use a new run name.")
+                             f"Delete {ckpt_path} to train from the start, train without --resume, or use a new run name. "
+                             "(A checkpoint from before epochs, learning rates, batch sizes and the base model "
+                             "were recorded lacks those keys and is refused for the same reason.)")
         model.load_state_dict(ck["model"])
         optimizer.load_state_dict(ck["optimizer"])
         scheduler.load_state_dict(ck["scheduler"])
         scaler.load_state_dict(ck["scaler"])
         start_epoch = ck["epoch"]
+        step = ck.get("step", 0)  # micro-batches so far, so metrics.jsonl carries on instead of restarting at 0
         print(f"resumed from epoch {start_epoch}", flush=True)
 
     metrics = open(os.path.join(a.out, "metrics.jsonl"), "a")
     print(f"{len(items)} items | micro-batch {a.micro_batch} x accum {a.grad_accum} | {a.epochs} epochs", flush=True)
-    t0, step, timed, t_timed = time.time(), 0, 0, 0.0
+    t0, timed, t_timed = time.time(), 0, 0.0
     for epoch in range(start_epoch, a.epochs):
-        random.seed(42 + epoch)
-        random.shuffle(items)
+        order = epoch_order(len(items), epoch)
         sigma = sigma_start + (sigma_end - sigma_start) * epoch / max(1, a.epochs - 1)
         optimizer.zero_grad(set_to_none=True)
         accum, ep_loss, nb = 0, 0.0, 0
         for b in range(0, len(items), a.micro_batch):
-            chunk = items[b : b + a.micro_batch]
+            chunk = [items[j] for j in order[b : b + a.micro_batch]]
             batch = collate_train_batch(chunk, tok.pad_token_id)
             torch.cuda.synchronize()
             ts = time.perf_counter()
@@ -211,7 +262,7 @@ def main():
                 return
         print(f"=== epoch {epoch + 1}/{a.epochs} done in {time.time() - t0:.0f}s | avg loss {ep_loss / max(1, nb):.4f} ===", flush=True)
         torch.save({"model": model.state_dict(), "optimizer": optimizer.state_dict(), "scheduler": scheduler.state_dict(),
-                    "scaler": scaler.state_dict(), "epoch": epoch + 1, "made_from": made_from},
+                    "scaler": scaler.state_dict(), "epoch": epoch + 1, "step": step, "made_from": made_from},
                    ckpt_path + ".tmp")
         os.replace(ckpt_path + ".tmp", ckpt_path)
 
@@ -230,18 +281,23 @@ def main():
                 arr = ls.float().cpu().numpy()
                 for i, it in enumerate(chunk):
                     preds.append((it["qtype"], arr[i, : len(it["markers"])], it["target"]))
+        per_type = {}
         for qt in range(3):
             sel = [(z, t) for qtp, z, t in preds if qtp == qt]
+            per_type[qt] = len(sel)
             if sel:
                 temps[qt] = fit_one_temp(sel)
-        print("temperatures fitted on HELD-OUT items (choice, score, noul):", [round(t, 3) for t in temps], flush=True)
+        print(calibration_note(len(calib), per_type), [round(t, 3) for t in temps], flush=True)
     else:
         print("WARNING: no --calib-items, temperatures left at the 1.2 fallback; do not trust the probabilities", flush=True)
-    save_file({k: v.half().contiguous().cpu() for k, v in model.state_dict().items()}, os.path.join(a.out, "model.safetensors"))
+    weights = os.path.join(a.out, "model.safetensors")
+    save_file({k: v.half().contiguous().cpu() for k, v in model.state_dict().items()}, weights + ".tmp")
+    os.replace(weights + ".tmp", weights)
     model.encoder.config.save_pretrained(os.path.join(a.out, "encoder"))
     tok.save_pretrained(os.path.join(a.out, "tokenizer"))
     cfg.update({"fine_tuned": True, "model_name": a.model_name, "temperature": temps})
-    json.dump(cfg, open(os.path.join(a.out, "rl_agent_config.json"), "w"), indent=2)
+    # Last, and atomically: a loader that finds this file finds the weights, encoder and tokenizer it describes.
+    write_json_atomic(os.path.join(a.out, "rl_agent_config.json"), cfg)
     print(f"saved to {a.out}", flush=True)
 
 

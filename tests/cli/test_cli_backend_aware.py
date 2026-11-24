@@ -124,9 +124,9 @@ def test_a_server_that_dies_mid_run_does_not_leave_its_rules_on_the_local_fallba
 def test_a_baseline_message_names_the_models_it_did_find(tmp_path, capsys):
     from conftest import typed  # noqa: F401  (keeps the import style of this package)
     (tmp_path / "v0.6.0.json").write_text(json.dumps(
-        {"model": "verdict-v1-mlx", "suites": {"toy": {"metric": "auc", "value": 0.8, "ci": [0.7, 0.9]}}}))
+        {"model": "verdict-v1-mlx", "bits": 16, "budget": 400, "suites": {"toy": {"metric": "auc", "value": 0.8, "ci": [0.7, 0.9]}}}))
     (tmp_path / "v0.7.0.json").write_text(json.dumps(
-        {"model": "laya-mlx", "suites": {"toy": {"metric": "auc", "value": 0.5, "ci": [0.4, 0.6]}}}))
+        {"model": "laya-mlx", "bits": 16, "budget": 400, "suites": {"toy": {"metric": "auc", "value": 0.5, "ci": [0.4, 0.6]}}}))
     assert cli.main(["bench", "--verify", str(tmp_path / "v0.7.0.json")]) == 0
     err = capsys.readouterr().err
     assert "laya-mlx" in err and "verdict-v1-mlx" in err and "baseline" in err
