@@ -164,14 +164,17 @@ class Engine:
 
     def exceeds_context(self, state: Any) -> bool:
         """True when `state` alone is longer than laya's own context, so the model cuts it even
-        with no budget. Only answers when the tokenizer is already loaded: this never loads one."""
-        if self._tokenizer is None:
-            return False
+        with no budget. A state with fewer characters than the limit cannot exceed it (a token is
+        at least one character), so that case answers without a tokenizer; otherwise the
+        tokenizer loads lazily, once. Cost: one import and load (about 1.3 s) on the first long
+        no-budget request, then a tokenize of a few ms against a forward pass of 87 ms or more."""
         import json
 
         text = state if isinstance(state, str) else json.dumps(state, ensure_ascii=False)
         limit = (getattr(self._agent, "cfg", None) or {}).get("max_len") or LAYA_MAX_LEN
-        return len(self._tokenizer(text)["input_ids"]) > limit
+        if len(text) + 2 <= limit:
+            return False
+        return len(self.tokenizer(text)["input_ids"]) > limit
 
     def predict(self, state: Any, questions: dict[str, Any]) -> dict[str, Any]:
         """Raw answers, keyed by question id. No pydantic: bulk callers do not need it."""

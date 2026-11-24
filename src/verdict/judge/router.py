@@ -67,7 +67,7 @@ CASES = {
 #: wants the small branch to reach a local model writes that one line itself.
 
 
-def is_uniform(answers: Mapping[str, Any]) -> bool:
+def is_uniform(answers: Mapping[str, Any], precision: float | None = None) -> bool:
     """True when any router answer is maximum uncertainty, i.e. there is no model behind this.
 
     Any, not all: a flat `difficulty` scores 1.5 whatever else was answered, which routes SMALL.
@@ -76,15 +76,23 @@ def is_uniform(answers: Mapping[str, Any]) -> bool:
     `T_DIFFICULTY`, so without this check a backend with no model behind it would route every
     prompt to the small model, which is the expensive direction. `answers.is_flat` explains why
     the check reads the distribution rather than `confidence`.
+
+    `precision` is the declared rounding step of the backend (`Capabilities.precision`). A backend
+    that rounds (Jev, 0.01) is a real model: its flat-looking answer is a genuinely unsure one, or
+    a noul that rounded to 0.5, never "no model". Only the `uniform` backend, which declares no
+    precision and answers exactly flat, is no model, so a rounding backend is never uniform.
     """
+    if precision is not None:
+        return False
     return any(is_flat(answers[qid]) for qid in ROUTER_BANK)
 
 
-def make_selector(t_difficulty: float = T_DIFFICULTY, t_sensitive: float = T_SENSITIVE):
+def make_selector(t_difficulty: float = T_DIFFICULTY, t_sensitive: float = T_SENSITIVE,
+                  precision: float | None = None):
     """The mechanism: a calibrated cut on `difficulty`, with `is_sensitive` as a safety override."""
 
     def select(answers: Mapping[str, Any]) -> Branch | None:
-        if is_uniform(answers):
+        if is_uniform(answers, precision):
             return None  # the Switch turns this into `default`, i.e. BIG
         difficulty = float(field(answers["difficulty"], "score"))
         sensitive = float(field(answers["is_sensitive"], "noul"))
@@ -112,13 +120,15 @@ def route(
     *,
     t_difficulty: float = T_DIFFICULTY,
     t_sensitive: float = T_SENSITIVE,
+    precision: float | None = None,
 ) -> Branch:
-    """`BIG_SMALL.decide`, with the thresholds exposed so the scorer can sweep them."""
-    if (t_difficulty, t_sensitive) == (T_DIFFICULTY, T_SENSITIVE):
+    """`BIG_SMALL.decide`, with the thresholds exposed so the scorer can sweep them. `precision`
+    is the answering backend's `Capabilities.precision`."""
+    if (t_difficulty, t_sensitive, precision) == (T_DIFFICULTY, T_SENSITIVE, None):
         return BIG_SMALL.decide(answers)
     switch = Switch(
         name=BIG_SMALL.name, cases=CASES, default=BIG, questions=ROUTER_BANK,
-        select=make_selector(t_difficulty, t_sensitive),
+        select=make_selector(t_difficulty, t_sensitive, precision),
     )
     return switch.decide(answers)
 

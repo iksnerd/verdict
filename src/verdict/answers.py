@@ -77,15 +77,20 @@ def gold_point(gold_entry: Mapping[str, Any]) -> float | dict[str, float]:
     return float(p[TRUE]) if TRUE in p else {str(k): float(v) for k, v in p.items()}
 
 
-def is_flat(answer: Any) -> bool:
+def is_flat(answer: Any, precision: float | None = None) -> bool:
     """True when this answer carries no information, i.e. nothing is behind it.
 
     Checked on the distribution rather than on `confidence`, because for a yes/no answer Laya
     reports `confidence == max(p, 1 - p)`, which makes a confidence gate the same test as a
     probability threshold, and because `UniformBackend` reports confidence 0.0 for a score question
     but 0.5 for a yes/no one, so no single confidence cutoff catches both.
+
+    `precision` is the step a rounding backend reports in (`Capabilities.precision`, 0.01 for
+    Jev): values within one step of each other count as flat. The default is the 1e-9 that is only
+    safe for unrounded Laya.
     """
+    tol = 1e-9 if precision is None else float(precision) + 1e-9
     if kind(answer) == "noul":
-        return abs(float(field(answer, "noul")) - 0.5) < 1e-9
+        return abs(float(field(answer, "noul")) - 0.5) < tol
     values = list(probs(answer).values())
-    return bool(values) and max(values) - min(values) < 1e-9
+    return bool(values) and max(values) - min(values) < tol

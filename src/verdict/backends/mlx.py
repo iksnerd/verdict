@@ -109,8 +109,8 @@ class MlxBackend:
         questions = laya_questions(request.questions)
         engine = self.engine_for(request.model)
         state = engine.clip_state(request.state, self.budget)
-        # Past laya's own context the model cuts the state too, budget or not; only checked when
-        # a tokenizer is already loaded, because loading one costs more than the decision.
+        # Past laya's own context the model cuts the state too, budget or not. A short state is
+        # ruled out by length alone; only a long one loads the tokenizer (once).
         truncated = state is not request.state or (
             not self.budget and engine.exceeds_context(request.state))
         result = engine.run(state, questions)

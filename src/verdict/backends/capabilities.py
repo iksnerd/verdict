@@ -29,6 +29,8 @@ class Capabilities(BaseModel):
     noul_confidence: Literal["max_probability", "absent", "provider_defined", "unknown"] = "unknown"
     choice_score_confidence: str = "provider_defined"
     token_usage: str = "provider_reported"
+    #: The step the backend rounds probabilities to (Jev: 0.01); None means unrounded.
+    precision: float | None = None
     notes: tuple[str, ...] = ()
 
     def validate_request(self, request: DecideRequest) -> None:
@@ -51,7 +53,7 @@ def jev_capabilities(model: str) -> Capabilities:
     return Capabilities(
         family="jev", model=model, max_request_tokens=64000,
         max_state_and_question_tokens=32000, max_choice_options=255, max_score_levels=10,
-        question_execution="parallel", noul_confidence="absent",
+        question_execution="parallel", noul_confidence="absent", precision=0.01,
         notes=("TypeSafe documentation snapshot: 2026-09-27; upstream enforces token limits.",
                "No local clipping or Laya question rewriting; refit thresholds when changing models."),
     )

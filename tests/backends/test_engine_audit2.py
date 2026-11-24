@@ -123,14 +123,3 @@ def test_no_budget_still_marks_a_state_past_the_model_context():
     short = DecideRequest(state="x " * 5, questions=BANK)
     assert backend.decide(long).answers["q"].truncated is True
     assert backend.decide(short).answers["q"].truncated is None
-
-
-def test_no_budget_does_not_load_a_tokenizer_just_to_check(monkeypatch):
-    backend = MlxBackend("main", agent=Agent(), budget=None)
-
-    def forbidden(*a, **k):
-        raise AssertionError("tokenizer loaded")
-
-    monkeypatch.setitem(sys.modules, "transformers", types.SimpleNamespace(AutoTokenizer=types.SimpleNamespace(from_pretrained=forbidden)))
-    resp = backend.decide(DecideRequest(state="x " * 600, questions=BANK))
-    assert resp.answers["q"].truncated is None
