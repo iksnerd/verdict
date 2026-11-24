@@ -1,5 +1,5 @@
 # On a version tag only: run the whole suite, check the tag matches the package version, build,
-# and publish a GitHub release with the wheel and sdist.
+# and publish a GitHub release (draft, assets, then publish) with the wheel and sdist.
 #
 # macOS arm64, because the suite's laya and MLX extras are what CLAUDE.md warns a plain install
 # silently skips (13 tests, including the guard that the vendored router bank still matches
@@ -69,7 +69,26 @@ jobs:
       - name: Build
         run: uv build
 
-      - name: Release
+      # Draft first, assets second, publish last: `verdict update` installs only tags with a
+      # published release, so a half-uploaded release must never be visible. A re-run replaces a
+      # leftover draft of this tag; a published release is never deleted.
+      - name: Create draft release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" dist/* --title "verdict $GITHUB_REF_NAME" --notes-file "docs/release-notes/$GITHUB_REF_NAME.md"
+        run: |
+          leftover=$(gh release list --limit 200 --json tagName,isDraft \
+            --jq ".[] | select(.tagName == \"$GITHUB_REF_NAME\" and .isDraft) | .tagName")
+          if [ -n "$leftover" ]; then
+            gh release delete "$GITHUB_REF_NAME" --yes
+          fi
+          gh release create "$GITHUB_REF_NAME" --draft --verify-tag --title "verdict $GITHUB_REF_NAME" --notes-file "docs/release-notes/$GITHUB_REF_NAME.md"
+
+      - name: Upload assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$GITHUB_REF_NAME" dist/*
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release edit "$GITHUB_REF_NAME" --draft=false

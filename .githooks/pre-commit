@@ -6,6 +6,9 @@
 # 1. Paths CLAUDE.md says never to commit (data, weights, runs, a DB, experiments with real data).
 # 2. A gitleaks scan of the staged diff (default rules; there is no .gitleaks.toml on purpose,
 #    since one without `[extend] useDefault = true` silently disables every rule).
+# Every check reads ONE snapshot of the index (a tree from `git write-tree`, taken once), so a
+# peer `git add` mid-run cannot make what was checked differ from what is committed. A check
+# that cannot run says so on a `pre-commit: SKIPPED` line; none is silent.
 # 3. The test suite, run against a copy of the index. The working tree may hold unstaged edits
 #    that make tests pass or fail for code that is not being committed, and stashing them to hide
 #    that would disturb anyone else working in this checkout. Exporting the index touches nothing.
@@ -14,7 +17,22 @@ set -eu
 repo=$(git rev-parse --show-toplevel)
 cd "$repo"
 
-forbidden=$(git diff --cached --name-only --diff-filter=ACMR |
+snapshot=""
+cleanup() { [ -n "$snapshot" ] && rm -rf "$snapshot"; return 0; }
+trap cleanup EXIT
+trap 'cleanup; exit 130' INT
+trap 'cleanup; exit 143' TERM
+trap 'cleanup; exit 129' HUP
+
+# The one read of the index. Everything below uses $tree.
+tree=$(git write-tree)
+if git rev-parse --verify -q HEAD >/dev/null; then
+  base=$(git rev-parse HEAD)
+else
+  base=$(git hash-object -t tree /dev/null)
+fi
+
+forbidden=$(git diff-tree -r --name-only --no-commit-id --diff-filter=ACMR "$base" "$tree" |
   grep -E '^(data|models|runs|experiments)/|(^|/)\.env($|\.)|(^|/)apol\.db$' || true)
 if [ -n "$forbidden" ]; then
   echo "pre-commit: these must never be committed (see CLAUDE.md, Constraints):" >&2
@@ -24,13 +42,16 @@ if [ -n "$forbidden" ]; then
 fi
 
 if command -v gitleaks >/dev/null 2>&1; then
-  if ! gitleaks git --pre-commit --staged --no-banner --redact >/dev/null 2>&1; then
-    gitleaks git --pre-commit --staged --no-banner --redact >&2 || true
+  # Scan the snapshot's diff from stdin, not `--staged`, which would read the index again.
+  if ! git diff-tree -p --no-color --no-commit-id "$base" "$tree" |
+      gitleaks stdin --no-banner --redact >/dev/null 2>&1; then
+    git diff-tree -p --no-color --no-commit-id "$base" "$tree" |
+      gitleaks stdin --no-banner --redact >&2 || true
     echo "pre-commit: gitleaks found a secret in the staged changes" >&2
     exit 1
   fi
 else
-  echo "pre-commit: gitleaks not installed, secret scan skipped (brew install gitleaks)" >&2
+  echo "pre-commit: SKIPPED secret scan: gitleaks not installed (brew install gitleaks)" >&2
 fi
 
 python="$repo/.venv/bin/python"
@@ -43,10 +64,10 @@ fi
 if ! "$python" -c 'import importlib.util as u, sys; sys.exit(0 if all(u.find_spec(m) for m in ("mlx", "laya_mlx")) else 1)'; then
   echo "pre-commit: WARNING: this .venv lacks the mlx or laya extras, so the tests that need them" >&2
   echo "  are skipped. Restore them: uv sync --extra mlx --extra laya --extra jev" >&2
+  echo "pre-commit: SKIPPED mlx/laya tests: extras missing from .venv" >&2
 fi
 snapshot=$(mktemp -d "${TMPDIR:-/tmp}/verdict-precommit.XXXXXX")
-trap 'rm -rf "$snapshot"' EXIT
-git checkout-index --all --prefix="$snapshot/"
+git archive "$tree" | tar -x -C "$snapshot"
 # PYTHONPATH beats the editable install, which would otherwise import the working tree.
 if ! (cd "$snapshot" && PYTHONPATH="$snapshot/src" "$python" -m pytest -q -p no:cacheprovider \
       >"$snapshot/.pytest.log" 2>&1); then
