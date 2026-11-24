@@ -26,6 +26,10 @@ def _precision(values) -> float:
     return 0.01 if all(abs(v * 100 - round(v * 100)) < 1e-6 for v in values) else 0.0001
 
 
+def _unit(v: float) -> bool:
+    return math.isfinite(v) and 0 <= v <= 1
+
+
 def validate_response(raw: Any, request: DecideRequest,
                       precision: float | None = None) -> DecideResponse:
     """Check semantic consistency as well as types, without rewriting provider values.
@@ -42,16 +46,16 @@ def validate_response(raw: Any, request: DecideRequest,
             if raw["answers"][qid].get("type") != q.type or a.type != q.type:
                 raise ValueError(f"{qid}: answer type does not match question")
             confidence = a.confidence
-            if confidence is not None and (not math.isfinite(confidence) or not 0 <= confidence <= 1):
+            if confidence is not None and not _unit(confidence):
                 raise ValueError(f"{qid}: invalid confidence")
             if a.type == "noul":
-                if not math.isfinite(a.noul) or not 0 <= a.noul <= 1:
+                if not _unit(a.noul):
                     raise ValueError(f"{qid}: invalid yes/no probability")
                 continue
             p = a.probabilities
             if set(p) != set(q.option_keys()):
                 raise ValueError(f"{qid}: probability keys do not match criteria")
-            if any(not math.isfinite(v) or not 0 <= v <= 1 for v in p.values()):
+            if not all(_unit(v) for v in p.values()):
                 raise ValueError(f"{qid}: invalid probabilities")
             # A provider rounds each probability to its own precision: Laya to four decimals, hosted
             # Jev to two (a valid Jev choice can sum to 0.99). Allow half a unit of the precision

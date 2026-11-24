@@ -265,10 +265,6 @@ def create_app(backend: Backend | None = None) -> FastAPI:
         front doors reproduce the FINDINGS §15 numbers. On the `uniform` backend every prompt
         routes to the default branch, which is the point of having a default.
         """
-        # Clip here too, so the HTTP path is the one the thresholds were fitted on. The CLI
-        # clips because it has a tokenizer loaded; before this the server did not, so the two
-        # front doors could disagree on a long prompt. A backend with no engine (uniform) has
-        # no tokenizer and needs none.
         with _backend_errors():
             branch = BIG_SMALL.decide(_answers_for(request.prompt))
         return RouteResponse(

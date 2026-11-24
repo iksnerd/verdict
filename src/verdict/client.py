@@ -117,8 +117,16 @@ def _post(
         # happens to be JSON would route on a stranger's output.
         raise NoServer(f"{base} answered but does not look like a verdict server")
     if payload.get("model") == "uniform":
-        raise NoServer(f"the server at {base} is running the uniform backend, which has no model")
+        raise _uniform(base)
     return payload
+
+
+def _uniform(base: str) -> NoServer:
+    return NoServer(f"the server at {base} is running the uniform backend, which has no model")
+
+
+def _base(url: str | None) -> str:
+    return (url or server_url()).rstrip("/")
 
 
 def _server_error(exc: urllib.error.HTTPError) -> ServerError:
@@ -152,7 +160,7 @@ def route_batch(
     mercy of that staying true, and puts the guarantee at the library boundary rather than in
     whichever caller remembered.
     """
-    base = (url or server_url()).rstrip("/")
+    base = _base(url)
     if timeout is None:
         timeout = BATCH_TIMEOUT_BASE + BATCH_TIMEOUT_PER_PROMPT * len(prompts)
     results = _post(
@@ -179,7 +187,7 @@ def decide(
     # travel with the call. An older server ignores unknown query parameters.
     flags = [f for f, on in (("allow_unmeasured", allow_unmeasured), ("yesno", yesno)) if on]
     path = "/v1/decide" + ("?" + "&".join(f"{f}=true" for f in flags) if flags else "")
-    return _post((url or server_url()).rstrip("/"), path, body, timeout,
+    return _post(_base(url), path, body, timeout,
                  frozenset({"answers"}))
 
 
@@ -192,7 +200,7 @@ def capabilities(url: str | None = None, model: str | None = None,
     """
     from urllib.parse import urlencode
 
-    base = (url or server_url()).rstrip("/")
+    base = _base(url)
     path = "/v1/capabilities" + ("?" + urlencode({"model": model}) if model is not None else "")
     try:
         with urllib.request.urlopen(base + path, timeout=timeout) as response:
@@ -206,14 +214,14 @@ def capabilities(url: str | None = None, model: str | None = None,
     if not isinstance(payload, dict) or not {"family", "model"} <= payload.keys():
         raise NoServer(f"{base} returned invalid capability metadata")
     if payload.get("family") == "uniform" or payload.get("model") == "uniform":
-        raise NoServer(f"the server at {base} is running the uniform backend, which has no model")
+        raise _uniform(base)
     return payload
 
 
 def models(url: str | None = None, timeout: float = CONNECT_TIMEOUT) -> list[dict[str, Any]]:
     """`GET /v1/models`: what the server says it can answer with. `NoServer` for a stranger on the
     port or nothing listening, like `capabilities`."""
-    base = (url or server_url()).rstrip("/")
+    base = _base(url)
     try:
         with urllib.request.urlopen(base + "/v1/models", timeout=timeout) as response:
             payload = json.loads(response.read())
@@ -226,7 +234,7 @@ def models(url: str | None = None, timeout: float = CONNECT_TIMEOUT) -> list[dic
     except (urllib.error.URLError, OSError, ValueError) as exc:
         raise NoServer(f"no model list at {base}") from exc
     if uniform:
-        raise NoServer(f"the server at {base} is running the uniform backend, which has no model")
+        raise _uniform(base)
     listed = payload.get("models") if isinstance(payload, dict) else None
     if not isinstance(listed, list):
         raise NoServer(f"{base} returned an invalid model list")
@@ -244,6 +252,6 @@ def route(prompt: str, url: str | None = None,
     because the local checkpoint is usually available even when the served one is not.
     """
     return _post(
-        (url or server_url()).rstrip("/"), "/v1/route", {"prompt": prompt}, timeout,
+        _base(url), "/v1/route", {"prompt": prompt}, timeout,
         frozenset({"branch"}),
     )

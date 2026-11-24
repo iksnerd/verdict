@@ -61,7 +61,8 @@ def load_questions(spec: str) -> dict[str, Any]:
     tried in that order."""
     if spec in PRESETS:
         return preset(spec)
-    if not spec.lstrip().startswith(("{", "[")) and not Path(spec.lstrip("@")).is_file():
+    inline = spec.lstrip().startswith(("{", "["))
+    if not inline and not Path(spec.lstrip("@")).is_file():
         from . import library
 
         names = [n.strip() for n in spec.split(",") if n.strip()]
@@ -75,7 +76,7 @@ def load_questions(spec: str) -> dict[str, Any]:
             hint = _suggest(unknown[0], [*entries, *PRESETS]) if len(unknown) == 1 else "."
             raise ValueError(f"--questions: no preset or library question {', '.join(unknown)}"
                              f"{hint} See `verdict questions` and `verdict presets`")
-    if spec.lstrip().startswith(("{", "[")):
+    if inline:
         bank = json.loads(spec)
         if not isinstance(bank, dict):
             raise ValueError("--questions: a question bank is a JSON object of name -> question, "

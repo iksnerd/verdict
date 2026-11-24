@@ -17,6 +17,11 @@ multilingual = "models/multi-mlx"
 """
 
 
+def _isolated(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(config, "CONFIG_PATHS", (pathlib.Path("verdict.toml"),))
+
+
 def write(tmp_path, body=MINIMAL):
     p = tmp_path / "verdict.toml"
     p.write_text(body)
@@ -24,9 +29,7 @@ def write(tmp_path, body=MINIMAL):
 
 
 def test_defaults_apply_with_no_file(monkeypatch, tmp_path):
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.delenv("VERDICT_URL", raising=False)
-    monkeypatch.setattr(config, "CONFIG_PATHS", (pathlib.Path("verdict.toml"),))
+    _isolated(monkeypatch, tmp_path)
     s = config.load()
     assert s.source is None
     assert s.url == config.DEFAULTS["server"]["url"]
@@ -34,9 +37,7 @@ def test_defaults_apply_with_no_file(monkeypatch, tmp_path):
 
 
 def test_a_file_beats_the_defaults(monkeypatch, tmp_path):
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.delenv("VERDICT_URL", raising=False)
-    monkeypatch.setattr(config, "CONFIG_PATHS", (pathlib.Path("verdict.toml"),))
+    _isolated(monkeypatch, tmp_path)
     write(tmp_path)
     s = config.load()
     assert s.url == "http://127.0.0.1:9001" and s.port == 9001
@@ -46,8 +47,7 @@ def test_a_file_beats_the_defaults(monkeypatch, tmp_path):
 
 
 def test_the_environment_beats_the_file(monkeypatch, tmp_path):
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(config, "CONFIG_PATHS", (pathlib.Path("verdict.toml"),))
+    _isolated(monkeypatch, tmp_path)
     write(tmp_path)
     monkeypatch.setenv("VERDICT_URL", "http://127.0.0.1:9999")
     monkeypatch.setenv("VERDICT_MULTILINGUAL", "models/fromenv-mlx")
@@ -59,9 +59,7 @@ def test_the_environment_beats_the_file(monkeypatch, tmp_path):
 
 def test_a_partial_file_falls_back_per_section(monkeypatch, tmp_path):
     """Setting one table must not wipe the others."""
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.delenv("VERDICT_URL", raising=False)
-    monkeypatch.setattr(config, "CONFIG_PATHS", (pathlib.Path("verdict.toml"),))
+    _isolated(monkeypatch, tmp_path)
     write(tmp_path, '[server]\nurl = "http://127.0.0.1:9002"\n')
     s = config.load()
     assert s.url == "http://127.0.0.1:9002"
@@ -70,19 +68,14 @@ def test_a_partial_file_falls_back_per_section(monkeypatch, tmp_path):
 
 
 def test_a_trailing_slash_is_stripped(monkeypatch, tmp_path):
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.delenv("VERDICT_URL", raising=False)
-    monkeypatch.setattr(config, "CONFIG_PATHS", (pathlib.Path("verdict.toml"),))
+    _isolated(monkeypatch, tmp_path)
     write(tmp_path, '[server]\nurl = "http://127.0.0.1:9003/"\n')
     assert config.load().url == "http://127.0.0.1:9003"
 
 
 def test_round_trip_through_the_written_file(monkeypatch, tmp_path):
     """`verdict init` writes with to_toml; load() must read back exactly what it wrote."""
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.delenv("VERDICT_URL", raising=False)
-    monkeypatch.delenv("VERDICT_MULTILINGUAL", raising=False)
-    monkeypatch.setattr(config, "CONFIG_PATHS", (pathlib.Path("verdict.toml"),))
+    _isolated(monkeypatch, tmp_path)
     original = config.Settings(
         url="http://127.0.0.1:9100", model_path="models/x-mlx", prompt_token_budget=96,
         multilingual_path="models/m-mlx",
@@ -100,24 +93,19 @@ def test_there_is_no_thresholds_key():
 
 
 def test_extra_checkpoints_default_to_empty(monkeypatch, tmp_path):
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(config, "CONFIG_PATHS", (pathlib.Path("verdict.toml"),))
+    _isolated(monkeypatch, tmp_path)
     assert config.load().extra_checkpoints == {}
 
 
 def test_a_file_can_name_extra_checkpoints(monkeypatch, tmp_path):
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(config, "CONFIG_PATHS", (pathlib.Path("verdict.toml"),))
+    _isolated(monkeypatch, tmp_path)
     write(tmp_path, MINIMAL + '\n[model.extra]\nsupport = "org/support-mlx"\nlegal = "org/legal-mlx"\n')
     s = config.load()
     assert s.extra_checkpoints == {"support": "org/support-mlx", "legal": "org/legal-mlx"}
 
 
 def test_extra_checkpoints_round_trip_through_the_written_file(monkeypatch, tmp_path):
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.delenv("VERDICT_URL", raising=False)
-    monkeypatch.delenv("VERDICT_MULTILINGUAL", raising=False)
-    monkeypatch.setattr(config, "CONFIG_PATHS", (pathlib.Path("verdict.toml"),))
+    _isolated(monkeypatch, tmp_path)
     original = config.Settings(
         url="http://127.0.0.1:9100", model_path="models/x-mlx", prompt_token_budget=96,
         multilingual_path="models/m-mlx", extra_checkpoints={"support": "org/support-mlx"},
@@ -137,8 +125,7 @@ def test_settings_is_not_a_dataclass():
 
 def test_a_routes_table_is_reported_not_silently_ignored(monkeypatch, tmp_path, capsys):
     """verdict no longer dispatches anywhere, so `[routes]` does nothing. Say so, once."""
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(config, "CONFIG_PATHS", (pathlib.Path("verdict.toml"),))
+    _isolated(monkeypatch, tmp_path)
     write(tmp_path, '[routes.small]\ncmd = "ollama run x"\n')
     config.load()
     err = capsys.readouterr().err
@@ -166,13 +153,6 @@ def test_awkward_names_and_paths_round_trip_through_the_written_file(tmp_path):
 
 
 # [systemone]: a hosted or remote backend for `verdict serve`. The key is never a setting.
-
-def _isolated(monkeypatch, tmp_path):
-    monkeypatch.chdir(tmp_path)
-    for var in ("VERDICT_URL", "VERDICT_SYSTEMONE_URL", "VERDICT_SYSTEMONE_MODEL"):
-        monkeypatch.delenv(var, raising=False)
-    monkeypatch.setattr(config, "CONFIG_PATHS", (pathlib.Path("verdict.toml"),))
-
 
 def test_no_systemone_backend_by_default(monkeypatch, tmp_path):
     _isolated(monkeypatch, tmp_path)

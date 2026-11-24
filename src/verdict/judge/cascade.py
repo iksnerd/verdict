@@ -18,7 +18,7 @@ import math
 from typing import Any, Callable, Sequence
 
 from . import calibrate
-from ..answers import is_flat
+from ..answers import is_flat, max_probability, top
 from ..errors import QuestionError
 
 Ask = Callable[[Any, dict], dict]
@@ -40,8 +40,7 @@ def confidence(answer: dict, cut: float | None = None) -> float:
         p = answer["noul"]
         if cut is not None:
             return abs(_logit(p) - _logit(cut))
-        return max(p, 1 - p)
-    return max(answer["probabilities"].values())
+    return max_probability(answer)
 
 
 def _cuts(bank: dict, fits: dict | None) -> dict[str, float | None]:
@@ -152,7 +151,7 @@ def _correct(answer: dict, label: Any, cut: float | None = None) -> bool | None:
     if answer["type"] == "noul":
         return (answer["noul"] >= (0.5 if cut is None else cut)) == calibrate.as_bool(label)
     if answer["type"] == "choice":
-        return max(answer["probabilities"], key=answer["probabilities"].get) == label
+        return top(answer) == label
     return None   # a score has no single right answer to count
 
 
