@@ -12,7 +12,7 @@ from pathlib import Path
 
 from .stages import require_fresh
 from .audit import split_of
-from .store import jsonl_text, labels_store, states_store, write_text_atomic
+from .store import jsonl_text, run_lock, labels_store, states_store, write_text_atomic
 
 _STATE_KEYS = ("domain", "intended_type", "ambiguous", "confusable", "generator", "state")
 
@@ -20,19 +20,26 @@ _STATE_KEYS = ("domain", "intended_type", "ambiguous", "confusable", "generator"
 def compile_runs(run_dirs: list[Path]) -> list[dict]:
     rows = []
     for run_dir in map(Path, run_dirs):
-        require_fresh(run_dir, "compile")
-        split_path = run_dir / "split.json"
-        split = json.loads(split_path.read_text()) if split_path.exists() else {}
-        where = split_of(split)
-        teachers = defaultdict(list)
-        labels_path = run_dir / "labels.jsonl"
-        if labels_path.exists():
-            for r in labels_store(run_dir, labels_path).latest():
-                teachers[r["id"]].append({"model": r["model"], "repeat": r["repeat"], "labels": r["labels"]})
-        for s in states_store(run_dir).latest():
-            rows.append({"run": run_dir.name, "id": s["id"], **{k: s.get(k) for k in _STATE_KEYS},
-                         "split": where.get(s["id"]),
-                         "teachers": sorted(teachers[s["id"]], key=lambda t: (t["model"], t["repeat"]))})
+        with run_lock(run_dir, "compile"):
+            rows.extend(_compile_one(run_dir))
+    return rows
+
+
+def _compile_one(run_dir: Path) -> list[dict]:
+    rows = []
+    require_fresh(run_dir, "compile")
+    split_path = run_dir / "split.json"
+    split = json.loads(split_path.read_text()) if split_path.exists() else {}
+    where = split_of(split)
+    teachers = defaultdict(list)
+    labels_path = run_dir / "labels.jsonl"
+    if labels_path.exists():
+        for r in labels_store(run_dir, labels_path).latest():
+            teachers[r["id"]].append({"model": r["model"], "repeat": r["repeat"], "labels": r["labels"]})
+    for s in states_store(run_dir).latest():
+        rows.append({"run": run_dir.name, "id": s["id"], **{k: s.get(k) for k in _STATE_KEYS},
+                     "split": where.get(s["id"]),
+                     "teachers": sorted(teachers[s["id"]], key=lambda t: (t["model"], t["repeat"]))})
     return rows
 
 

@@ -20,7 +20,7 @@ from ..label.teacher import mean_labels
 from .audit import SPLITS, held_out_leak, split_of
 from .config import PipelineConfig
 from .stages import label_digest, require_fresh, write_manifest
-from .store import jsonl_text, labels_store, states_store, write_text_atomic
+from .store import jsonl_text, labels_store, run_lock, states_store, write_text_atomic
 
 
 def _gold(bank: dict, mean: dict) -> dict:
@@ -35,6 +35,11 @@ def export_stage(cfg: PipelineConfig, run_dir: Path, bank: dict, salt: str = "0"
     """`preamble` is the teachers' preamble the labels were made with (`label_stage`'s argument): rows
     made under another domain, bank or preamble are refused rather than averaged in."""
     run_dir = Path(run_dir)
+    with run_lock(run_dir, "export"):
+        return _export_stage(cfg, run_dir, bank, salt, preamble)
+
+
+def _export_stage(cfg, run_dir: Path, bank: dict, salt: str, preamble: str | None) -> dict:
     require_fresh(run_dir, "export")
     # One row per key, the last winning: a relabelled row replaces the old one, and a key written
     # twice by two runs is not weighted double.
@@ -80,6 +85,11 @@ def export_stage(cfg: PipelineConfig, run_dir: Path, bank: dict, salt: str = "0"
         rows.sort(key=lambda r: hashlib.sha256(f"{salt}|{r['id']}".encode()).hexdigest())
         texts[name] = jsonl_text(rows)
         counts[name] = len(rows)
+    lm_path = run_dir / "label.manifest.json"
+    label_complete = json.loads(lm_path.read_text()).get("complete") if lm_path.exists() else None
+    if excluded["unlabelled"] or label_complete is False:  # None: a manifest from before the key, unknown
+        why = " (the label run did not finish; rerun `--stage label`)" if label_complete is False else ""
+        print(f"export: {excluded['unlabelled']} unlabelled states are left out{why}", file=sys.stderr)
     # Every file whole or not at all, and the manifest after all three: a kill in between leaves a
     # manifest that does not describe the new files, which `require_fresh` and the sha256s expose.
     for name, text in texts.items():

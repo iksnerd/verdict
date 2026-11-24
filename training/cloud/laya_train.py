@@ -47,6 +47,16 @@ def resume_mismatch(was, now):
             for k in sorted(set(was) | set(now)) if was.get(k, object()) != now.get(k)]
 
 
+#: Keys added to `made_from` after checkpoints already existed. A checkpoint that lacks one is
+#: compared without it (as it was written), so the older ones stay resumable; one that has it must match.
+NEW_MADE_FROM_KEYS = ("group_size", "sigma_start", "sigma_end", "model_name")
+
+
+def resume_identity(was, now):
+    """`now` without the new keys the saved record never had."""
+    return {k: v for k, v in now.items() if k not in NEW_MADE_FROM_KEYS or k in was}
+
+
 def total_updates(n_items, micro_batch, grad_accum, epochs):
     """Optimizer steps the loop takes: each epoch steps every `grad_accum` micro-batches and once more
     on a trailing partial accumulation, so per epoch it is ceil(micro-batches / grad_accum)."""
@@ -177,7 +187,8 @@ def main():
     wfile = os.path.join(a.model_dir, "model.safetensors")
     made_from = {"items_sha256": _sha256(a.items), "precision": a.precision, "epochs": a.epochs,
                  "lr_encoder": a.lr_encoder, "lr_head": a.lr_head, "micro_batch": a.micro_batch,
-                 "grad_accum": a.grad_accum,
+                 "grad_accum": a.grad_accum, "group_size": a.group_size,
+                 "sigma_start": sigma_start, "sigma_end": sigma_end, "model_name": a.model_name,
                  "base_model": {"dir": os.path.basename(os.path.realpath(a.model_dir)),
                                 "weights_bytes": os.path.getsize(wfile) if os.path.exists(wfile) else None}}
     step = 0
@@ -186,8 +197,8 @@ def main():
         was = ck.get("made_from")
         if was is None:
             print("WARNING: this checkpoint does not record its items; resuming on trust", flush=True)
-        elif was != made_from:
-            diff = "\n  ".join(resume_mismatch(was, made_from))
+        elif was != (comparable := resume_identity(was, made_from)):
+            diff = "\n  ".join(resume_mismatch(was, comparable))
             raise SystemExit(f"{ckpt_path} was not made by this run:\n  {diff}\n"
                              "Resuming would save the old run's weights under this run's name. "
                              f"Delete {ckpt_path} to train from the start, train without --resume, or use a new run name. "

@@ -155,17 +155,22 @@ def _label_stage(cfg, run_dir, transport, bank, preamble, plan) -> dict:
     digest = label_digest(cfg, bank, preamble)
     # A row made under another bank, preamble or domain is not done: it is asked again, and the
     # newer row wins on read. Old rows without a digest are kept.
-    redo = {labels.key(r) for r in labels.rows() if r.get("label_digest", digest) != digest}
+    # Built from the latest row per key: a key already relabelled has a current row and is done,
+    # whatever older generations of it are still on disk.
+    redo = {labels.key(r) for r in labels.latest() if r.get("label_digest", digest) != digest}
     teachers = {m: Teacher(m, transport, preamble=preamble, prices=lc.prices) for m, _ in plan}
 
     def spent() -> float:
-        return sum(cost_of(r["model"], r["tokens_in"], r["tokens_out"], lc.prices) for r in labels.rows())
+        # Every row on disk, superseded ones too: money was spent on each. Tolerant of a row
+        # without token counts, so this cannot mask the error that ended the run.
+        return sum(cost_of(r["model"], r.get("tokens_in", 0), r.get("tokens_out", 0), lc.prices) for r in labels.rows())
 
     failures = 0
     # A failed call is billed for the tries that answered, but writes no row, so `spent()` cannot
     # see it. It is counted here, for this run only: nothing on disk records what the failed calls
     # of an earlier run cost, so a resumed run starts this at zero and the cap is per run for them.
     failed_spend = 0.0
+    finished = False
     try:
         for s in states:
             for model, reps in plan:
@@ -187,16 +192,22 @@ def _label_stage(cfg, run_dir, transport, bank, preamble, plan) -> dict:
                     labels.append({"id": s["id"], "model": model, "repeat": rep, "labels": out,
                                    "tokens_in": t.last_in, "tokens_out": t.last_out, "label_digest": digest})
                     redo.discard(key)
+        finished = True
     finally:
         # Also when the cap or a Ctrl-C ends the run: the manifest describes the labels.jsonl that
         # is on disk now, not the one the previous run left.
         rows = labels.latest()
+        # States with a key still to ask for (missing or made under another digest).
+        unlabelled = len({s["id"] for s in states for model, reps in plan for rep in range(reps)
+                          if (label_key(s["id"], model, rep)) not in labels.done
+                          or label_key(s["id"], model, rep) in redo})
         counts = {"states": len(states), "label_rows": len(rows), "failures_this_run": failures,
                   "failed_spend_usd": round(failed_spend, 6)}
         # `spend_usd` stays what the rows on disk cost, every run included; `failed_spend_usd` is this run's only.
         write_manifest(run_dir, "label", cfg, ["states.jsonl"], ["labels.jsonl"], counts,
                        spend_usd=round(spent(), 6), failed_spend_usd=round(failed_spend, 6),
-                       teachers=[m for m, _ in plan], label_digest=digest)
+                       teachers=[m for m, _ in plan], label_digest=digest,
+                       complete=finished and unlabelled == 0, unlabelled_states=unlabelled)
     return counts
 
 
@@ -225,6 +236,11 @@ def split_stage(cfg: PipelineConfig, run_dir: Path) -> dict:
     every topic, test set included. A rerun whose seed or fractions differ from the recorded ones
     is refused for the same reason; delete `split.json` to split afresh on purpose."""
     run_dir = Path(run_dir)
+    with run_lock(run_dir, "split"):
+        return _split_stage(cfg, run_dir)
+
+
+def _split_stage(cfg: PipelineConfig, run_dir: Path) -> dict:
     require_fresh(run_dir, "split")
     states = states_store(run_dir).latest()
     sp = cfg.split

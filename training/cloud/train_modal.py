@@ -54,6 +54,15 @@ def _run_committing(args: list[str], ckpt: str, commit=None, poll: float = 60.0)
     print("+", " ".join(args), flush=True)
     proc = subprocess.Popen([sys.executable, "-u", *args])
     seen = os.path.getmtime(ckpt) if os.path.exists(ckpt) else None
+    def try_commit() -> bool:
+        # A transient volume error must never kill a multi-hour run: log it, keep going.
+        try:
+            commit()
+            return True
+        except Exception as e:
+            print(f"commit failed ({type(e).__name__}: {e}); retrying at the next poll", flush=True)
+            return False
+
     try:
         while True:
             try:
@@ -62,17 +71,17 @@ def _run_committing(args: list[str], ckpt: str, commit=None, poll: float = 60.0)
             except subprocess.TimeoutExpired:
                 pass
             now = os.path.getmtime(ckpt) if os.path.exists(ckpt) else None
-            if now != seen:
+            if now != seen and try_commit():  # `seen` stays put on failure, so the next poll retries
                 seen = now
-                commit()
     finally:
         if proc.poll() is None:
             proc.kill()
             proc.wait()
+    if proc.returncode:
+        try_commit()  # keep the partial outputs and metrics of a failed run
+        raise subprocess.CalledProcessError(proc.returncode, args)
     if os.path.exists(ckpt) and os.path.getmtime(ckpt) != seen:
         commit()  # the last epoch's checkpoint can land between the last poll and the exit
-    if proc.returncode:
-        raise subprocess.CalledProcessError(proc.returncode, args)
 
 
 @app.function(image=image, gpu="A10G", volumes={"/data": vol}, timeout=30 * 60)
@@ -109,6 +118,29 @@ def probe_main(items: str = "runs/dev/probe_items.pt", precisions: str = "fp16,b
         print(json.dumps(r))
 
 
+def _require_fresh_export(run_dir) -> None:
+    """Refuse train/holdout files that no longer match what the export stage recorded. A run with
+    no export manifest (made by hand) is not checked. Plain json and hashlib: no verdict import."""
+    import hashlib
+    from pathlib import Path
+
+    run_dir = Path(run_dir)
+    mpath = run_dir / "export.manifest.json"
+    if not mpath.exists():
+        return
+    outputs = json.loads(mpath.read_text()).get("outputs", {})
+    for name in ("train", "holdout"):
+        rel = f"export/{name}.jsonl"
+        path, recorded = run_dir / rel, outputs.get(rel)
+        if recorded is None or not path.exists():
+            continue
+        now = hashlib.sha256(path.read_bytes()).hexdigest()
+        if now != recorded:
+            raise SystemExit(f"{path} no longer matches the copy the export stage made (recorded "
+                             f"{recorded[:12]}, now {now[:12]}): rerun `python -m verdict.pipeline "
+                             f"--run-dir {run_dir} --stage export` before uploading")
+
+
 @app.local_entrypoint()
 def upload(run: str = "v1", model_dir: str = ""):
     """Build training items from runs/<run>/export and put them on the volume for `train`.
@@ -122,6 +154,7 @@ def upload(run: str = "v1", model_dir: str = ""):
 
     md = Path(model_dir or snapshot_download(BASE, revision=BASE_REVISION,
                                                        allow_patterns=["tokenizer/*", "rl_agent_config.json", "encoder/*"]))
+    _require_fresh_export(Path(f"runs/{run}"))
     out = Path(f"runs/{run}/items")
     out.mkdir(parents=True, exist_ok=True)
     for name in ("train", "holdout"):

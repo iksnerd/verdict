@@ -16,6 +16,7 @@ from __future__ import annotations
 import hashlib
 import json
 import random
+import re
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -230,8 +231,13 @@ def _version_key(path: Path) -> tuple[int, ...]:
     return tuple(int(p) for p in path.stem.lstrip("v").split("."))
 
 
+_CARD_NAME = re.compile(r"v\d+\.\d+\.\d+")
+
+
 def scorecards(directory: Path) -> list[Path]:
-    return sorted(Path(directory).glob("v*.json"), key=_version_key)
+    """The release scorecards, oldest first. A file not named `vN.N.N.json` (a `-rc1` card, notes)
+    is not a release and is skipped rather than breaking the listing."""
+    return sorted((p for p in Path(directory).glob("v*.json") if _CARD_NAME.fullmatch(p.stem)), key=_version_key)
 
 
 #: What makes two scorecards the same measurement. A card that differs in one of these is not a

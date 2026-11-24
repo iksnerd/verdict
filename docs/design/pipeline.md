@@ -55,7 +55,10 @@ uses it by pointing `[model].path` at a local copy. verdict itself defaults to b
   refused before any call, so the cap cannot be bypassed by a model that costs "zero".
 - **Fresh.** `split`, `label`, `export` and `compile` compare each recorded input hash with the
   file on disk and refuse a stale one, naming the stage to rerun. Label rows carry a digest of the
-  bank and preamble, and a run holds a lock on its directory.
+  bank and preamble, and a run holds a lock on its directory (`gen`, `label`, `split`, `export`
+  and `compile` all take it). The label manifest records `complete` and `unlabelled_states`;
+  `export` warns on stderr when it drops unlabelled states or the label run did not finish, and
+  still exports.
 - **Manifested.** Every stage ends by writing `<stage>.manifest.json`: config digest, git commit,
   sha256 of each input and output, counts, spend. APOL scorecards pin these hashes, so a scorecard
   fails when its data drifts instead of quietly scoring something else.

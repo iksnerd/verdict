@@ -58,7 +58,29 @@ def _key(preamble: str, model: str, state_id: str, bank: dict | None = None) -> 
     return hashlib.sha256(f"{model}\x00{preamble}\x00{state_id}\x00{bank_digest}".encode()).hexdigest()
 
 
+@contextmanager
+def _cache_lock(cache_path: Path):
+    """Two runs on one cache both miss the same key and both pay for it, so the second is refused."""
+    cache_path = Path(cache_path)
+    cache_path.parent.mkdir(parents=True, exist_ok=True)
+    path = cache_path.with_name(cache_path.name + ".lock")
+    fd = os.open(path, os.O_RDWR | os.O_CREAT, 0o644)
+    try:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            raise SystemExit(f"{cache_path} is in use by another run ({path} is locked): wait for it to finish") from None
+        yield
+    finally:
+        os.close(fd)
+
+
 def score_preamble(states: list[dict], reference: dict, teacher: Teacher, bank: dict, cache_path: Path, ledger: SpendLedger) -> dict:
+    with _cache_lock(cache_path):
+        return _score_preamble(states, reference, teacher, bank, cache_path, ledger)
+
+
+def _score_preamble(states: list[dict], reference: dict, teacher: Teacher, bank: dict, cache_path: Path, ledger: SpendLedger) -> dict:
     missing = [s["id"] for s in states if s["id"] not in reference]
     if missing:  # before any paid call, not after the first label was bought
         raise KeyError(f"no reference label for {len(missing)} state(s), first {missing[0]!r}: "
@@ -86,6 +108,8 @@ def score_preamble(states: list[dict], reference: dict, teacher: Teacher, bank: 
                 continue
             cost = cost_of(teacher.model, teacher.last_in, teacher.last_out, teacher.prices)
             spent += cost
+            # Ledger first: a crash between the two re-pays the call on a retry, but every
+            # payment is counted. The other order could lose a payment from the ledger.
             ledger.add(cost)
             cache.append({"k": k, "labels": labels})
         for qid, v in agreement(labels, reference[s["id"]]).items():
