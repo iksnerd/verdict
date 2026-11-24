@@ -328,7 +328,10 @@ release is available. Ctrl-C exits 130, and a closed pipe (`| head`) exits 2 wit
 because 0 would read as "yes" or "small". Every command's `--help` ends with its own exit status.
 `decide`, `ask --cut` and `cascade` print one warning on stderr when the fit they were given
 was made on another model, bits or budget, or holds no fits, and when a server appears or
-disappears in the middle of a run.
+disappears in the middle of a run. A run is pinned to the source of its first answer (the server
+or the in-process model): a server that dies mid-run fails that row with exit 2 instead of
+switching model, and one that starts mid-run is ignored with a note. `route --batch` exits 0
+whatever it routed; read the branches from its output.
 
 An error is one `verdict:` line on stderr. With `--json` or `--jsonl`, stdout also gets
 `{"error": {"code": ..., "message": ...}}` (always for `decide`, for `cascade` without `--check` and

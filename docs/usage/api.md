@@ -328,6 +328,6 @@ one-off question and an eyeballed guess at whether it's "close enough".
 |---|---|
 | `GET /healthz` | `{"status": "ok", "backend": "laya-mlx:..."}`. A backend of `uniform` means no model: it reports `{"status": "no_model", "ready": false}` (still 200), and the client treats it as absent, never as "unsure" |
 | `POST /v1/route` | `{"prompt": ...}` in, the big-or-small branch out ([routing.md](../design/routing.md)) |
-| `POST /v1/route/batch` | `{"prompts": [...]}` in, one result per prompt with its `index`; at most 512 |
+| `POST /v1/route/batch` | `{"prompts": [...]}` in, one result per prompt with its `index`; at most 512. If a prompt fails after others were routed the status is 207: the results so far are kept, the failed index carries `error`, and every later index carries `error: "not attempted: ..."` |
 
 `uvicorn verdict.api:app` serves the `uniform` backend, not the model. Use `verdict serve`.
