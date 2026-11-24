@@ -8,8 +8,7 @@ import types
 from verdict.backends.mlx import MlxBackend
 from verdict.schema import DecideRequest
 
-from test_clip_state import WordTokenizer
-from test_engine_audit2 import Agent, BANK
+from fakes import NOUL_BANK as BANK, Agent, WordTokenizer
 
 
 def fake_transformers(monkeypatch, calls):

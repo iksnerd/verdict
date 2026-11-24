@@ -11,6 +11,11 @@ from verdict.backends.systemone import SystemOneBackend
 from verdict.schema import DecideRequest
 
 Q = {"q": {"type": "noul", "instructions": "Is it urgent?"}}
+OK_NOUL = {"model": "jev-1.13.0", "answers": {"q": {"type": "noul", "noul": .9}}}
+
+
+def jev(handler):
+    return SystemOneBackend("https://api.typesafe.ai", transport=httpx.MockTransport(handler))
 
 
 def request(model=None):
@@ -23,10 +28,9 @@ def test_proxy_honors_model_and_does_not_invent_confidence_or_usage():
     def handler(req):
         body = json.loads(req.content)
         calls.append(body)
-        return httpx.Response(200, json={"model": body["model"], "answers": {
-            "q": {"type": "noul", "noul": .9}}})
+        return httpx.Response(200, json={**OK_NOUL, "model": body["model"]})
 
-    with SystemOneBackend("https://api.typesafe.ai", transport=httpx.MockTransport(handler)) as backend:
+    with jev(handler) as backend:
         c = TestClient(create_app(backend))
         for path in ("/v1/decide", "/v1/systemone"):
             r = c.post(path, json={"state": "hello", "questions": Q, "model": "jev-1.13.0"})
@@ -70,7 +74,7 @@ def test_jev_limit_is_not_layas_recommendation():
             "type": "choice", "choice": keys[0], "confidence": 0.,
             "probabilities": {k: 1 / len(keys) for k in keys}}}})
 
-    with SystemOneBackend("https://api.typesafe.ai", transport=httpx.MockTransport(handler)) as backend:
+    with jev(handler) as backend:
         for n in (21, 255):
             backend.decide(DecideRequest(state="x", questions={"q": {
                 "type": "choice", "instructions": "Choose", "criteria": {str(i): None for i in range(n)}}}))
@@ -87,7 +91,7 @@ def test_jev_limit_is_not_layas_recommendation():
 def test_invalid_upstream_answers_are_bad_gateway(answers):
     def handler(req):
         return httpx.Response(200, content=json.dumps({"model": "jev-1.13.0", "answers": answers}))
-    with SystemOneBackend("https://api.typesafe.ai", transport=httpx.MockTransport(handler)) as backend:
+    with jev(handler) as backend:
         r = TestClient(create_app(backend)).post("/v1/decide", json={"state": "x", "questions": Q})
         assert r.status_code == 502
 
@@ -100,9 +104,9 @@ def test_retry_after_and_connection_lifecycle(monkeypatch):
         calls.append(req)
         if len(calls) == 1:
             return httpx.Response(429, headers={"Retry-After": "3"})
-        return httpx.Response(200, json={"model": "jev-1.13.0", "answers": {"q": {"type": "noul", "noul": .9}}})
+        return httpx.Response(200, json=OK_NOUL)
 
-    with SystemOneBackend("https://api.typesafe.ai", transport=httpx.MockTransport(handler)) as backend:
+    with jev(handler) as backend:
         backend.decide(request())
         assert waits == [3.0]
     with pytest.raises(RuntimeError, match="closed"):
@@ -115,7 +119,7 @@ def test_permanent_errors_are_not_retried(status):
     def handler(req):
         calls.append(req)
         return httpx.Response(status, text="private state must not leak")
-    with SystemOneBackend("https://api.typesafe.ai", transport=httpx.MockTransport(handler)) as backend:
+    with jev(handler) as backend:
         with pytest.raises(ValueError, match=str(status)) as exc:
             backend.decide(request())
         assert "private" not in str(exc.value)
@@ -125,7 +129,7 @@ def test_permanent_errors_are_not_retried(status):
 def test_score_limit_is_rejected_before_transport():
     def handler(req):
         pytest.fail("invalid question must not reach upstream")
-    with SystemOneBackend("https://api.typesafe.ai", transport=httpx.MockTransport(handler)) as backend:
+    with jev(handler) as backend:
         c = TestClient(create_app(backend))
         r = c.post("/v1/decide", json={"state": "x", "questions": {"q": {
             "type": "score", "instructions": "Rate", "criteria": [str(i) for i in range(11)]}}})
@@ -149,8 +153,8 @@ def test_retry_after_http_date():
 
 @pytest.mark.parametrize("body", [b"not json", b"[]", b'{"model":"jev","answers":{"q":{"noul":0.9}}}'])
 def test_malformed_response_is_a_clean_error(body):
-    with SystemOneBackend("https://api.typesafe.ai", transport=httpx.MockTransport(
-            lambda req: httpx.Response(200, content=body))) as backend:
+    with jev(
+            lambda req: httpx.Response(200, content=body)) as backend:
         with pytest.raises(ValueError, match="upstream"):
             backend.decide(request())
 
@@ -202,7 +206,7 @@ def test_jev_preserves_long_structured_state_and_noul_question():
         assert body["questions"] == Q
         return httpx.Response(200, json={"model": "jev-1.13.0", "answers": {"q": {"type": "noul", "noul": .9}},
                                          "usage": {"input_tokens": 2048, "output_tokens": 20}})
-    with SystemOneBackend("https://api.typesafe.ai", transport=httpx.MockTransport(handler)) as backend:
+    with jev(handler) as backend:
         result = backend.decide(DecideRequest(state=state, questions=Q))
         assert result.usage.output_tokens == 20
 
@@ -217,8 +221,8 @@ def test_retry_after_is_capped_so_an_upstream_cannot_park_the_process(monkeypatc
         calls.append(req)
         if len(calls) == 1:
             return httpx.Response(429, headers={"Retry-After": "86400"})
-        return httpx.Response(200, json={"model": "jev-1.13.0", "answers": {"q": {"type": "noul", "noul": .9}}})
+        return httpx.Response(200, json=OK_NOUL)
 
-    with SystemOneBackend("https://api.typesafe.ai", transport=httpx.MockTransport(handler)) as backend:
+    with jev(handler) as backend:
         backend.decide(request())
     assert waits == [systemone.MAX_RETRY_WAIT] and systemone.MAX_RETRY_WAIT <= 120

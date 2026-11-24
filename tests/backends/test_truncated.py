@@ -14,9 +14,8 @@ from verdict.backends.mlx import MlxBackend
 from verdict.cli import inference
 from verdict.backends.engine import Engine
 
-from test_clip_state import Agent, WordTokenizer
+from fakes import NOUL_BANK as BANK, Agent, WordTokenizer
 
-BANK = {"q": {"type": "noul", "instructions": "?"}}
 LONG = "x " * 500
 
 

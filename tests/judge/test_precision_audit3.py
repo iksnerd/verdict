@@ -6,13 +6,7 @@ from verdict.answers import is_flat
 from verdict.backends.capabilities import jev_capabilities
 from verdict.judge.router import BIG, SMALL, is_uniform, route
 
-
-def answers(difficulty_probs, difficulty, sensitive):
-    return {
-        "difficulty": {"type": "score", "score": difficulty, "legend": {}, "probabilities": difficulty_probs,
-                       "confidence": 0.0},
-        "is_sensitive": {"type": "noul", "noul": sensitive, "confidence": 0.5},
-    }
+from fakes import router_answers as answers
 
 
 NEAR = {"0": .26, "1": .25, "2": .25, "3": .24}   # 0.01-rounded, genuinely unsure

@@ -14,10 +14,7 @@ from verdict.backends.engine import Engine
 from verdict.backends.mlx import MlxBackend
 from verdict.schema import DecideRequest
 
-from fakes import noul
-from test_clip_state import WordTokenizer
-
-BANK = {"q": {"type": "noul", "instructions": "?"}}
+from fakes import NOUL_BANK as BANK, Agent, WordTokenizer, noul
 
 
 def run_threads(fn, n=2):
@@ -92,11 +89,6 @@ def test_extra_checkpoint_loads_once_under_two_threads(monkeypatch):
     backend = MlxBackend("main", agent=object(), multilingual_id="multi")
     engines = run_threads(lambda: backend.engine_for("multilingual"))
     assert loads == ["multi"] and engines[0] is engines[1]
-
-
-class Agent:
-    def predict(self, state, questions):
-        return {"answers": {k: noul(0.5) for k in questions}}
 
 
 def test_capabilities_do_not_depend_on_load_order_and_do_not_touch_the_cache():

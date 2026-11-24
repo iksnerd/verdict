@@ -9,6 +9,8 @@ from verdict.pipeline.export import export_stage
 from verdict.pipeline.stages import gen_stage, label_stage, split_stage
 from verdict.pipeline.store import JsonlStore
 
+from fakes import GOOD_LABELS
+
 
 class FakeGen:
     model = "fake"
@@ -21,17 +23,9 @@ class FakeGen:
         return f"Item {self.n} shipped for module {seed} after review and full verification of edge cases {seed}."
 
 
-GOOD = {
-    "kind": {"action": 0.7, "synthesis": 0.1, "decision": 0.05, "thought": 0.05, "draft": 0.05, "note": 0.03, "other": 0.02},
-    "records_decision": {"true": 0.1, "false": 0.9},
-    "reports_shipped_work": {"true": 0.9, "false": 0.1},
-    "leaves_open_question": {"true": 0.1, "false": 0.9},
-    "is_proposal": {"true": 0.1, "false": 0.9},
-}
-
 
 def transport(model, prompt):
-    return json.dumps(GOOD), {"promptTokenCount": 10, "candidatesTokenCount": 5}
+    return json.dumps(GOOD_LABELS), {"promptTokenCount": 10, "candidatesTokenCount": 5}
 
 
 def cfg():

@@ -9,16 +9,7 @@ from fastapi.testclient import TestClient
 from verdict.api import create_app
 from verdict.backends.mlx import MlxBackend
 from verdict.backends.engine import Engine
-from fakes import noul
-
-
-class WordTokenizer:
-    def __call__(self, text, add_special_tokens=True):
-        ids = list(range(len(text.split())))
-        return {"input_ids": [-1] + ids + [-2] if add_special_tokens else ids}
-
-    def decode(self, ids, skip_special_tokens=True):
-        return " ".join(f"w{i}" for i in ids)
+from fakes import Agent, WordTokenizer, noul
 
 
 def engine():
@@ -46,15 +37,6 @@ def test_no_budget_means_no_clipping():
     state = {"command": "x " * 500}
     assert engine().clip_state(state, None) is state
     assert engine().clip_state(state, 0) is state
-
-
-class Agent:
-    def __init__(self):
-        self.seen = None
-
-    def predict(self, state, questions):
-        self.seen = state
-        return {"answers": {k: noul(0.5) for k in questions}}
 
 
 def test_the_server_clips_decide_states_to_its_budget():

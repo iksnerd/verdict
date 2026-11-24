@@ -9,6 +9,8 @@ from verdict.pipeline.config import PipelineConfig
 from verdict.pipeline.stages import gen_stage, label_stage, split_stage
 from verdict.pipeline.store import JsonlStore, sha256_file, write_json_atomic
 
+from fakes import GOOD_LABELS, PaidGarbage
+
 
 def cfg(**over):
     base = {"name": "t", "gen": {"n": 6, "seed": 0}, "label": {"models": ["m1", "m2"], "reference": "ref", "repeats": 2, "max_cost_usd": 5.0,
@@ -29,14 +31,6 @@ class FakeGen:
         return f"Finished item {self.n} in module {seed} and verified it with tests {seed}."
 
 
-GOOD = {
-    "kind": {"action": 0.7, "synthesis": 0.1, "decision": 0.05, "thought": 0.05, "draft": 0.05, "note": 0.03, "other": 0.02},
-    "records_decision": {"true": 0.1, "false": 0.9},
-    "reports_shipped_work": {"true": 0.9, "false": 0.1},
-    "leaves_open_question": {"true": 0.1, "false": 0.9},
-    "is_proposal": {"true": 0.1, "false": 0.9},
-}
-
 
 class FakeTransport:
     def __init__(self):
@@ -44,7 +38,7 @@ class FakeTransport:
 
     def __call__(self, model, prompt):
         self.calls += 1
-        return json.dumps(GOOD), {"promptTokenCount": 1000, "candidatesTokenCount": 500}
+        return json.dumps(GOOD_LABELS), {"promptTokenCount": 1000, "candidatesTokenCount": 500}
 
 
 def test_store_appends_and_reports_done_keys(tmp_path):
@@ -236,17 +230,6 @@ def test_a_generation_run_that_accepts_nothing_stops_the_pipeline(tmp_path):
 
 
 # ---- failed label calls cost money too ------------------------------------------------------------
-
-class PaidGarbage:
-    """Answers every call, bills for it, and never returns a parsable label."""
-
-    def __init__(self):
-        self.calls = 0
-
-    def __call__(self, model, prompt):
-        self.calls += 1
-        return "not json", {"promptTokenCount": 1000, "candidatesTokenCount": 500}
-
 
 # gemini-2.5-flash: (1000 * 0.30 + 500 * 2.50) / 1e6 = $0.00155 a try, two tries a failed label
 FAILED_LABEL_USD = 0.0031

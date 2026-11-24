@@ -6,25 +6,12 @@ from fastapi.testclient import TestClient
 
 from verdict import library
 from verdict.api import create_app
-from verdict.schema import ChoiceAnswer, DecideRequest, DecideResponse, NoulAnswer, Usage
+from verdict.schema import DecideRequest, NoulAnswer
+
+from fakes import Recording
 
 PLAIN = {"type": "noul", "instructions": "Is `message` a refund request?"}
 BODY = {"state": {"message": "charged twice"}, "questions": {"refund": PLAIN}}
-
-
-class Recording:
-    name = "recording"
-
-    def decide(self, request):
-        answers = {}
-        for qid, q in request.questions.items():
-            if q.type == "noul":
-                answers[qid] = NoulAnswer(noul=0.5, confidence=0.5)
-                continue
-            keys = q.option_keys()
-            answers[qid] = ChoiceAnswer(choice=keys[0], probabilities={k: 1 / len(keys) for k in keys},
-                                        confidence=0.0)
-        return DecideResponse(model=self.name, answers=answers, usage=Usage(input_tokens=0))
 
 
 def test_library_ask_keeps_asked_as():

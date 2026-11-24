@@ -6,13 +6,8 @@ from verdict.label.bank import BANK
 from verdict.label.prompt_eval import score_preamble, SpendLedger
 from verdict.label.teacher import Teacher
 
-GOOD = {
-    "kind": {"action": 0.7, "synthesis": 0.1, "decision": 0.05, "thought": 0.05, "draft": 0.05, "note": 0.03, "other": 0.02},
-    "records_decision": {"true": 0.1, "false": 0.9},
-    "reports_shipped_work": {"true": 0.9, "false": 0.1},
-    "leaves_open_question": {"true": 0.1, "false": 0.9},
-    "is_proposal": {"true": 0.1, "false": 0.9},
-}
+from fakes import GOOD_LABELS, PaidGarbage
+
 REF = {"kind": {"action": 0.6, "synthesis": 0.2, "decision": 0.05, "thought": 0.05, "draft": 0.05, "note": 0.03, "other": 0.02},
        "records_decision": 0.05, "reports_shipped_work": 0.95, "leaves_open_question": 0.2, "is_proposal": 0.1}
 
@@ -23,7 +18,7 @@ class T:
 
     def __call__(self, model, prompt):
         self.calls += 1
-        return json.dumps(GOOD), {"promptTokenCount": 1000, "candidatesTokenCount": 500}
+        return json.dumps(GOOD_LABELS), {"promptTokenCount": 1000, "candidatesTokenCount": 500}
 
 
 def states(n=3):
@@ -66,17 +61,6 @@ def test_ledger_persists_and_the_cap_stops_spending(tmp_path):
     ledger2 = SpendLedger(tmp_path / "l2.json", cap=5)
     ledger2.add(1.25)
     assert SpendLedger(tmp_path / "l2.json", cap=5).total() == 1.25
-
-
-class PaidGarbage:
-    """Answers every call, bills for it, and never returns a parsable label."""
-
-    def __init__(self):
-        self.calls = 0
-
-    def __call__(self, model, prompt):
-        self.calls += 1
-        return "not json", {"promptTokenCount": 1000, "candidatesTokenCount": 500}
 
 
 # gemini-2.5-flash-lite: (1000 * 0.10 + 500 * 0.40) / 1e6 = $0.0003 a try, two tries a failed label

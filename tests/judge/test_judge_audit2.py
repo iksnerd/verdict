@@ -9,15 +9,9 @@ from verdict.errors import QuestionError
 from verdict.judge import calibrate, cascade, hierarchy
 from verdict.judge.router import BIG, is_uniform, route
 
+from fakes import router_answers
+
 BANK = {"spam": {"type": "noul", "instructions": "Is this spam?"}}
-
-
-def router_answers(difficulty_probs, difficulty, sensitive):
-    return {
-        "difficulty": {"type": "score", "score": difficulty, "legend": {}, "probabilities": difficulty_probs,
-                       "confidence": 0.0},
-        "is_sensitive": {"type": "noul", "noul": sensitive, "confidence": 0.9},
-    }
 
 
 def test_partly_flat_router_answers_route_big():

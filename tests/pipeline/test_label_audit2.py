@@ -9,7 +9,8 @@ from verdict.label import teacher as teacher_mod
 from verdict.label.bank import BANK
 from verdict.label.prompt_eval import SpendLedger, score_preamble
 from verdict.label.teacher import Teacher, UnpricedModelError, cost_of
-from test_prompt_eval import GOOD, REF, T, refs, states  # noqa: E402  (same directory, invented data)
+from fakes import GOOD_LABELS as GOOD  # noqa: E402
+from test_prompt_eval import REF, T, refs, states  # noqa: E402  (same directory, invented data)
 
 
 def test_an_unknown_model_has_no_price_unless_the_config_states_one():

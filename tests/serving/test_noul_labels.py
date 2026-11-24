@@ -21,31 +21,12 @@ from verdict.schema import (
     laya_questions,
 )
 from verdict.sdk import Noul
-from fakes import FakeEngine
+from fakes import FakeEngine, Recording
 
 LABELS = {"false": "calm", "true": "urgent"}
 ASKED = {"type": "noul", "instructions": "Is `message` urgent?", "labels": LABELS}
 PLAIN = {"type": "noul", "instructions": "Is `message` a refund request?"}
 LAYA_REFUSAL = "noul labels must map exactly 'false' and 'true' to distinct non-empty strings"
-
-
-class Recording:
-    """A local backend that records the questions it was asked and answers every one 0.5."""
-    name = "recording"
-
-    def __init__(self):
-        self.asked = []
-
-    def decide(self, request):
-        self.asked.append(request.questions)
-        answers = {qid: NoulAnswer(noul=0.5, confidence=0.5)
-                   for qid, q in request.questions.items() if q.type == "noul"}
-        for qid, q in request.questions.items():
-            if q.type != "noul":
-                keys = q.option_keys()
-                answers[qid] = ChoiceAnswer(choice=keys[0], probabilities={k: 1 / len(keys) for k in keys},
-                                            confidence=0.0)
-        return DecideResponse(model=self.name, answers=answers, usage=Usage(input_tokens=0))
 
 
 def test_a_yes_no_with_labels_is_passed_to_laya_as_written():
