@@ -7,31 +7,30 @@ import subprocess
 import time
 
 import pytest
-import yaml
 
-from test_hooks_audit2 import WORKFLOW, HOOK, _exe, _git, _run, _steps, _idx, env  # noqa: F401
+from hook_support import HOOK, create_run, git, run_hook, start_hook, workflow, write_exe
 
 GIT = "/usr/bin/git"
 
 
 def _wrap_git(bin_, fail: str):
     """A `git` ahead of the real one on PATH whose subcommand `fail` exits 1 after running."""
-    _exe(bin_ / "git", f'"{GIT}" "$@"\nrc=$?\n[ "$1" = "{fail}" ] && exit 1\nexit $rc\n')
+    write_exe(bin_ / "git", f'"{GIT}" "$@"\nrc=$?\n[ "$1" = "{fail}" ] && exit 1\nexit $rc\n')
 
 
 def test_a_failing_diff_tree_blocks_the_commit(env):
     repo, bin_, _, e = env
     (repo / "b.txt").write_text("hello\n")
-    _git(repo, "add", "b.txt")
+    git(repo, "add", "b.txt")
     _wrap_git(bin_, "diff-tree")
-    r = _run(repo, e)
+    r = run_hook(repo, e)
     assert r.returncode != 0 and "diff-tree" in r.stderr
 
 
 def test_a_failing_git_archive_blocks_the_commit(env):
     repo, bin_, _, e = env
     _wrap_git(bin_, "archive")
-    r = _run(repo, e)
+    r = run_hook(repo, e)
     assert r.returncode != 0 and "archive" in r.stderr
 
 
@@ -45,18 +44,11 @@ def test_head_is_read_before_the_index_tree():
                                       (signal.SIGHUP, 129)])
 def test_a_signal_to_sh_alone_kills_the_pytest_child(env, sig, code):
     repo, _, tmp_path, e = env
-    p = subprocess.Popen(["sh", ".githooks/pre-commit"], cwd=repo, env={**e, "HOOK_SLEEP": "1"},
-                         stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True,
-                         # The real hook runs this suite as a background job, and a background job of
-                         # a non-interactive sh starts with SIGINT ignored; a shell cannot trap a
-                         # signal that was ignored on entry, so restore the default for the child.
-                         preexec_fn=lambda: signal.signal(signal.SIGINT, signal.SIG_DFL))
-    marker = tmp_path / "child"
-    for _ in range(100):
-        if marker.exists():
-            break
-        time.sleep(0.1)
-    assert marker.exists()
+    p, marker = start_hook(repo, e, tmp_path,
+                           # The real hook runs this suite as a background job, and a background job of
+                           # a non-interactive sh starts with SIGINT ignored; a shell cannot trap a
+                           # signal that was ignored on entry, so restore the default for the child.
+                           preexec_fn=lambda: signal.signal(signal.SIGINT, signal.SIG_DFL))
     child = int(marker.read_text())
     os.kill(p.pid, sig)  # the child is left alone: the trap must end it
     try:
@@ -72,17 +64,13 @@ def test_a_signal_to_sh_alone_kills_the_pytest_child(env, sig, code):
     assert not list((tmp_path / "tmp").glob("verdict-precommit.*"))
 
 
-def _wf():
-    return yaml.safe_load(WORKFLOW.read_text())
-
-
 def test_release_runs_are_serialised_per_tag_and_never_cancelled():
-    conc = _wf().get("concurrency") or _wf()["jobs"]["test-build-release"].get("concurrency")
+    conc = workflow().get("concurrency") or workflow()["jobs"]["test-build-release"].get("concurrency")
     assert conc == {"group": "release-${{ github.ref }}", "cancel-in-progress": False}
 
 
 def test_a_leftover_draft_is_found_by_tag_not_by_a_capped_list():
-    run = _steps()[_idx(_steps(), "gh release create")]["run"]
+    run = create_run()
     assert "gh release list" not in run and "--limit" not in run
     assert 'gh release view "$GITHUB_REF_NAME" --json isDraft' in run
     assert run.index("gh release view") < run.index("gh release delete") < run.index("gh release create")

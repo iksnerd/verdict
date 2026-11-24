@@ -5,10 +5,9 @@ from __future__ import annotations
 
 import json
 import re
-import tomllib
 
 import pytest
-from fakes import REPO_ROOT
+from fakes import REPO_ROOT, project_version
 
 ROOT = REPO_ROOT
 PLUGIN = ROOT / "plugins" / "verdict"
@@ -24,8 +23,7 @@ def test_the_plugin_version_is_the_package_version():
     """`claude plugin update` compares version strings, not content: a plugin version left behind
     serves the old skill forever. Tied to the package, every release bumps it."""
     plugin = json.loads((PLUGIN / ".claude-plugin" / "plugin.json").read_text())
-    package = tomllib.loads((ROOT / "pyproject.toml").read_text())["project"]["version"]
-    assert plugin["version"] == package
+    assert plugin["version"] == project_version()
     assert isinstance(plugin["author"], dict), "a string author fails `claude plugin install`"
 
 

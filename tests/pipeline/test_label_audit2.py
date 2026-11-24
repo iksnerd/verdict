@@ -7,10 +7,11 @@ import pytest
 
 from verdict.label import teacher as teacher_mod
 from verdict.label.bank import BANK
-from verdict.label.prompt_eval import SpendLedger, score_preamble
+from verdict.label.prompt_eval import SpendLedger
 from verdict.label.teacher import Teacher, UnpricedModelError, cost_of
+from verdict.pipeline.store import jsonl_text
 from fakes import GOOD_LABELS as GOOD  # noqa: E402
-from test_prompt_eval import REF, T, refs, states  # noqa: E402  (same directory, invented data)
+from test_prompt_eval import REF, T, run_score  # noqa: E402  (same directory, invented data)
 
 
 def test_an_unknown_model_has_no_price_unless_the_config_states_one():
@@ -24,15 +25,13 @@ def test_an_unknown_model_has_no_price_unless_the_config_states_one():
 def test_score_preamble_refuses_an_unpriced_teacher_before_any_call(tmp_path):
     t = T()
     with pytest.raises(UnpricedModelError):
-        score_preamble(states(), refs(), Teacher("mystery", t, preamble="P"), BANK,
-                       cache_path=tmp_path / "c.jsonl", ledger=SpendLedger(tmp_path / "l.json", cap=5))
+        run_score(tmp_path, t, model="mystery")
     assert t.calls == 0
 
 
 def test_a_priced_in_config_teacher_charges_the_ledger(tmp_path):
     ledger = SpendLedger(tmp_path / "l.json", cap=5)
-    score_preamble(states(), refs(), Teacher("mystery", T(), preamble="P", prices={"mystery": [1.0, 1.0]}), BANK,
-                   cache_path=tmp_path / "c.jsonl", ledger=ledger)
+    run_score(tmp_path, T(), model="mystery", prices={"mystery": [1.0, 1.0]}, ledger=ledger)
     assert ledger.total() == pytest.approx(3 * 1500 / 1e6)
 
 
@@ -54,25 +53,24 @@ def test_the_cap_sees_what_another_run_spent(tmp_path):
 def test_a_changed_bank_is_asked_again(tmp_path):
     t = T()
     kw = dict(cache_path=tmp_path / "c.jsonl", ledger=SpendLedger(tmp_path / "l.json", cap=5))
-    score_preamble(states(), refs(), Teacher("gemini-2.5-flash-lite", t, preamble="P"), BANK, **kw)
+    run_score(tmp_path, t, **kw)
     assert t.calls == 3
     other = {**BANK, "kind": {**BANK["kind"], "instructions": "A different question about `message`?"}}
-    score_preamble(states(), refs(), Teacher("gemini-2.5-flash-lite", t, preamble="P"), other, **kw)
+    run_score(tmp_path, t, bank=other, **kw)
     assert t.calls == 6
 
 
 def test_a_missing_reference_is_a_clear_error_before_any_paid_call(tmp_path):
     t = T()
     with pytest.raises(KeyError, match="no reference label"):
-        score_preamble(states(3), refs(2), Teacher("gemini-2.5-flash-lite", t, preamble="P"), BANK,
-                       cache_path=tmp_path / "c.jsonl", ledger=SpendLedger(tmp_path / "l.json", cap=5))
+        run_score(tmp_path, t, n_states=3, n_refs=2)
     assert t.calls == 0
 
 
 def run_label_main(monkeypatch, tmp_path, transport, extra=()):
     sp = tmp_path / "s.jsonl"
-    sp.write_text("".join(json.dumps({"id": f"s{i}", "intended_type": "note", "state": {"message": f"m{i}"}}) + "\n"
-                          for i in range(3)))
+    sp.write_text(jsonl_text({"id": f"s{i}", "intended_type": "note", "state": {"message": f"m{i}"}}
+                             for i in range(3)))
     out = tmp_path / "out.jsonl"
     monkeypatch.setattr(teacher_mod, "load_key", lambda *a: "k")
     monkeypatch.setattr(teacher_mod, "gemini_transport", lambda key: transport)

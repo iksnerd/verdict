@@ -1,25 +1,7 @@
 """The cosine schedule's length equals the optimizer steps the loop takes (audit 3). No GPU, no Modal."""
-import importlib.util
-from pathlib import Path
-
 import pytest
 
-ROOT = Path(__file__).resolve().parents[2]
-
-
-def load(name, rel):
-    spec = importlib.util.spec_from_file_location(name, ROOT / rel)
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
-
-
-@pytest.fixture(scope="module")
-def lt():
-    pytest.importorskip("torch")
-    pytest.importorskip("laya")
-    pytest.importorskip("transformers")
-    return load("laya_train_under_test3", "training/cloud/laya_train.py")
+from pfakes import laya_train  # noqa: F401  (fixture)
 
 
 def loop_steps(n, micro, accum, epochs):
@@ -41,10 +23,10 @@ def loop_steps(n, micro, accum, epochs):
     (7, 8, 4, 2),     # fewer items than one micro-batch
     (100, 3, 5, 4),
 ])
-def test_total_updates_counts_the_steps_the_loop_takes(lt, n, micro, accum, epochs):
-    assert lt.total_updates(n, micro, accum, epochs) == loop_steps(n, micro, accum, epochs)
+def test_total_updates_counts_the_steps_the_loop_takes(laya_train, n, micro, accum, epochs):
+    assert laya_train.total_updates(n, micro, accum, epochs) == loop_steps(n, micro, accum, epochs)
 
 
-def test_an_uneven_count_rounds_up_so_the_cosine_never_rises_again(lt):
-    assert lt.total_updates(10, 4, 4, 2) == 2 * 1  # 3 micro-batches -> 1 step per epoch
-    assert lt.total_updates(10, 4, 2, 3) == 3 * 2  # floor formula said 3 * 1
+def test_an_uneven_count_rounds_up_so_the_cosine_never_rises_again(laya_train):
+    assert laya_train.total_updates(10, 4, 4, 2) == 2 * 1  # 3 micro-batches -> 1 step per epoch
+    assert laya_train.total_updates(10, 4, 2, 3) == 3 * 2  # floor formula said 3 * 1

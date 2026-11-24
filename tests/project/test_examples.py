@@ -9,7 +9,7 @@ import pytest
 
 from verdict import inputs
 from verdict.schema import DecideRequest
-from fakes import REPO_ROOT
+from fakes import REPO_ROOT, project_version
 
 EXAMPLES = REPO_ROOT / "examples"
 BANKS = sorted(EXAMPLES.glob("*/bank.json"))
@@ -68,10 +68,8 @@ def test_every_example_is_listed_in_the_examples_readme():
 def test_the_documented_install_line_names_the_current_version():
     """The README and the guide pin a release tag in their install line. A release that bumps the
     version without updating them leaves a copy-paste install of the old version, silently."""
-    import tomllib
-
     root = EXAMPLES.parent
-    version = tomllib.loads((root / "pyproject.toml").read_text())["project"]["version"]
+    version = project_version()
     for doc in ("README.md", "docs/usage/guide.md"):
         text = (root / doc).read_text()
         pins = set(__import__("re").findall(r"verdict\.git@v(\d+\.\d+\.\d+)", text))

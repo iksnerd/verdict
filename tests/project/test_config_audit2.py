@@ -6,16 +6,13 @@ import pytest
 from verdict import config
 
 
-def _two_files(monkeypatch, tmp_path):
-    local, user = tmp_path / "local.toml", tmp_path / "user.toml"
-    local.write_text('[model]\nbits = 8\n')
-    user.write_text('[model]\nlang = "multi"\n[server]\nurl = "http://127.0.0.1:9001"\n')
-    monkeypatch.setattr(config, "CONFIG_PATHS", (local, user))
-    return local, user
+def _two_files(config_files):
+    return config_files('[model]\nbits = 8\n',
+                        '[model]\nlang = "multi"\n[server]\nurl = "http://127.0.0.1:9001"\n')
 
 
-def test_each_key_names_the_file_that_won(monkeypatch, tmp_path):
-    local, user = _two_files(monkeypatch, tmp_path)
+def test_each_key_names_the_file_that_won(config_files):
+    local, user = _two_files(config_files)
     s = config.load()
     assert s.sources[("model", "bits")] == str(local)
     assert s.sources[("model", "lang")] == str(user)
@@ -25,22 +22,15 @@ def test_each_key_names_the_file_that_won(monkeypatch, tmp_path):
     assert rows["model.path"] == "default"
 
 
-def test_the_environment_wins_in_both_load_and_explain(monkeypatch, tmp_path):
-    _two_files(monkeypatch, tmp_path)
+def test_the_environment_wins_in_both_load_and_explain(monkeypatch, config_files):
+    _two_files(config_files)
     monkeypatch.setenv("VERDICT_URL", "http://127.0.0.1:9777")
     assert config.load().sources[("server", "url")] == "$VERDICT_URL"
     assert {r["key"]: r["source"] for r in config.explain()}["server.url"] == "$VERDICT_URL"
 
 
-def test_a_forced_path_that_is_not_a_file_is_an_error(tmp_path):
-    with pytest.raises(config.ConfigError, match="missing.toml"):
-        config.load(tmp_path / "missing.toml")
-
-
-def test_a_bad_url_is_named_by_where_it_came_from_not_by_a_guess(monkeypatch, tmp_path):
-    f = tmp_path / "v.toml"
-    f.write_text('[server]\nurl = "nonsense"\n')
-    monkeypatch.setattr(config, "CONFIG_PATHS", (f,))
+def test_a_bad_url_is_named_by_where_it_came_from_not_by_a_guess(monkeypatch, config_files):
+    config_files('[server]\nurl = "nonsense"\n')
     monkeypatch.setenv("VERDICT_URL", "nonsense")   # same text as the file's: the old guess said $VAR
     with pytest.raises(config.ConfigError, match=r"^\$VERDICT_URL"):
         config.load()

@@ -1,15 +1,28 @@
 """Test doubles that more than one test file needs. Fixtures built on them live in conftest.py."""
 from __future__ import annotations
 
+import json
+import sys
+import types
 from pathlib import Path
 
+import httpx
 from fastapi.testclient import TestClient
 
 from verdict.api import create_app
 from verdict.backends.base import UniformBackend
-from verdict.schema import ChoiceAnswer, DecideResponse, NoulAnswer, Usage
+from verdict.schema import ChoiceAnswer, DecideResponse, NoulAnswer, ScoreAnswer, Usage
+from verdict.systemone import SystemOneClient, UpstreamError
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+
+
+def project_version():
+    """The package version, as pyproject.toml says it."""
+    import tomllib
+
+    return tomllib.loads((REPO_ROOT / "pyproject.toml").read_text())["project"]["version"]
+
 
 def typed(questions, noul_answer):
     """A fake server's answers, typed as a real server types them. `noul_answer(qid)` is the
@@ -52,8 +65,10 @@ class FakeEngine:
     `strict` raises like laya-mlx does on a question with no `instructions` key."""
     name = "fake-local"
 
-    def __init__(self, p=0.5, strict=False):
+    def __init__(self, p=0.5, strict=False, name=None):
         self.p, self.strict, self.seen = p, strict, []
+        if name is not None:
+            self.name = name
 
     def clip_state(self, state, budget):
         return state
@@ -66,6 +81,10 @@ class FakeEngine:
 
 
 NOUL_BANK = {"q": {"type": "noul", "instructions": "?"}}
+
+#: A one-question yes/no bank as the JSON a `--questions` flag takes, and five states for stdin.
+RISKY_BANK = json.dumps({"risky": {"type": "noul", "instructions": "Is `kind` marked bad?"}})
+KIND_STATES = "".join(json.dumps({"kind": k}) + "\n" for k in "abcde")
 
 
 class WordTokenizer:
@@ -136,3 +155,78 @@ class PaidGarbage:
     def __call__(self, model, prompt):
         self.calls += 1
         return "not json", {"promptTokenCount": 1000, "candidatesTokenCount": 500}
+
+
+class FailsAt:
+    """A backend that answers every call (0.5 yes/no, uniform scores) until call number `fail_at`
+    (counted from 0), which raises `exc` (an `UpstreamError` unless given)."""
+    proxy = False
+
+    def __init__(self, exc=None, fail_at=2, name="flaky"):
+        self.calls, self.exc, self.fail_at, self.name = 0, exc or UpstreamError("upstream went away"), fail_at, name
+
+    def decide(self, request):
+        self.calls += 1
+        if self.calls - 1 == self.fail_at:
+            raise self.exc
+        answers = {}
+        for qid, q in request.questions.items():
+            if q.type == "score":
+                keys = q.option_keys()
+                answers[qid] = ScoreAnswer(score=0.0, legend={k: k for k in keys},
+                                           probabilities={k: 1 / len(keys) for k in keys},
+                                           confidence=0.5)
+            else:
+                answers[qid] = NoulAnswer(noul=0.5, confidence=0.5)
+        return DecideResponse(model=self.name, answers=answers)
+
+
+#: A `/v1/systemone` answer to `SYSTEMONE_Q`, and the question it answers.
+SYSTEMONE_OK = {"model": "m", "answers": {"q": {"type": "noul", "noul": .9}}}
+SYSTEMONE_Q = {"q": {"type": "noul", "instructions": "?"}}
+
+
+def retry_run(first, monkeypatch, **client_kw):
+    """What happens when the first attempt fails with `first` (a response or an exception):
+    returns `(calls, exc)`, `exc` being the `UpstreamError` if the call gave up. Later attempts
+    answer 200. No sleeping, no network."""
+    monkeypatch.setattr("time.sleep", lambda s: None)
+    calls = []
+
+    def handler(req):
+        calls.append(req)
+        if len(calls) == 1:
+            if isinstance(first, Exception):
+                raise first
+            return first
+        return httpx.Response(200, json=SYSTEMONE_OK)
+
+    c = SystemOneClient("http://x.example", "m", "k", attempts=3, backoff=0.,
+                        transport=httpx.MockTransport(handler), **client_kw)
+    try:
+        c("x", SYSTEMONE_Q)
+        return calls, None
+    except UpstreamError as exc:
+        return calls, exc
+
+
+def install_laya(monkeypatch, load):
+    """Puts a fake `laya_mlx` module in `sys.modules` whose `load` is `load`; returns the module."""
+    module = types.ModuleType("laya_mlx")
+    module.load = load
+    monkeypatch.setitem(sys.modules, "laya_mlx", module)
+    return module
+
+
+def fake_transformers(monkeypatch, calls, fail=False, from_pretrained=None):
+    """A fake `transformers` whose `AutoTokenizer.from_pretrained` records its args in `calls` and
+    returns a `WordTokenizer` (or raises OSError when `fail`). `from_pretrained` replaces that
+    function wholesale, for a test that needs a slow or special loader."""
+    def default(*a, **k):
+        calls.append(a)
+        if fail:
+            raise OSError("no tokenizer")
+        return WordTokenizer()
+
+    monkeypatch.setitem(sys.modules, "transformers", types.SimpleNamespace(
+        AutoTokenizer=types.SimpleNamespace(from_pretrained=from_pretrained or default)))

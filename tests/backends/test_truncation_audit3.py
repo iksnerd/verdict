@@ -2,22 +2,10 @@
 lazily (once, only when the state could be long enough to matter)."""
 from __future__ import annotations
 
-import sys
-import types
-
 from verdict.backends.mlx import MlxBackend
 from verdict.schema import DecideRequest
 
-from fakes import NOUL_BANK as BANK, Agent, WordTokenizer
-
-
-def fake_transformers(monkeypatch, calls):
-    def from_pretrained(*a, **k):
-        calls.append(a)
-        return WordTokenizer()
-
-    monkeypatch.setitem(sys.modules, "transformers",
-                        types.SimpleNamespace(AutoTokenizer=types.SimpleNamespace(from_pretrained=from_pretrained)))
+from fakes import NOUL_BANK as BANK, Agent, fake_transformers
 
 
 def test_no_budget_loads_the_tokenizer_lazily_to_mark_a_long_state(monkeypatch):

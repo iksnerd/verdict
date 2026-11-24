@@ -17,30 +17,15 @@ from verdict import cli, client, config, library
 from verdict.cli import inference, parser, setup, update
 from verdict.evaluation import bench
 from conftest import typed
-from fakes import noul
-
-BANK = json.dumps({"risky": {"type": "noul", "instructions": "Is `kind` marked bad?"}})
-STATES = "".join(json.dumps({"kind": k}) + "\n" for k in "abcde")
-
-
-class Eng:
-    name = "local"
-
-    def clip_state(self, state, budget):
-        return state
-
-    def predict(self, state, questions):
-        return typed(questions, lambda k: noul(0.5))
-
+from fakes import KIND_STATES as STATES, RISKY_BANK as BANK, noul
 
 # --- 1. bench: the scorecard is stamped from what answered -----------------------------------------
 
-def _bench(monkeypatch, tmp_path, decide, suites=("sst2-yesno",), extra=()):
+def _bench(monkeypatch, local_engine, tmp_path, decide, suites=("sst2-yesno",), extra=()):
     monkeypatch.setattr(client, "decide", decide)
     monkeypatch.setattr(client, "capabilities", lambda *a, **k: (_ for _ in ()).throw(
         client.NoServer("no capabilities")))
-    monkeypatch.setattr(inference, "load", lambda *a, **k: Eng())
-    monkeypatch.setattr(inference, "_ENGINES", {})
+    local_engine()
     monkeypatch.setattr(bench, "fetch", lambda s: [])
     monkeypatch.setattr(bench, "sample", lambda s, rows: [("t", "x")])
 
@@ -64,29 +49,29 @@ def _down(state, questions, url=None, model=None, **flags):
     raise client.NoServer("down")
 
 
-def test_bench_refuses_to_stamp_a_scorecard_from_a_server_run(monkeypatch, tmp_path, capsys):
-    argv, out = _bench(monkeypatch, tmp_path, _served)
+def test_bench_refuses_to_stamp_a_scorecard_from_a_server_run(monkeypatch, tmp_path, capsys, local_engine):
+    argv, out = _bench(monkeypatch, local_engine, tmp_path, _served)
     assert cli.main(argv) == 2
     assert not out.exists()
     err = capsys.readouterr().err
     assert "served-model" in err and "in-process" in err
 
 
-def test_bench_in_process_still_writes_its_scorecard(monkeypatch, tmp_path, capsys):
-    argv, out = _bench(monkeypatch, tmp_path, _down)
+def test_bench_in_process_still_writes_its_scorecard(monkeypatch, tmp_path, capsys, local_engine):
+    argv, out = _bench(monkeypatch, local_engine, tmp_path, _down)
     assert cli.main(argv) == 0
     card = json.loads(out.read_text())
     assert card["bits"] == config.load().bits and "model" in card
 
 
-def test_bench_warns_when_its_askers_did_not_share_a_source(monkeypatch, tmp_path, capsys):
+def test_bench_warns_when_its_askers_did_not_share_a_source(monkeypatch, tmp_path, capsys, local_engine):
     calls = []
 
     def decide(state, questions, url=None, **kw):
         calls.append(1)
         return _served(state, questions) if len(calls) == 1 else _down(state, questions)
 
-    argv, out = _bench(monkeypatch, tmp_path, decide, suites=("sst2-yesno", "bg-yesno"))
+    argv, out = _bench(monkeypatch, local_engine, tmp_path, decide, suites=("sst2-yesno", "bg-yesno"))
     argv.remove("--out"); argv.remove(str(out))
     assert cli.main(argv) == 0
     assert "not all answered by the same source" in capsys.readouterr().err
@@ -94,13 +79,12 @@ def test_bench_warns_when_its_askers_did_not_share_a_source(monkeypatch, tmp_pat
 
 # --- 3. the pin and the family probe are one state machine -----------------------------------------
 
-def test_once_pinned_in_process_the_family_is_never_probed_again(monkeypatch, capsys):
+def test_once_pinned_in_process_the_family_is_never_probed_again(monkeypatch, capsys, local_engine):
     probes, caps = [], []
     monkeypatch.setattr(client, "decide", _down)
     monkeypatch.setattr(client, "capabilities",
                         lambda *a, **k: caps.append(1) or {"family": "jev", "model": "m"})
-    monkeypatch.setattr(inference, "load", lambda *a, **k: Eng())
-    monkeypatch.setattr(inference, "_ENGINES", {})
+    local_engine()
     monkeypatch.setattr("sys.stdin", io.StringIO(STATES))
     real = library.prepare
 
@@ -209,26 +193,24 @@ def test_a_server_that_stopped_for_another_reason_does_not_blame_the_port(capsys
     assert "taken" not in capsys.readouterr().err
 
 
-def _init(monkeypatch, tmp_path, free):
-    monkeypatch.setattr(config, "CONFIG_PATHS", (tmp_path / "absent.toml",))
-    monkeypatch.setattr(setup, "_port_free", free)
+def _init(monkeypatch, init_env, tmp_path, free):
+    init_env(free)
     monkeypatch.setattr(setup, "_verdict_listens", lambda url: False)
-    monkeypatch.chdir(tmp_path)
     target = tmp_path / "c.toml"
     assert cli.main(["init", "--yes", "--out", str(target)]) == 0
     return target
 
 
-def test_init_does_not_call_a_taken_port_free_when_none_is(monkeypatch, tmp_path, capsys):
-    _init(monkeypatch, tmp_path, lambda *a: False)
+def test_init_does_not_call_a_taken_port_free_when_none_is(monkeypatch, init_env, tmp_path, capsys):
+    _init(monkeypatch, init_env, tmp_path, lambda *a: False)
     out = capsys.readouterr().out
     assert "is free" not in out and "every port up to" in out
 
 
-def test_init_does_not_freeze_the_environment_into_a_new_file(monkeypatch, tmp_path):
+def test_init_does_not_freeze_the_environment_into_a_new_file(monkeypatch, init_env, tmp_path):
     monkeypatch.setenv("VERDICT_URL", "http://127.0.0.1:5999")
     monkeypatch.setenv("VERDICT_BITS", "8")
-    target = _init(monkeypatch, tmp_path, lambda *a: True)
+    target = _init(monkeypatch, init_env, tmp_path, lambda *a: True)
     text = target.read_text()
     assert "5999" not in text and "bits = 8" not in text
 
@@ -247,10 +229,9 @@ def test_write_atomic_keeps_a_symlink_and_the_file_mode(tmp_path):
     assert stat.S_IMODE(real.stat().st_mode) == 0o600
 
 
-def test_a_pinned_in_process_run_with_no_engine_loads_instead_of_a_key_error(monkeypatch):
+def test_a_pinned_in_process_run_with_no_engine_loads_instead_of_a_key_error(monkeypatch, local_engine):
     monkeypatch.setattr(client, "decide", _down)
-    monkeypatch.setattr(inference, "load", lambda *a, **k: Eng())
-    monkeypatch.setattr(inference, "_ENGINES", {})
+    local_engine()
     got = inference._answer({"kind": "a"}, {"q": {"type": "noul", "instructions": "Is `kind` bad?"}},
                             "http://127.0.0.1:1", "m", pin=("in-process", 2))
     assert got["source"] == "in-process"

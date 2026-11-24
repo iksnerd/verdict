@@ -8,6 +8,8 @@ import pytest
 
 from verdict.evaluation import bench
 
+from efakes import write_cards
+
 
 def suite(**over):
     base = {
@@ -131,14 +133,12 @@ def test_verify_with_no_previous_scorecard_passes():
 
 
 def test_scorecards_are_ordered_by_version_not_by_name(tmp_path):
-    for v in ("0.9.0", "0.10.0", "0.4.0"):
-        (tmp_path / f"v{v}.json").write_text(json.dumps(card(0.8, 0.7, 0.9)))
+    write_cards(tmp_path, {v: card(0.8, 0.7, 0.9) for v in ("0.9.0", "0.10.0", "0.4.0")})
     assert [p.stem for p in bench.scorecards(tmp_path)] == ["v0.4.0", "v0.9.0", "v0.10.0"]
 
 
 def test_previous_scorecard_is_the_newest_older_version(tmp_path):
-    for v in ("0.4.0", "0.5.0", "0.6.0"):
-        (tmp_path / f"v{v}.json").write_text(json.dumps(card(0.8, 0.7, 0.9)))
+    write_cards(tmp_path, {v: card(0.8, 0.7, 0.9) for v in ("0.4.0", "0.5.0", "0.6.0")})
     assert bench.previous(tmp_path, "0.6.0").stem == "v0.5.0"
     assert bench.previous(tmp_path, "0.4.0") is None
 
@@ -201,14 +201,13 @@ def test_bench_writes_a_scorecard(toy_bench, capsys):
 
 def test_bench_verify_needs_no_model_and_fails_on_a_regression(toy_bench, monkeypatch, capsys):
     monkeypatch.setattr(client, "decide", lambda *a, **k: pytest.fail("verify must not ask"))
-    (toy_bench / "v0.4.0.json").write_text(json.dumps(card(0.90, 0.85, 0.95)))
-    (toy_bench / "v0.5.0.json").write_text(json.dumps(card(0.70, 0.60, 0.80)))
+    write_cards(toy_bench, {"0.4.0": card(0.90, 0.85, 0.95), "0.5.0": card(0.70, 0.60, 0.80)})
     assert cli.main(["bench", "--verify", str(toy_bench / "v0.5.0.json")]) == 1
     assert "below the previous interval" in capsys.readouterr().err
 
 
 def test_bench_verify_passes_against_itself_when_first(toy_bench):
-    (toy_bench / "v0.5.0.json").write_text(json.dumps(card(0.70, 0.60, 0.80)))
+    write_cards(toy_bench, {"0.5.0": card(0.70, 0.60, 0.80)})
     assert cli.main(["bench", "--verify", str(toy_bench / "v0.5.0.json")]) == 0
 
 
@@ -461,16 +460,15 @@ def test_timing_never_decides_whether_a_release_regressed(toy_bench):
     slow = card(0.70, 0.60, 0.80)
     slow["timing"] = {"calls": 1, "median_ms": 99999, "p95_ms": 99999,
                       "input_tokens": None, "output_tokens": None}
-    (toy_bench / "v0.4.0.json").write_text(json.dumps(card(0.70, 0.60, 0.80)))
-    (toy_bench / "v0.5.0.json").write_text(json.dumps(slow))
+    write_cards(toy_bench, {"0.4.0": card(0.70, 0.60, 0.80), "0.5.0": slow})
     assert cli.main(["bench", "--verify", str(toy_bench / "v0.5.0.json")]) == 0
 
 
 # ---- the gate compares like with like ----------------------------------------------------------
 
 def test_previous_can_be_limited_to_the_same_model(tmp_path):
-    for v, model in (("0.5.0", "verdict-v1-mlx"), ("0.6.0", "laya-mlx"), ("0.7.0", "verdict-v1-mlx")):
-        (tmp_path / f"v{v}.json").write_text(json.dumps(card(0.8, 0.7, 0.9, model=model)))
+    write_cards(tmp_path, {v: card(0.8, 0.7, 0.9, model=model)
+                           for v, model in (("0.5.0", "verdict-v1-mlx"), ("0.6.0", "laya-mlx"), ("0.7.0", "verdict-v1-mlx"))})
     assert bench.previous(tmp_path, "0.8.0").stem == "v0.7.0"
     assert bench.previous(tmp_path, "0.8.0", model="laya-mlx").stem == "v0.6.0"
     assert bench.previous(tmp_path, "0.7.0", model="verdict-v1-mlx").stem == "v0.5.0"
@@ -480,24 +478,23 @@ def test_previous_can_be_limited_to_the_same_model(tmp_path):
 def test_the_first_scorecard_of_a_new_model_is_a_baseline_not_a_regression(tmp_path, capsys):
     """Moving the release scorecard from the fine-tune to base Laya must not be judged against the
     fine-tune: SST-2 yes/no is 0.80 on one and 0.50 on the other (FINDINGS §35, §40)."""
-    (tmp_path / "v0.6.0.json").write_text(json.dumps(card(0.80, 0.74, 0.86, model="verdict-v1-mlx")))
-    (tmp_path / "v0.7.0.json").write_text(json.dumps(card(0.50, 0.45, 0.55, model="laya-mlx")))
+    write_cards(tmp_path, {"0.6.0": card(0.80, 0.74, 0.86, model="verdict-v1-mlx"),
+                           "0.7.0": card(0.50, 0.45, 0.55, model="laya-mlx")})
     assert cli.main(["bench", "--verify", str(tmp_path / "v0.7.0.json")]) == 0
     err = capsys.readouterr().err
     assert "baseline" in err and "laya-mlx" in err and "REGRESSED" not in err
 
 
 def test_the_next_scorecard_of_the_same_model_is_still_gated(tmp_path, capsys):
-    (tmp_path / "v0.6.0.json").write_text(json.dumps(card(0.80, 0.74, 0.86, model="verdict-v1-mlx")))
-    (tmp_path / "v0.7.0.json").write_text(json.dumps(card(0.50, 0.45, 0.55, model="laya-mlx")))
-    (tmp_path / "v0.8.0.json").write_text(json.dumps(card(0.30, 0.25, 0.35, model="laya-mlx")))
+    write_cards(tmp_path, {"0.6.0": card(0.80, 0.74, 0.86, model="verdict-v1-mlx"),
+                           "0.7.0": card(0.50, 0.45, 0.55, model="laya-mlx"),
+                           "0.8.0": card(0.30, 0.25, 0.35, model="laya-mlx")})
     assert cli.main(["bench", "--verify", str(tmp_path / "v0.8.0.json")]) == 1
     assert "v0.7.0.json: REGRESSED" in capsys.readouterr().err
 
 
 def test_a_scorecard_with_no_model_field_is_compared_as_before(tmp_path):
-    (tmp_path / "v0.5.0.json").write_text(json.dumps({"suites": card(0.8, 0.7, 0.9)["suites"]}))
-    (tmp_path / "v0.6.0.json").write_text(json.dumps({"suites": card(0.8, 0.7, 0.9)["suites"]}))
+    write_cards(tmp_path, {v: {"suites": card(0.8, 0.7, 0.9)["suites"]} for v in ("0.5.0", "0.6.0")})
     assert bench.previous(tmp_path, "0.6.0", model=None).stem == "v0.5.0"
 
 
@@ -511,8 +508,8 @@ def test_bench_will_not_send_the_key_over_plain_http_to_a_remote_host(toy_bench,
 def test_previous_matches_bits_and_budget_as_well_as_the_model(tmp_path):
     """An 8-bit or 512-token card is a different measurement: judged against the 16-bit, 128-token
     one it would pass or regress for a reason that is not the release."""
-    for v, bits, budget in (("0.5.0", 16, 128), ("0.6.0", 8, 128), ("0.7.0", 16, 512)):
-        (tmp_path / f"v{v}.json").write_text(json.dumps({**card(0.8, 0.7, 0.9), "bits": bits, "budget": budget}))
+    write_cards(tmp_path, {v: {**card(0.8, 0.7, 0.9), "bits": bits, "budget": budget}
+                           for v, bits, budget in (("0.5.0", 16, 128), ("0.6.0", 8, 128), ("0.7.0", 16, 512))})
     like = {**card(0.8, 0.7, 0.9), "bits": 16, "budget": 128}
     assert bench.previous(tmp_path, "0.8.0", like=like).stem == "v0.5.0"
     assert bench.previous(tmp_path, "0.8.0", like={**like, "bits": 8}).stem == "v0.6.0"

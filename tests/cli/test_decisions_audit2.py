@@ -9,9 +9,8 @@ import pytest
 from verdict import cli, client
 from verdict.cli import evaluation, inference
 from conftest import typed
-from fakes import noul
+from fakes import RISKY_BANK as BANK, noul
 
-BANK = json.dumps({"risky": {"type": "noul", "instructions": "Is `kind` marked bad?"}})
 CALL = ["decide", '{"kind": "bad"}', "--questions", BANK]
 
 

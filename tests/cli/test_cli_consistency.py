@@ -187,10 +187,8 @@ def test_a_cut_verdict_never_prints_a_score_that_reads_the_other_way(monkeypatch
     assert capsys.readouterr().out.strip() == "no 0.4964"
 
 
-def test_init_does_not_offer_the_uniform_backend(monkeypatch, tmp_path, capsys):
-    monkeypatch.setattr(config, "CONFIG_PATHS", (tmp_path / "none.toml",))
-    monkeypatch.setattr(setup, "_port_free", lambda *a: True)
-    monkeypatch.chdir(tmp_path)
+def test_init_does_not_offer_the_uniform_backend(init_env, tmp_path, capsys):
+    init_env()
     cli.main(["init", "--yes", "--out", str(tmp_path / "c.toml")])
     assert "uniform" not in capsys.readouterr().out
 

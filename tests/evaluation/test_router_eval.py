@@ -8,6 +8,8 @@ import pytest
 from verdict.judge.router import BIG, SMALL, T_DIFFICULTY, T_SENSITIVE
 from verdict.evaluation.router_eval import COST_RATIO, as_answers, cost, evaluate, fit, load_prompts, score
 
+from efakes import engine  # noqa: F401  (fixture)
+
 
 def rows_and_probs():
     """Four prompts: two easy, two hard, with outputs chosen so the shipped cuts get them right."""
@@ -124,40 +126,6 @@ def test_the_refit_runs_as_a_module(capsys):
 
 
 # --- the replay cache: an entry is only as good as what it was measured for ---
-
-class CountingEngine:
-    """Stands in for a loaded checkpoint: answers from the prompt text, counts what it was asked."""
-
-    def __init__(self, die_after=None):
-        self.asked, self.budgets, self.die_after = [], [], die_after
-
-    def clip(self, prompt, budget=None):
-        self.budgets.append(budget)
-        return prompt
-
-    def predict(self, state, questions):
-        if self.die_after is not None and len(self.asked) >= self.die_after:
-            raise KeyboardInterrupt
-        self.asked.append(state)
-        return {"difficulty": {"type": "score", "score": float(len(state))},
-                "is_sensitive": {"type": "noul", "noul": 0.25}}
-
-
-@pytest.fixture
-def engine(monkeypatch):
-    """`measure` loads through `backends.engine.load`; this hands it a fake and counts the loads."""
-    from verdict.backends import engine as engine_module
-
-    eng = CountingEngine()
-    eng.loads = 0
-
-    def fake_load(model, *a, **kw):
-        eng.loads += 1
-        return eng
-
-    monkeypatch.setattr(engine_module, "load", fake_load)
-    return eng
-
 
 def test_a_full_matching_cache_loads_no_model(tmp_path, engine):
     from verdict.evaluation.router_eval import measure

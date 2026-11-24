@@ -5,6 +5,8 @@ import pytest
 
 from verdict.evaluation import bench, router_eval
 
+from efakes import engine, write_cards  # noqa: F401  (engine is a fixture)
+
 
 def card(value=0.8, model="m1", **extra):
     suite = {"metric": "auc", "value": value, "ci": [value - 0.05, value + 0.05], **extra}
@@ -12,7 +14,7 @@ def card(value=0.8, model="m1", **extra):
 
 
 def test_a_current_card_without_a_measurement_field_is_an_error_not_a_baseline(tmp_path):
-    (tmp_path / "v0.5.0.json").write_text(json.dumps(card()))
+    write_cards(tmp_path, {"0.5.0": card()})
     for lost in ("model", "bits", "budget"):
         like = {k: v for k, v in card().items() if k != lost}
         with pytest.raises(ValueError, match=lost):
@@ -22,13 +24,13 @@ def test_a_current_card_without_a_measurement_field_is_an_error_not_a_baseline(t
 def test_an_older_card_without_a_measurement_field_is_an_error(tmp_path):
     old = card()
     del old["budget"]
-    (tmp_path / "v0.5.0.json").write_text(json.dumps(old))
+    write_cards(tmp_path, {"0.5.0": old})
     with pytest.raises(ValueError, match=r"v0\.5\.0\.json has no budget"):
         bench.previous(tmp_path, "0.6.0", like=card())
 
 
 def test_a_changed_model_bits_or_budget_is_still_a_baseline(tmp_path):
-    (tmp_path / "v0.5.0.json").write_text(json.dumps(card()))
+    write_cards(tmp_path, {"0.5.0": card()})
     assert bench.previous(tmp_path, "0.6.0", like={**card(), "bits": 8}) is None
 
 
@@ -46,33 +48,10 @@ def test_verify_is_quiet_when_both_cards_carry_the_fingerprint(capsys):
 
 # --- router cache -------------------------------------------------------------------------------
 
-class Engine:
-    def __init__(self, on_predict=None):
-        self.on_predict, self.n = on_predict, 0
-
-    def clip(self, prompt, budget=None):
-        return prompt
-
-    def predict(self, state, questions):
-        self.n += 1
-        if self.on_predict:
-            self.on_predict(self.n)
-        return {"difficulty": {"type": "score", "score": float(len(state))}, "is_sensitive": {"type": "noul", "noul": 0.25}}
-
-
-@pytest.fixture
-def fake_engine(monkeypatch):
-    from verdict.backends import engine as engine_module
-
-    holder = {"eng": Engine()}
-    monkeypatch.setattr(engine_module, "load", lambda model, *a, **k: holder["eng"])
-    return holder
-
-
 ROWS = [{"id": "a", "prompt": "one"}, {"id": "b", "prompt": "two two"}]
 
 
-def test_a_concurrent_runs_bucket_is_not_dropped(tmp_path, fake_engine):
+def test_a_concurrent_runs_bucket_is_not_dropped(tmp_path, engine):
     cache = tmp_path / "probs.json"
 
     def other_run_writes(n):
@@ -81,26 +60,26 @@ def test_a_concurrent_runs_bucket_is_not_dropped(tmp_path, fake_engine):
             store["other-model"] = {"z": {"difficulty": 1.0, "is_sensitive": 0.5, "fp": "f"}}
             cache.write_text(json.dumps(store))
 
-    fake_engine["eng"] = Engine(other_run_writes)
+    engine.on_predict = other_run_writes
     router_eval.measure(ROWS, "m", cache)
     store = json.loads(cache.read_text())
     assert "other-model" in store and set(store["m"]) == {"a", "b"}
 
 
-def test_retrained_local_weights_miss_the_cache(tmp_path, fake_engine):
+def test_retrained_local_weights_miss_the_cache(tmp_path, engine):
     weights = tmp_path / "model"
     weights.mkdir()
     (weights / "model.safetensors").write_bytes(b"x" * 10)
     cache = tmp_path / "probs.json"
     router_eval.measure(ROWS, str(weights), cache)
-    assert fake_engine["eng"].n == 2
+    assert engine.n == 2
     router_eval.measure(ROWS, str(weights), cache)
-    assert fake_engine["eng"].n == 2  # unchanged weights: served from the cache
+    assert engine.n == 2  # unchanged weights: served from the cache
     (weights / "model.safetensors").write_bytes(b"y" * 20)
     router_eval.measure(ROWS, str(weights), cache)
-    assert fake_engine["eng"].n == 4  # new weights under the same path: measured again
+    assert engine.n == 4  # new weights under the same path: measured again
 
 
-def test_a_hub_id_keeps_its_plain_key(tmp_path, fake_engine):
+def test_a_hub_id_keeps_its_plain_key(tmp_path, engine):
     router_eval.measure(ROWS, "owner/some-model", tmp_path / "probs.json")
     assert list(json.loads((tmp_path / "probs.json").read_text())) == ["owner/some-model"]

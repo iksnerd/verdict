@@ -9,11 +9,8 @@ from verdict import config
 
 
 @pytest.fixture
-def one_file(monkeypatch, tmp_path):
-    f = tmp_path / "v.toml"
-    f.write_text('[model]\nbits = 8\n')
-    monkeypatch.setattr(config, "CONFIG_PATHS", (f,))
-    return f
+def one_file(config_files):
+    return config_files('[model]\nbits = 8\n')[0]
 
 
 def _count_reads(monkeypatch):
@@ -58,11 +55,8 @@ def test_the_routes_warning_prints_once_per_file_state(monkeypatch, tmp_path, ca
     assert capsys.readouterr().err.count("[routes]") == 1
 
 
-def test_merged_extra_tables_record_each_entrys_file(monkeypatch, tmp_path):
-    local, user = tmp_path / "local.toml", tmp_path / "user.toml"
-    local.write_text('[model.extra]\nb = "org/b"\n')
-    user.write_text('[model.extra]\na = "org/a"\n')
-    monkeypatch.setattr(config, "CONFIG_PATHS", (local, user))
+def test_merged_extra_tables_record_each_entrys_file(config_files):
+    local, user = config_files('[model.extra]\nb = "org/b"\n', '[model.extra]\na = "org/a"\n')
     s = config.load()
     assert s.sources[("model", "extra", "a")] == str(user)
     assert s.sources[("model", "extra", "b")] == str(local)

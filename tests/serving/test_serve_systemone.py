@@ -61,10 +61,8 @@ def test_a_loopback_server_needs_no_key(served):
     assert backend_name(served) == "systemone:kev-latest@http://127.0.0.1:8009"
 
 
-def test_the_file_can_choose_the_backend_and_a_flag_beats_it(served, monkeypatch, tmp_path):
-    (tmp_path / "verdict.toml").write_text(
-        '[systemone]\nurl = "http://127.0.0.1:8009"\nmodel = "kev-latest"\n')
-    monkeypatch.setattr(config, "CONFIG_PATHS", (config.Path("verdict.toml"),))
+def test_the_file_can_choose_the_backend_and_a_flag_beats_it(served, config_files):
+    config_files('[systemone]\nurl = "http://127.0.0.1:8009"\nmodel = "kev-latest"\n')
     assert cli.main(["serve", "--port", "0"]) == 0
     assert backend_name(served) == "systemone:kev-latest@http://127.0.0.1:8009"
     assert cli.main(["serve", "--port", "0", "--systemone", "http://127.0.0.1:8010"]) == 0

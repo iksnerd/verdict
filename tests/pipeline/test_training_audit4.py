@@ -1,31 +1,16 @@
 """Modal commit resilience and the upload freshness check (audit 4). No GPU, no Modal."""
 import hashlib
-import importlib.util
 import json
 import subprocess
-import sys
 import time
-from pathlib import Path
-from unittest import mock
 
 import pytest
 
-ROOT = Path(__file__).resolve().parents[2]
+from pfakes import laya_train, train_modal  # noqa: F401  (fixtures)
 
 
-def load(name, rel="training/cloud/train_modal.py"):
-    fake = mock.MagicMock()
-    fake.App.return_value.function.side_effect = lambda **kw: (lambda f: f)
-    fake.App.return_value.local_entrypoint.side_effect = lambda *a, **kw: (lambda f: f)
-    with mock.patch.dict(sys.modules, {"modal": fake}):
-        spec = importlib.util.spec_from_file_location(name, ROOT / rel)
-        mod = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(mod)
-    return mod
-
-
-def test_a_failed_commit_does_not_kill_the_training_run(tmp_path):
-    tm = load("tm4a")
+def test_a_failed_commit_does_not_kill_the_training_run(train_modal, tmp_path):
+    tm = train_modal
     ckpt, done = tmp_path / "ckpt.pt", tmp_path / "done"
     script = tmp_path / "t.py"
     script.write_text(f"import time\nopen({str(ckpt)!r},'w').write('1')\ntime.sleep(0.8)\nopen({str(done)!r},'w').write('x')\n")
@@ -41,8 +26,8 @@ def test_a_failed_commit_does_not_kill_the_training_run(tmp_path):
     assert len(calls) >= 2  # and the commit was retried
 
 
-def test_a_failing_script_still_gets_a_final_commit(tmp_path):
-    tm = load("tm4b")
+def test_a_failing_script_still_gets_a_final_commit(train_modal, tmp_path):
+    tm = train_modal
     ckpt = tmp_path / "ckpt.pt"
     ckpt.write_text("old")
     script = tmp_path / "bad.py"
@@ -53,8 +38,8 @@ def test_a_failing_script_still_gets_a_final_commit(tmp_path):
     assert calls
 
 
-def test_a_failing_final_commit_does_not_hide_the_scripts_failure(tmp_path):
-    tm = load("tm4c")
+def test_a_failing_final_commit_does_not_hide_the_scripts_failure(train_modal, tmp_path):
+    tm = train_modal
     script = tmp_path / "bad.py"
     script.write_text("raise SystemExit(3)\n")
 
@@ -79,40 +64,32 @@ def _export(tmp_path, tamper=False):
     return run
 
 
-def test_upload_refuses_an_export_that_no_longer_matches_its_manifest(tmp_path):
-    tm = load("tm4d")
+def test_upload_refuses_an_export_that_no_longer_matches_its_manifest(train_modal, tmp_path):
+    tm = train_modal
     with pytest.raises(SystemExit, match=r"train\.jsonl.*(stale|no longer)"):
         tm._require_fresh_export(_export(tmp_path, tamper=True))
 
 
-def test_upload_accepts_a_matching_export_and_one_without_a_manifest(tmp_path):
-    tm = load("tm4e")
+def test_upload_accepts_a_matching_export_and_one_without_a_manifest(train_modal, tmp_path):
+    tm = train_modal
     run = _export(tmp_path)
     tm._require_fresh_export(run)
     (run / "export.manifest.json").unlink()
     tm._require_fresh_export(run)
 
 
-@pytest.fixture(scope="module")
-def lt():
-    pytest.importorskip("torch")
-    pytest.importorskip("laya")
-    pytest.importorskip("transformers")
-    return load("laya_train_audit4", "training/cloud/laya_train.py")
-
-
-def test_a_checkpoint_from_before_the_new_keys_still_resumes(lt):
+def test_a_checkpoint_from_before_the_new_keys_still_resumes(laya_train):
     now = {"items_sha256": "a", "epochs": 4, "group_size": 4, "sigma_start": 0.4, "sigma_end": 0.1, "model_name": "m"}
     old = {"items_sha256": "a", "epochs": 4}
-    assert lt.resume_identity(old, now) == old
+    assert laya_train.resume_identity(old, now) == old
 
 
-def test_changing_a_recorded_new_key_refuses_a_resume(lt):
+def test_changing_a_recorded_new_key_refuses_a_resume(laya_train):
     now = {"items_sha256": "a", "group_size": 4, "sigma_start": 0.4, "model_name": "m"}
     was = {**now, "group_size": 8}
-    assert lt.resume_identity(was, now) != was
-    assert lt.resume_mismatch(was, lt.resume_identity(was, now)) == ["group_size: checkpoint 8, this run 4"]
+    assert laya_train.resume_identity(was, now) != was
+    assert laya_train.resume_mismatch(was, laya_train.resume_identity(was, now)) == ["group_size: checkpoint 8, this run 4"]
 
 
-def test_a_new_run_records_the_new_keys(lt):
-    assert {"group_size", "sigma_start", "sigma_end", "model_name"} <= set(lt.NEW_MADE_FROM_KEYS)
+def test_a_new_run_records_the_new_keys(laya_train):
+    assert {"group_size", "sigma_start", "sigma_end", "model_name"} <= set(laya_train.NEW_MADE_FROM_KEYS)

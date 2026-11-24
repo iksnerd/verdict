@@ -10,7 +10,9 @@ from verdict.pipeline.compile import compile_runs
 from verdict.pipeline.config import PipelineConfig
 from verdict.pipeline.export import export_stage
 from verdict.pipeline.stages import gen_stage, label_stage, split_stage
-from verdict.pipeline.store import run_lock, write_text_atomic
+from verdict.pipeline.store import jsonl_text, run_lock, write_text_atomic
+
+from pfakes import AlternatingTransport, build_run
 
 PRICES = {"m1": [0.1, 0.4], "m2": [0.1, 0.4]}
 
@@ -35,21 +37,8 @@ class FakeGen:
         return f"Finished item {self.n} in module {seed} and verified it with tests {seed}."
 
 
-def reply(a):
-    rest = (1 - a) / 6
-    return {"kind": {"action": a, "synthesis": rest, "decision": rest, "thought": rest,
-                     "draft": rest, "note": rest, "other": rest},
-            "records_decision": {"true": 0.1, "false": 0.9}, "reports_shipped_work": {"true": 0.9, "false": 0.1},
-            "leaves_open_question": {"true": 0.1, "false": 0.9}, "is_proposal": {"true": 0.1, "false": 0.9}}
-
-
-class Transport:
-    def __init__(self):
-        self.calls = {}
-
-    def __call__(self, model, prompt):
-        n = self.calls[model] = self.calls.get(model, 0) + 1
-        return json.dumps(reply(0.8 if (n - 1) % 2 == 0 else 0.2)), {"promptTokenCount": 1000, "candidatesTokenCount": 500}
+def _labelled(tmp_path):
+    return build_run(cfg(), tmp_path, FakeGen(), AlternatingTransport(), split=False)
 
 
 def nrows(p):
@@ -57,12 +46,10 @@ def nrows(p):
 
 
 def test_a_relabelled_key_is_not_asked_again_on_the_next_run(tmp_path):
-    c = cfg()
-    gen_stage(c, tmp_path, FakeGen(), MESSAGE_TYPING)
-    label_stage(c, tmp_path, Transport(), BANK)
-    label_stage(c, tmp_path, Transport(), BANK, preamble="a new preamble")
+    c = _labelled(tmp_path)
+    label_stage(c, tmp_path, AlternatingTransport(), BANK, preamble="a new preamble")
     before = nrows(tmp_path)
-    t = Transport()
+    t = AlternatingTransport()
     label_stage(c, tmp_path, t, BANK, preamble="a new preamble")
     assert t.calls == {}
     assert nrows(tmp_path) == before
@@ -72,7 +59,7 @@ def test_label_manifest_says_it_is_incomplete_after_a_cap_stop_and_export_warns(
     c = cfg()
     gen_stage(c, tmp_path, FakeGen(), MESSAGE_TYPING)
     with pytest.raises(SystemExit, match="cost cap"):
-        label_stage(cfg(cap=0.0007), tmp_path, Transport(), BANK)
+        label_stage(cfg(cap=0.0007), tmp_path, AlternatingTransport(), BANK)
     m = json.loads((tmp_path / "label.manifest.json").read_text())
     assert m["complete"] is False
     assert m["unlabelled_states"] == 6
@@ -85,9 +72,7 @@ def test_label_manifest_says_it_is_incomplete_after_a_cap_stop_and_export_warns(
 
 
 def test_a_finished_label_run_is_complete_and_export_is_quiet(tmp_path, capsys):
-    c = cfg()
-    gen_stage(c, tmp_path, FakeGen(), MESSAGE_TYPING)
-    label_stage(c, tmp_path, Transport(), BANK)
+    c = _labelled(tmp_path)
     m = json.loads((tmp_path / "label.manifest.json").read_text())
     assert m["complete"] is True and m["unlabelled_states"] == 0
     split_stage(c, tmp_path)
@@ -97,9 +82,7 @@ def test_a_finished_label_run_is_complete_and_export_is_quiet(tmp_path, capsys):
 
 
 def test_an_old_label_manifest_without_the_new_keys_does_not_warn(tmp_path, capsys):
-    c = cfg()
-    gen_stage(c, tmp_path, FakeGen(), MESSAGE_TYPING)
-    label_stage(c, tmp_path, Transport(), BANK)
+    c = _labelled(tmp_path)
     split_stage(c, tmp_path)
     p = tmp_path / "label.manifest.json"
     m = json.loads(p.read_text())
@@ -111,15 +94,13 @@ def test_an_old_label_manifest_without_the_new_keys_does_not_warn(tmp_path, caps
 
 
 def test_a_row_without_token_counts_does_not_mask_the_original_stop(tmp_path):
-    c = cfg()
-    gen_stage(c, tmp_path, FakeGen(), MESSAGE_TYPING)
-    label_stage(c, tmp_path, Transport(), BANK)
+    c = _labelled(tmp_path)
     p = tmp_path / "labels.jsonl"
     rows = [json.loads(l) for l in p.read_text().splitlines()]
     rows[0].pop("tokens_in")
-    p.write_text("".join(json.dumps(r) + "\n" for r in rows))
+    p.write_text(jsonl_text(rows))
     (tmp_path / "label.manifest.json").unlink()
-    label_stage(cfg(cap=0.0), tmp_path, Transport(), BANK)  # nothing left to ask: must not raise KeyError
+    label_stage(cfg(cap=0.0), tmp_path, AlternatingTransport(), BANK)  # nothing left to ask: must not raise KeyError
 
 
 def test_atomic_writes_do_not_share_a_temp_name(tmp_path, monkeypatch):
@@ -142,11 +123,7 @@ def test_atomic_write_cleans_its_temp_on_failure(tmp_path, monkeypatch):
 
 
 def _built(tmp_path):
-    c = cfg()
-    gen_stage(c, tmp_path, FakeGen(), MESSAGE_TYPING)
-    label_stage(c, tmp_path, Transport(), BANK)
-    split_stage(c, tmp_path)
-    return c
+    return build_run(cfg(), tmp_path, FakeGen(), AlternatingTransport())
 
 
 def test_split_export_and_compile_refuse_a_locked_run(tmp_path):

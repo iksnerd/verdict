@@ -1,15 +1,14 @@
 import json
-import random
 
 from verdict.gen.domains import MESSAGE_TYPING
 from verdict.label.bank import BANK
 from verdict.pipeline.audit import held_out_leak, split_stats
 from verdict.pipeline.config import PipelineConfig
 from verdict.pipeline.export import export_stage
-from verdict.pipeline.stages import gen_stage, label_stage, split_stage
-from verdict.pipeline.store import JsonlStore
+from verdict.pipeline.store import states_store
 
 from fakes import GOOD_LABELS
+from pfakes import build_run
 
 
 class FakeGen:
@@ -35,16 +34,12 @@ def cfg():
 
 
 def built(tmp_path):
-    c = cfg()
-    gen_stage(c, tmp_path, FakeGen(), MESSAGE_TYPING)
-    label_stage(c, tmp_path, transport, BANK)
-    split_stage(c, tmp_path)
-    return c
+    return build_run(cfg(), tmp_path, FakeGen(), transport)
 
 
 def test_split_stats_crosstabs_type_by_split(tmp_path):
     built(tmp_path)
-    states = JsonlStore(tmp_path / "states.jsonl", key=lambda r: r["id"]).rows()
+    states = states_store(tmp_path).rows()
     stats = split_stats(states, json.loads((tmp_path / "split.json").read_text()))
     assert set(stats["intended_type"]) <= set(MESSAGE_TYPING.types)
     total = sum(sum(v.values()) for v in stats["intended_type"].values())
@@ -88,7 +83,7 @@ def test_export_order_is_shuffled_by_salted_hash_not_by_generation_order(tmp_pat
     a = [json.loads(l)["id"] for l in (tmp_path / "export/train.jsonl").read_text().splitlines()]
     export_stage(c, tmp_path, BANK, salt="b")
     b = [json.loads(l)["id"] for l in (tmp_path / "export/train.jsonl").read_text().splitlines()]
-    states = [r["id"] for r in JsonlStore(tmp_path / "states.jsonl", key=lambda r: r["id"]).rows()]
+    states = [r["id"] for r in states_store(tmp_path).rows()]
     in_gen_order = [i for i in states if i in set(a)]
     assert a != in_gen_order and a != b and sorted(a) == sorted(b)
 

@@ -5,7 +5,6 @@ the memory (804 -> 429 MB active). 4-bit moved too many answers, so it is refuse
 file stays FP16: laya-mlx loads nothing else, so this saves memory, not disk."""
 from __future__ import annotations
 
-import sys
 import types
 
 import pytest
@@ -13,7 +12,7 @@ import pytest
 from verdict import cli, config
 from verdict.backends import engine
 from verdict.cli import inference, support
-from fakes import FakeEngine
+from fakes import FakeEngine, install_laya
 
 
 def test_bits_default_to_full_precision(monkeypatch):
@@ -56,9 +55,7 @@ def test_init_writes_the_bits_line(monkeypatch):
 def fake_laya(monkeypatch, loaded):
     agent = types.SimpleNamespace(model=object())
     agent._inference = agent.model
-    fake = types.ModuleType("laya_mlx")
-    fake.load = lambda model_id, **kw: loaded.append(kw) or agent
-    monkeypatch.setitem(sys.modules, "laya_mlx", fake)
+    install_laya(monkeypatch, lambda model_id, **kw: loaded.append(kw) or agent)
     return agent
 
 

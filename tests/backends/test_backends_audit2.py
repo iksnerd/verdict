@@ -9,7 +9,8 @@ from verdict.backends.systemone import SystemOneBackend
 from verdict.schema import DecideRequest
 from verdict.systemone import UpstreamError
 
-Q = {"q": {"type": "noul", "instructions": "?"}}
+from fakes import NOUL_BANK as Q
+
 
 
 def backend(handler):

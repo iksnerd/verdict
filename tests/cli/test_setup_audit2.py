@@ -69,19 +69,17 @@ def test_a_lost_bind_inside_uvicorn_is_a_failure_not_an_answer(monkeypatch, caps
 OLD = '[server]\nurl = "http://127.0.0.1:1"\n'
 
 
-def _config_target(tmp_path, monkeypatch):
-    monkeypatch.setattr(config, "CONFIG_PATHS", (tmp_path / "absent.toml",))
-    monkeypatch.setattr(setup, "_port_free", lambda *a: True)
-    monkeypatch.chdir(tmp_path)
+def _config_target(tmp_path, init_env):
+    init_env()
     target = tmp_path / "c.toml"
     target.write_text(OLD)
     return target
 
 
-def test_init_never_leaves_a_truncated_config(monkeypatch, tmp_path):
+def test_init_never_leaves_a_truncated_config(monkeypatch, tmp_path, init_env):
     from pathlib import Path
 
-    target = _config_target(tmp_path, monkeypatch)
+    target = _config_target(tmp_path, init_env)
     original = Path.write_text
 
     def interrupted(self, text, *a, **k):
@@ -94,15 +92,15 @@ def test_init_never_leaves_a_truncated_config(monkeypatch, tmp_path):
     assert [p.name for p in tmp_path.iterdir()] == ["c.toml"]
 
 
-def test_init_writes_through_a_replace(monkeypatch, tmp_path):
-    target = _config_target(tmp_path, monkeypatch)
+def test_init_writes_through_a_replace(monkeypatch, tmp_path, init_env):
+    target = _config_target(tmp_path, init_env)
     assert cli.main(["init", "--yes", "--out", str(target)]) == 0
     assert config.load(target).url.startswith("http://")
     assert [p.name for p in tmp_path.iterdir()] == ["c.toml"]
 
 
-def test_init_refuses_to_overwrite_without_a_terminal(monkeypatch, tmp_path, capsys):
-    target = _config_target(tmp_path, monkeypatch)
+def test_init_refuses_to_overwrite_without_a_terminal(monkeypatch, tmp_path, capsys, init_env):
+    target = _config_target(tmp_path, init_env)
     monkeypatch.setattr("sys.stdin", open("/dev/null"))
     assert cli.main(["init", "--out", str(target)]) == 2
     assert str(target) in capsys.readouterr().err

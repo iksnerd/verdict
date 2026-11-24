@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 from verdict.api import create_app
 from verdict.backends.mlx import MlxBackend
 from verdict.backends.engine import Engine
-from fakes import Agent, WordTokenizer, noul
+from fakes import NOUL_BANK, Agent, WordTokenizer, noul
 
 
 def engine():
@@ -43,7 +43,7 @@ def test_the_server_clips_decide_states_to_its_budget():
     agent = Agent()
     backend = MlxBackend(agent=agent, budget=10)
     backend.engine._tokenizer = WordTokenizer()
-    body = {"state": {"command": "x " * 500}, "questions": {"q": {"type": "noul", "instructions": "?"}}}
+    body = {"state": {"command": "x " * 500}, "questions": NOUL_BANK}
     assert TestClient(create_app(backend)).post("/v1/decide", json=body).status_code == 200
     assert isinstance(agent.seen, str) and len(agent.seen.split()) == 10
 
@@ -52,6 +52,6 @@ def test_the_server_passes_short_states_through_as_structured():
     agent = Agent()
     backend = MlxBackend(agent=agent, budget=10)
     backend.engine._tokenizer = WordTokenizer()
-    body = {"state": {"command": "ls"}, "questions": {"q": {"type": "noul", "instructions": "?"}}}
+    body = {"state": {"command": "ls"}, "questions": NOUL_BANK}
     TestClient(create_app(backend)).post("/v1/decide", json=body)
     assert agent.seen == {"command": "ls"}

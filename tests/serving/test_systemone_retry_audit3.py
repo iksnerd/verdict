@@ -4,36 +4,14 @@ from __future__ import annotations
 import httpx
 import pytest
 
+from fakes import SYSTEMONE_OK as OK, SYSTEMONE_Q as Q, retry_run
 from verdict import systemone
-from verdict.systemone import SystemOneClient, UpstreamError
-
-OK = {"model": "m", "answers": {"q": {"type": "noul", "noul": .9}}}
-Q = {"q": {"type": "noul", "instructions": "?"}}
+from verdict.systemone import SystemOneClient
 
 
 def client(handler, attempts=3):
     return SystemOneClient("http://x.example", "m", "k", attempts=attempts, backoff=0.,
                            transport=httpx.MockTransport(handler))
-
-
-def run_post(first, monkeypatch):
-    """What happens when the first attempt fails with `first` (a response or an exception)."""
-    monkeypatch.setattr("time.sleep", lambda s: None)
-    calls = []
-
-    def handler(req):
-        calls.append(req)
-        if len(calls) == 1:
-            if isinstance(first, Exception):
-                raise first
-            return first
-        return httpx.Response(200, json=OK)
-
-    try:
-        client(handler)("x", Q)
-        return calls, None
-    except UpstreamError as exc:
-        return calls, exc
 
 
 @pytest.mark.parametrize("first", [
@@ -42,7 +20,7 @@ def run_post(first, monkeypatch):
     httpx.Response(503), httpx.Response(503, headers={"Retry-After": "2"}),
 ])
 def test_a_post_the_upstream_did_not_process_is_retried(first, monkeypatch):
-    calls, exc = run_post(first, monkeypatch)
+    calls, exc = retry_run(first, monkeypatch)
     assert exc is None and len(calls) == 2
 
 
@@ -50,7 +28,7 @@ def test_a_post_the_upstream_did_not_process_is_retried(first, monkeypatch):
     httpx.ReadTimeout("no answer"), httpx.Response(500), httpx.Response(502), httpx.Response(504),
 ])
 def test_a_post_that_may_have_been_processed_is_not_retried(first, monkeypatch):
-    calls, exc = run_post(first, monkeypatch)
+    calls, exc = retry_run(first, monkeypatch)
     assert len(calls) == 1
     assert "may have been processed" in str(exc)
 

@@ -2,12 +2,13 @@
 import json
 
 from verdict.pipeline.compile import compile_runs
+from verdict.pipeline.store import jsonl_text
 
 
 def _run(d, states, labels, split=None):
     d.mkdir()
-    (d / "states.jsonl").write_text("".join(json.dumps(s) + "\n" for s in states))
-    (d / "labels.jsonl").write_text("".join(json.dumps(r) + "\n" for r in labels))
+    (d / "states.jsonl").write_text(jsonl_text(states))
+    (d / "labels.jsonl").write_text(jsonl_text(labels))
     if split is not None:
         (d / "split.json").write_text(json.dumps(split))
     return d

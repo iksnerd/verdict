@@ -7,8 +7,9 @@ from __future__ import annotations
 
 import pytest
 
-from fakes import typed  # noqa: F401  (tests import `typed` from `conftest`)
-from verdict.cli import inference, support, update
+from fakes import FakeEngine, typed  # noqa: F401  (tests import `typed` from `conftest`)
+from verdict import config
+from verdict.cli import inference, setup, support, update
 
 #: One yes/no bank, as the JSON a `--questions` flag takes.
 MONEY_BANK = '{"q": {"type": "noul", "instructions": "Is `message` about money?"}}'
@@ -66,6 +67,30 @@ def restores():
         """Installs of the OLD version: the rollback after a failed update."""
         return [c for c in tool.calls if c[:3] == ["uv", "tool", "install"] and c[-1].endswith("@v0.2.1")]
     return restored
+
+
+@pytest.fixture
+def local_engine(monkeypatch):
+    """`install(engine=None)`: the CLI's in-process engine is `engine` (a `FakeEngine` named
+    `local` when none is given), with no engine cached from an earlier test. Returns the engine."""
+    def install(engine=None):
+        engine = FakeEngine(name="local") if engine is None else engine
+        monkeypatch.setattr(inference, "load", lambda *a, **k: engine)
+        monkeypatch.setattr(inference, "_ENGINES", {})
+        return engine
+    return install
+
+
+@pytest.fixture
+def init_env(monkeypatch, tmp_path):
+    """`init(free=...)`: what `verdict init` needs to run in `tmp_path` without touching the
+    machine: no config file to read, the working directory in `tmp_path`, and `free(host, port)`
+    deciding which ports are free (all of them by default)."""
+    def init(free=lambda *a: True):
+        monkeypatch.setattr(config, "CONFIG_PATHS", (tmp_path / "absent.toml",))
+        monkeypatch.setattr(setup, "_port_free", free)
+        monkeypatch.chdir(tmp_path)
+    return init
 
 
 @pytest.fixture

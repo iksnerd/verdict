@@ -4,32 +4,9 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
+from fakes import FailsAt as Flaky
 from verdict.api import create_app
-from verdict.schema import DecideResponse, NoulAnswer, ScoreAnswer
 from verdict.backends.base import UniformBackend
-
-
-class Flaky:
-    name = "flaky"
-    proxy = False
-
-    def __init__(self, exc, fail_at=2):
-        self.calls, self.exc, self.fail_at = 0, exc, fail_at
-
-    def decide(self, request):
-        self.calls += 1
-        if self.calls - 1 == self.fail_at:
-            raise self.exc
-        answers = {}
-        for qid, q in request.questions.items():
-            if q.type == "score":
-                keys = q.option_keys()
-                answers[qid] = ScoreAnswer(score=0.0, legend={k: k for k in keys},
-                                           probabilities={k: 1 / len(keys) for k in keys},
-                                           confidence=0.5)
-            else:
-                answers[qid] = NoulAnswer(noul=0.5, confidence=0.5)
-        return DecideResponse(model=self.name, answers=answers)
 
 
 def _post(backend, n=4):

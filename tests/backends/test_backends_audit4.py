@@ -3,8 +3,6 @@ mark it, a tokenizer that will not load is unknown (not a 500), closed backends 
 from __future__ import annotations
 
 import logging
-import sys
-import types
 
 import httpx
 import pytest
@@ -16,24 +14,13 @@ from verdict.backends.systemone import SystemOneBackend
 from verdict.schema import DecideRequest
 from verdict.systemone import UpstreamError
 
-from fakes import NOUL_BANK as BANK, Agent, WordTokenizer
+from fakes import NOUL_BANK as BANK, Agent, fake_transformers
 
 
 class Cfg(Agent):
     def __init__(self, max_len):
         super().__init__()
         self.cfg = {"max_len": max_len}
-
-
-def fake_transformers(monkeypatch, calls, fail=False):
-    def from_pretrained(*a, **k):
-        calls.append(a)
-        if fail:
-            raise OSError("no tokenizer")
-        return WordTokenizer()
-
-    monkeypatch.setitem(sys.modules, "transformers",
-                        types.SimpleNamespace(AutoTokenizer=types.SimpleNamespace(from_pretrained=from_pretrained)))
 
 
 def test_engine_limit_does_not_change_when_the_agent_loads(monkeypatch):

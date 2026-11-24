@@ -3,32 +3,8 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
+from fakes import FailsAt as FailsOnThird
 from verdict.api import create_app
-from verdict.schema import DecideResponse, NoulAnswer, ScoreAnswer
-from verdict.systemone import UpstreamError
-
-
-class FailsOnThird:
-    name = "fails-on-third"
-    proxy = False
-
-    def __init__(self, exc=None, fail_at=2):
-        self.calls, self.exc, self.fail_at = 0, exc or UpstreamError("upstream went away"), fail_at
-
-    def decide(self, request):
-        self.calls += 1
-        if self.calls - 1 == self.fail_at:
-            raise self.exc
-        answers = {}
-        for qid, q in request.questions.items():
-            if q.type == "score":
-                keys = q.option_keys()
-                answers[qid] = ScoreAnswer(score=0.0, legend={k: k for k in keys},
-                                           probabilities={k: 1 / len(keys) for k in keys},
-                                           confidence=0.5)
-            else:
-                answers[qid] = NoulAnswer(noul=0.5, confidence=0.5)
-        return DecideResponse(model=self.name, answers=answers)
 
 
 def _post(backend, n=5):

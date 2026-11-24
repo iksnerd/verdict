@@ -3,6 +3,8 @@ from fastapi.testclient import TestClient
 from verdict.api import create_app
 from verdict.backends.mlx import MlxBackend
 
+from fakes import install_laya
+
 BODY = {
     "state": {"message": "shipped it"},
     "questions": {
@@ -81,18 +83,13 @@ def test_list_criteria_survive_the_round_trip():
 
 
 def test_load_options_are_passed_through_to_laya_mlx(monkeypatch):
-    import sys
-    import types
-
     seen = {}
-    fake = types.ModuleType("laya_mlx")
 
     def load(model_id, **kw):
         seen["id"], seen["kw"] = model_id, kw
         return FakeAgent()
 
-    fake.load = load
-    monkeypatch.setitem(sys.modules, "laya_mlx", fake)
+    install_laya(monkeypatch, load)
     b = MlxBackend("some/model", compile=True, pad_to_multiple=16, batch_size=64)
     b.engine.agent  # loading is lazy; touching the property is what loads
     assert seen["id"] == "some/model"
@@ -100,13 +97,8 @@ def test_load_options_are_passed_through_to_laya_mlx(monkeypatch):
 
 
 def test_defaults_pass_no_options(monkeypatch):
-    import sys
-    import types
-
     seen = {}
-    fake = types.ModuleType("laya_mlx")
-    fake.load = lambda model_id, **kw: seen.update(kw=kw) or FakeAgent()
-    monkeypatch.setitem(sys.modules, "laya_mlx", fake)
+    install_laya(monkeypatch, lambda model_id, **kw: seen.update(kw=kw) or FakeAgent())
     MlxBackend("m").engine.agent
     assert seen["kw"] == {}
 

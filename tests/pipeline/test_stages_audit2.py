@@ -11,7 +11,9 @@ from verdict.pipeline.compile import compile_runs
 from verdict.pipeline.config import PipelineConfig
 from verdict.pipeline.export import export_stage
 from verdict.pipeline.stages import gen_stage, label_stage, split_stage
-from verdict.pipeline.store import JsonlStore, run_lock, sha256_file
+from verdict.pipeline.store import JsonlStore, jsonl_text, labels_store, run_lock, sha256_file, states_store
+
+from pfakes import AlternatingTransport, build_run
 
 PRICES = {"m1": [0.1, 0.4], "m2": [0.1, 0.4]}
 
@@ -36,31 +38,8 @@ class FakeGen:
         return f"Finished item {self.n} in module {seed} and verified it with tests {seed}."
 
 
-def reply(kind_action):
-    rest = (1 - kind_action) / 6
-    return {"kind": {"action": kind_action, "synthesis": rest, "decision": rest, "thought": rest,
-                     "draft": rest, "note": rest, "other": rest},
-            "records_decision": {"true": 0.1, "false": 0.9}, "reports_shipped_work": {"true": 0.9, "false": 0.1},
-            "leaves_open_question": {"true": 0.1, "false": 0.9}, "is_proposal": {"true": 0.1, "false": 0.9}}
-
-
-class Transport:
-    """Per model, repeat 0 answers action 0.8 and repeat 1 answers 0.2 (a state's repeats are consecutive)."""
-
-    def __init__(self):
-        self.calls = {}
-
-    def __call__(self, model, prompt):
-        n = self.calls[model] = self.calls.get(model, 0) + 1
-        return json.dumps(reply(0.8 if (n - 1) % 2 == 0 else 0.2)), {"promptTokenCount": 1000, "candidatesTokenCount": 500}
-
-
 def built(tmp_path, **kw):
-    c = cfg(**kw)
-    gen_stage(c, tmp_path, FakeGen(), MESSAGE_TYPING)
-    label_stage(c, tmp_path, Transport(), BANK)
-    split_stage(c, tmp_path)
-    return c
+    return build_run(cfg(**kw), tmp_path, FakeGen(), AlternatingTransport())
 
 
 def append_state(tmp_path, sid="zz"):
@@ -91,7 +70,7 @@ def test_export_refuses_a_split_made_from_other_states(tmp_path):
     c = built(tmp_path)
     c2 = cfg(n=12)
     gen_stage(c2, tmp_path, FakeGen(), MESSAGE_TYPING)
-    label_stage(c2, tmp_path, Transport(), BANK)
+    label_stage(c2, tmp_path, AlternatingTransport(), BANK)
     with pytest.raises(SystemExit, match=r"split\.manifest|split stage|--stage split"):
         export_stage(c2, tmp_path, BANK)
     split_stage(c2, tmp_path)
@@ -126,7 +105,7 @@ def test_compile_refuses_stale_labels(tmp_path):
 def test_label_manifest_describes_the_file_when_the_cost_cap_ends_the_run(tmp_path):
     gen_stage(cfg(), tmp_path, FakeGen(), MESSAGE_TYPING)
     with pytest.raises(SystemExit, match="cost cap"):
-        label_stage(cfg(cap=0.0007), tmp_path, Transport(), BANK)  # $0.0003 a call: three calls
+        label_stage(cfg(cap=0.0007), tmp_path, AlternatingTransport(), BANK)  # $0.0003 a call: three calls
     m = json.loads((tmp_path / "label.manifest.json").read_text())
     assert m["outputs"]["labels.jsonl"] == sha256_file(tmp_path / "labels.jsonl")
     assert m["counts"]["label_rows"] == 3
@@ -134,7 +113,7 @@ def test_label_manifest_describes_the_file_when_the_cost_cap_ends_the_run(tmp_pa
 
 def test_rows_carry_the_bank_and_preamble_digest_and_a_different_one_is_refused_at_export(tmp_path):
     c = built(tmp_path)
-    rows = JsonlStore(tmp_path / "labels.jsonl", key=lambda r: f'{r["id"]}|{r["model"]}|{r["repeat"]}').rows()
+    rows = labels_store(tmp_path).rows()
     assert all(r["label_digest"] for r in rows)
     with pytest.raises(SystemExit, match="different domain, bank or preamble"):
         export_stage(c, tmp_path, BANK, preamble="another preamble")
@@ -142,7 +121,7 @@ def test_rows_carry_the_bank_and_preamble_digest_and_a_different_one_is_refused_
 
 def test_label_asks_again_for_rows_made_under_another_preamble_and_export_then_uses_the_new_ones(tmp_path):
     c = built(tmp_path)
-    t = Transport()
+    t = AlternatingTransport()
     label_stage(c, tmp_path, t, BANK, preamble="a new preamble")
     assert sum(t.calls.values()) == 6 * 4  # every row again
     export_stage(c, tmp_path, BANK, preamble="a new preamble")
@@ -154,7 +133,7 @@ def test_rows_from_before_the_digest_still_load(tmp_path):
     rows = [json.loads(l) for l in p.read_text().splitlines()]
     for r in rows:
         r.pop("label_digest")
-    p.write_text("".join(json.dumps(r) + "\n" for r in rows))
+    p.write_text(jsonl_text(rows))
     (tmp_path / "label.manifest.json").unlink()
     export_stage(c, tmp_path, BANK)
     assert sum(1 for _ in (tmp_path / "export/train.jsonl").read_text().splitlines()) > 0
@@ -186,7 +165,7 @@ def test_export_writes_each_file_atomically_and_the_manifest_last(tmp_path, monk
 def test_an_unpriced_label_model_is_refused_before_any_paid_call(tmp_path):
     c = PipelineConfig.model_validate({"name": "t", "gen": {"n": 3}, "label": {"models": ["mystery-model"], "reference": None}})
     gen_stage(c, tmp_path, FakeGen(), MESSAGE_TYPING)
-    t = Transport()
+    t = AlternatingTransport()
     with pytest.raises(UnpricedModelError, match="mystery-model.*PRICES"):
         label_stage(c, tmp_path, t, BANK)
     assert t.calls == {}
@@ -199,7 +178,7 @@ def test_a_resumed_gen_continues_the_same_type_cycle(tmp_path):
     gen_stage(cfg(n=6), whole, FakeGen(), MESSAGE_TYPING)
     for n in (2, 4, 6):  # killed and resumed twice
         gen_stage(cfg(n=n), resumed, FakeGen(), MESSAGE_TYPING)
-    types = lambda d: [r["intended_type"] for r in JsonlStore(d / "states.jsonl", key=lambda r: r["id"]).rows()]
+    types = lambda d: [r["intended_type"] for r in states_store(d).rows()]
     assert len(types(resumed)) == 6 and types(resumed) == types(whole)
     assert len(set(types(resumed))) == 6  # six different types, none repeated by a reshuffle
 
@@ -207,7 +186,7 @@ def test_a_resumed_gen_continues_the_same_type_cycle(tmp_path):
 def test_gen_persists_the_generators_token_counts(tmp_path):
     client = FakeGen()
     gen_stage(cfg(n=4), tmp_path, client, MESSAGE_TYPING)
-    rows = JsonlStore(tmp_path / "states.jsonl", key=lambda r: r["id"]).rows()
+    rows = states_store(tmp_path).rows()
     assert sum(r["gen_tokens"]["in"] for r in rows) == client.tokens_in == 40
     m = json.loads((tmp_path / "gen.manifest.json").read_text())
     assert (m["generator_tokens_in"], m["generator_tokens_out"]) == (40, 12)
@@ -220,7 +199,7 @@ def test_a_second_run_on_one_directory_is_refused(tmp_path):
         with pytest.raises(SystemExit, match="in use by another run"):
             gen_stage(cfg(), tmp_path, FakeGen(), MESSAGE_TYPING)
         with pytest.raises(SystemExit, match="in use by another run"):
-            label_stage(cfg(), tmp_path, Transport(), BANK)
+            label_stage(cfg(), tmp_path, AlternatingTransport(), BANK)
     gen_stage(cfg(), tmp_path, FakeGen(), MESSAGE_TYPING)  # released
 
 

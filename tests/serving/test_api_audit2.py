@@ -74,11 +74,6 @@ def test_healthz_says_a_uniform_backend_is_not_ready():
     assert body["backend"] == "uniform" and body["ready"] is False and body["status"] != "ok"
 
 
-def test_healthz_of_a_real_backend_is_ready():
-    r = TestClient(create_app(Raising(ValueError()))).get("/healthz")
-    assert r.json() == {"status": "ok", "backend": "raising", "ready": True}
-
-
 def test_a_uniform_models_list_is_marked_for_the_client():
     from fakes import uniform_client
 

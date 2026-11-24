@@ -9,19 +9,17 @@ import pytest
 from verdict import client, config
 
 
-def _file(monkeypatch, tmp_path, url):
-    f = tmp_path / "verdict.toml"
-    f.write_text(f'[server]\nurl = "{url}"\n')
-    monkeypatch.setattr(config, "CONFIG_PATHS", (f,))
+def _file(config_files, url):
+    config_files(f'[server]\nurl = "{url}"\n')
 
 
-def test_server_url_reads_the_config_file(monkeypatch, tmp_path):
-    _file(monkeypatch, tmp_path, "http://127.0.0.1:9123")
+def test_server_url_reads_the_config_file(monkeypatch, config_files):
+    _file(config_files, "http://127.0.0.1:9123")
     assert client.server_url() == "http://127.0.0.1:9123"
 
 
-def test_the_environment_beats_the_file_and_empty_is_ignored(monkeypatch, tmp_path):
-    _file(monkeypatch, tmp_path, "http://127.0.0.1:9123")
+def test_the_environment_beats_the_file_and_empty_is_ignored(monkeypatch, config_files):
+    _file(config_files, "http://127.0.0.1:9123")
     monkeypatch.setenv("VERDICT_URL", "http://127.0.0.1:9456/")
     assert client.server_url() == "http://127.0.0.1:9456"
     monkeypatch.setenv("VERDICT_URL", "")

@@ -7,9 +7,10 @@ from verdict.gen.domains import MESSAGE_TYPING
 from verdict.label.bank import BANK
 from verdict.pipeline.config import PipelineConfig
 from verdict.pipeline.stages import gen_stage, label_stage, split_stage
-from verdict.pipeline.store import JsonlStore, sha256_file, write_json_atomic
+from verdict.pipeline.store import JsonlStore, sha256_file, states_store, write_json_atomic
 
-from fakes import GOOD_LABELS, PaidGarbage
+from fakes import PaidGarbage
+from pfakes import GoodTransport
 
 
 def cfg(**over):
@@ -30,15 +31,6 @@ class FakeGen:
         self.n += 1
         return f"Finished item {self.n} in module {seed} and verified it with tests {seed}."
 
-
-
-class FakeTransport:
-    def __init__(self):
-        self.calls = 0
-
-    def __call__(self, model, prompt):
-        self.calls += 1
-        return json.dumps(GOOD_LABELS), {"promptTokenCount": 1000, "candidatesTokenCount": 500}
 
 
 def test_store_appends_and_reports_done_keys(tmp_path):
@@ -65,14 +57,14 @@ def test_gen_stage_is_resumable(tmp_path):
     g = FakeGen()
     gen_stage(cfg(), tmp_path, g, MESSAGE_TYPING)
     first = g.n
-    assert len(JsonlStore(tmp_path / "states.jsonl", key=lambda r: r["id"]).rows()) == 6
+    assert len(states_store(tmp_path).rows()) == 6
     gen_stage(cfg(), tmp_path, g, MESSAGE_TYPING)
     assert g.n == first  # nothing regenerated
 
 
 def test_label_stage_resumes_and_records_cost(tmp_path):
     gen_stage(cfg(), tmp_path, FakeGen(), MESSAGE_TYPING)
-    t = FakeTransport()
+    t = GoodTransport()
     label_stage(cfg(), tmp_path, t, BANK)
     n_calls = 6 * (2 * 2 + 1)  # 6 states x (2 models x 2 repeats + 1 reference)
     assert t.calls == n_calls
@@ -85,7 +77,7 @@ def test_label_stage_resumes_and_records_cost(tmp_path):
 
 def test_label_stage_stops_at_the_cost_cap(tmp_path):
     gen_stage(cfg(), tmp_path, FakeGen(), MESSAGE_TYPING)
-    t = FakeTransport()
+    t = GoodTransport()
     with pytest.raises(SystemExit):
         label_stage(cfg(label={"max_cost_usd": 0.0}), tmp_path, t, BANK)
     assert t.calls == 0
@@ -97,7 +89,7 @@ def test_split_is_deterministic_and_topic_disjoint(tmp_path):
     a = json.loads((tmp_path / "split.json").read_text())
     split_stage(cfg(gen={"n": 40}), tmp_path)
     assert a == json.loads((tmp_path / "split.json").read_text())
-    states = {r["id"]: r for r in JsonlStore(tmp_path / "states.jsonl", key=lambda r: r["id"]).rows()}
+    states = {r["id"]: r for r in states_store(tmp_path).rows()}
     train_topics = {states[i]["state"]["room_topic"] for i in a["train"]}
     test_topics = {states[i]["state"]["room_topic"] for i in a["test"]}
     assert not (train_topics & test_topics) and a["test"] and a["train"]
@@ -108,7 +100,7 @@ def test_three_way_split_is_topic_disjoint_and_covers_everything(tmp_path):
     c = cfg(gen={"n": 60}, split={"test_frac": 0.2, "holdout_frac": 0.2})
     gen_stage(c, tmp_path, FakeGen(), MESSAGE_TYPING)
     out = split_stage(c, tmp_path)
-    states = {r["id"]: r for r in JsonlStore(tmp_path / "states.jsonl", key=lambda r: r["id"]).rows()}
+    states = {r["id"]: r for r in states_store(tmp_path).rows()}
     parts = {k: {states[i]["state"]["room_topic"] for i in out[k]} for k in ("train", "holdout", "test")}
     assert set(out["train"]) | set(out["holdout"]) | set(out["test"]) == set(states)
     assert not (parts["train"] & parts["holdout"]) and not (parts["train"] & parts["test"]) and not (parts["holdout"] & parts["test"])
@@ -126,7 +118,7 @@ def test_require_type_coverage_searches_seeds_until_every_type_is_in_test_and_ho
     c = cfg(gen={"n": 150}, split={"test_frac": 0.25, "holdout_frac": 0.2, "require_type_coverage": True})
     gen_stage(c, tmp_path, FakeGen(), MESSAGE_TYPING)
     out = split_stage(c, tmp_path)
-    states = JsonlStore(tmp_path / "states.jsonl", key=lambda r: r["id"]).rows()
+    states = states_store(tmp_path).rows()
     st = split_stats(states, out)
     assert st["missing_in_test"] == [] and st["missing_in_holdout"] == []
     assert "seed_used" in out
@@ -206,7 +198,7 @@ def test_a_rerun_keeps_the_recorded_seed_so_the_test_set_does_not_move(tmp_path)
     recorded = first["seed_used"] + 7          # as if an earlier, smaller run had landed here
     write_json_atomic(tmp_path / "split.json", {**first, "seed_used": recorded})
     again = split_stage(c, tmp_path)
-    states = JsonlStore(tmp_path / "states.jsonl", key=lambda r: r["id"]).rows()
+    states = states_store(tmp_path).rows()
     assert again["seed_used"] == recorded
     assert again["test"] == sorted(_assign(states, c.split, recorded)["test"])
 
@@ -260,5 +252,5 @@ def test_label_stage_reports_what_failed_calls_cost(tmp_path):
 
 def test_a_clean_label_run_reports_no_failed_spend(tmp_path):
     gen_stage(cfg(), tmp_path, FakeGen(), MESSAGE_TYPING)
-    out = label_stage(priced(max_cost_usd=5.0), tmp_path, FakeTransport(), BANK)
+    out = label_stage(priced(max_cost_usd=5.0), tmp_path, GoodTransport(), BANK)
     assert out["failures_this_run"] == 0 and out["failed_spend_usd"] == 0

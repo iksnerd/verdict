@@ -7,12 +7,12 @@ shadowed the user file. No config file and no VERDICT_* variable reaches a test 
 from __future__ import annotations
 
 import os
-import sys
-import types
+
+from pathlib import Path
 
 import pytest
 
-from fakes import FakeLayaAgent, typed  # noqa: F401  (tests import `typed` from here)
+from fakes import FakeLayaAgent, install_laya, typed  # noqa: F401  (tests import `typed` from here)
 from verdict import config
 
 
@@ -45,7 +45,19 @@ def fake_laya(monkeypatch):
     under test loaded, so a test can assert which were (and were not) loaded and how often each
     was asked."""
     loaded = {}
-    module = types.ModuleType("laya_mlx")
-    module.load = lambda model_id, **kw: loaded.setdefault(model_id, FakeLayaAgent(model_id))
-    monkeypatch.setitem(sys.modules, "laya_mlx", module)
+    install_laya(monkeypatch, lambda model_id, **kw: loaded.setdefault(model_id, FakeLayaAgent(model_id)))
     return loaded
+
+
+@pytest.fixture
+def config_files(monkeypatch, tmp_path):
+    """`use(*texts) -> [Path]`: writes each text as a TOML file in `tmp_path` and makes them
+    `config.CONFIG_PATHS`, in order. The first is called `name` (default `verdict.toml`), the
+    others `user1.toml`, `user2.toml`."""
+    def use(*texts: str, name: str = "verdict.toml") -> list[Path]:
+        paths = [tmp_path / (name if i == 0 else f"user{i}.toml") for i in range(len(texts))]
+        for path, text in zip(paths, texts):
+            path.write_text(text)
+        monkeypatch.setattr(config, "CONFIG_PATHS", tuple(paths))
+        return paths
+    return use

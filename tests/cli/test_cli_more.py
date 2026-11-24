@@ -30,15 +30,13 @@ SCORE = {"type": "score", "score": 1.3, "confidence": 0.2, "legend": {"0": "low"
          "probabilities": {"0": 0.2, "1": 0.3, "2": 0.5}}
 
 
-def test_init_preserves_model_settings(monkeypatch, tmp_path):
+def test_init_preserves_model_settings(monkeypatch, tmp_path, config_files):
     from verdict import config
     from verdict.cli import setup
 
-    path = tmp_path / "config.toml"
     before = config.Settings("http://127.0.0.1:8799", "org/model", 128, bits=8,
                              lang="multi", extra_checkpoints={"support": "org/support"})
-    path.write_text(config.to_toml(before))
-    monkeypatch.setattr(config, "CONFIG_PATHS", (path,))
+    path, = config_files(config.to_toml(before), name="config.toml")
     monkeypatch.setattr(setup, "_port_free", lambda *a: True)
     monkeypatch.chdir(tmp_path)
     assert cli.main(["init", "--yes", "--out", str(path)]) == 0
@@ -155,12 +153,11 @@ def test_help_never_mentions_ollama(capsys):
     assert "ollama" not in capsys.readouterr().out.lower()
 
 
-def test_init_writes_a_loadable_file_with_absolute_paths_and_no_routes(monkeypatch, tmp_path):
+def test_init_writes_a_loadable_file_with_absolute_paths_and_no_routes(monkeypatch, tmp_path, init_env):
     from verdict import config
 
     (tmp_path / "models" / "verdict-v1-mlx").mkdir(parents=True)
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(config, "CONFIG_PATHS", (tmp_path / "none.toml",))
+    init_env()
     out = tmp_path / "written.toml"
     assert cli.main(["init", "--yes", "--out", str(out)]) == 0
     text = out.read_text()
@@ -207,7 +204,7 @@ def test_calibrate_prints_a_rounded_cut_and_saves_the_exact_one(monkeypatch, tmp
     assert abs(float(printed) - saved) < 1e-4
 
 
-def test_init_out_reads_its_own_target_not_the_search_path(monkeypatch, tmp_path):
+def test_init_out_reads_its_own_target_not_the_search_path(monkeypatch, tmp_path, init_env):
     from verdict import config
     from verdict.cli import setup
 
@@ -215,9 +212,7 @@ def test_init_out_reads_its_own_target_not_the_search_path(monkeypatch, tmp_path
     target.write_text(config.to_toml(config.Settings(
         "http://127.0.0.1:8799", "org/model", 128, bits=8, lang="multi",
         extra_checkpoints={"support": "org/support"})))
-    monkeypatch.setattr(config, "CONFIG_PATHS", (tmp_path / "absent.toml",))
-    monkeypatch.setattr(setup, "_port_free", lambda *a: True)
-    monkeypatch.chdir(tmp_path)
+    init_env()
     assert cli.main(["init", "--yes", "--out", str(target)]) == 0
     after = config.load(target)
     assert (after.bits, after.lang, after.extra_checkpoints) == (8, "multi", {"support": "org/support"})
@@ -258,18 +253,16 @@ def test_calibrate_refuses_answers_from_two_models(monkeypatch, tmp_path, capsys
     assert "more than one model" in capsys.readouterr().err
 
 
-def test_init_keeps_a_configured_remote_backend(monkeypatch, tmp_path):
+def test_init_keeps_a_configured_remote_backend(monkeypatch, tmp_path, config_files):
     """`[systemone]` is a setting like any other: rewriting the file must not drop it."""
     from verdict import config
     from verdict.cli import setup
 
-    path = tmp_path / "config.toml"
-    path.write_text(config.to_toml(config.Settings(
+    path, = config_files(config.to_toml(config.Settings(
         "http://127.0.0.1:8799", "org/model", 128,
-        systemone_url="http://127.0.0.1:8009", systemone_model="kev-small")))
+        systemone_url="http://127.0.0.1:8009", systemone_model="kev-small")), name="config.toml")
     monkeypatch.delenv("VERDICT_SYSTEMONE_URL", raising=False)
     monkeypatch.delenv("VERDICT_SYSTEMONE_MODEL", raising=False)
-    monkeypatch.setattr(config, "CONFIG_PATHS", (path,))
     monkeypatch.setattr(setup, "_port_free", lambda *a: True)
     monkeypatch.chdir(tmp_path)
     assert cli.main(["init", "--yes", "--out", str(path)]) == 0
@@ -333,15 +326,14 @@ def test_serve_beyond_loopback_warns_and_names_the_host(monkeypatch, capsys, hos
     assert host in warning and "no auth" in warning
 
 
-def test_init_keeps_the_port_its_own_server_is_holding(monkeypatch, tmp_path):
+def test_init_keeps_the_port_its_own_server_is_holding(monkeypatch, tmp_path, config_files):
     """Running init while `verdict serve` is up found the port taken and wrote the next free one,
     so every client then pointed at a port nobody serves."""
     from verdict import client, config
     from verdict.cli import setup
 
-    path = tmp_path / "config.toml"
-    path.write_text(config.to_toml(config.Settings("http://127.0.0.1:8799", "org/model", 128)))
-    monkeypatch.setattr(config, "CONFIG_PATHS", (path,))
+    path, = config_files(config.to_toml(config.Settings("http://127.0.0.1:8799", "org/model", 128)),
+                         name="config.toml")
     monkeypatch.setattr(setup, "_port_free", lambda host, port: port != 8799)
     monkeypatch.setattr(client, "capabilities", lambda url=None, **k: {"family": "laya", "model": "m"})
     monkeypatch.chdir(tmp_path)
@@ -349,16 +341,15 @@ def test_init_keeps_the_port_its_own_server_is_holding(monkeypatch, tmp_path):
     assert config.load(path).url == "http://127.0.0.1:8799"
 
 
-def test_init_moves_off_a_port_something_else_holds(monkeypatch, tmp_path):
+def test_init_moves_off_a_port_something_else_holds(monkeypatch, tmp_path, config_files):
     from verdict import client, config
     from verdict.cli import setup
 
     def nobody(url=None, **k):
         raise client.NoServer("not verdict")
 
-    path = tmp_path / "config.toml"
-    path.write_text(config.to_toml(config.Settings("http://127.0.0.1:8799", "org/model", 128)))
-    monkeypatch.setattr(config, "CONFIG_PATHS", (path,))
+    path, = config_files(config.to_toml(config.Settings("http://127.0.0.1:8799", "org/model", 128)),
+                         name="config.toml")
     monkeypatch.setattr(setup, "_port_free", lambda host, port: port != 8799)
     monkeypatch.setattr(client, "capabilities", nobody)
     monkeypatch.chdir(tmp_path)

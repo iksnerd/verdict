@@ -2,7 +2,6 @@
 `truncated` also marks a state laya cuts at its own context length."""
 from __future__ import annotations
 
-import sys
 import threading
 import time
 import types
@@ -14,7 +13,7 @@ from verdict.backends.engine import Engine
 from verdict.backends.mlx import MlxBackend
 from verdict.schema import DecideRequest
 
-from fakes import NOUL_BANK as BANK, Agent, WordTokenizer, noul
+from fakes import NOUL_BANK as BANK, Agent, WordTokenizer, fake_transformers, install_laya, noul
 
 
 def run_threads(fn, n=2):
@@ -41,14 +40,14 @@ def test_agent_loads_once_under_two_threads(monkeypatch):
         time.sleep(0.05)
         return object()
 
-    monkeypatch.setitem(sys.modules, "laya_mlx", types.SimpleNamespace(load=slow_load))
+    install_laya(monkeypatch, slow_load)
     engine = Engine("m")
     agents = run_threads(lambda: engine.agent)
     assert len(loads) == 1 and agents[0] is agents[1]
 
 
 def test_failed_quantize_is_not_cached_and_does_not_leave_a_half_state(monkeypatch):
-    monkeypatch.setitem(sys.modules, "laya_mlx", types.SimpleNamespace(load=lambda *a, **k: object()))
+    install_laya(monkeypatch, lambda *a, **k: object())
     from verdict.backends import engine as engine_mod
 
     def boom(agent, bits):
@@ -64,14 +63,12 @@ def test_failed_quantize_is_not_cached_and_does_not_leave_a_half_state(monkeypat
 def test_tokenizer_loads_once_under_two_threads(monkeypatch):
     loads = []
 
-    class Auto:
-        @staticmethod
-        def from_pretrained(*args, **kwargs):
-            loads.append(args)
-            time.sleep(0.05)
-            return WordTokenizer()
+    def slow_from_pretrained(*args, **kwargs):
+        loads.append(args)
+        time.sleep(0.05)
+        return WordTokenizer()
 
-    monkeypatch.setitem(sys.modules, "transformers", types.SimpleNamespace(AutoTokenizer=Auto))
+    fake_transformers(monkeypatch, loads, from_pretrained=slow_from_pretrained)
     engine = Engine("org/name", agent=object())
     run_threads(lambda: engine.tokenizer)
     assert len(loads) == 1
