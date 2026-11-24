@@ -28,6 +28,7 @@ from . import client as _http
 from . import library
 from .backends.base import UnknownModel, capabilities_of, known_models, listed_models
 from .backends.capabilities import Capabilities
+from .config import ConfigError
 from .errors import QuestionError
 from .systemone import UpstreamError
 from .schema import (
@@ -69,7 +70,8 @@ class VerdictError(Exception):
     """Every failure of a call, with the HTTP-style `status` it maps to (None when nothing
     answered) and a stable `code` to branch on: `refused` (reword the question, or pass
     `allow_unmeasured=True`), `no_server`, `server_timeout`, `server_error`, `upstream`,
-    `unknown_model`, `invalid_question`."""
+    `unknown_model`, `invalid_question`, `config` (a setting that does not parse, e.g.
+    a bad `[server].url`)."""
 
     def __init__(self, message: str, *, status: Optional[int] = None, code: Optional[str] = None):
         super().__init__(message)
@@ -123,6 +125,8 @@ def _served_errors():
     except _http.NoServer as exc:
         raise VerdictError(f"{exc}; start one with `verdict serve`, or pass backend=",
                            code="no_server") from exc
+    except ConfigError as exc:   # the configured server URL is resolved inside the client
+        raise VerdictError(str(exc), code="config") from exc
 
 
 class Verdict:
@@ -169,7 +173,13 @@ class Verdict:
         questions = {qid: q.model_dump(exclude_none=True) for qid, q in request.questions.items()}
         with _served_errors():
             raw = _http.decide(request.state, questions, url=self._url, model=request.model, **flags)
-        return DecideResponse.model_validate(raw)
+        try:
+            return DecideResponse.model_validate(raw)
+        except ValidationError as exc:
+            # Something answered 200 JSON with `model` and `answers`-less or mistyped fields: not
+            # a verdict server, or not one this version understands.
+            raise VerdictError(f"the server's answer is not a verdict decision: {_readable(exc)}",
+                               status=502, code="upstream") from exc
 
     def classify(self, state: Any, tree: dict, *, beam: int = 2, model: Optional[str] = None):
         """Classify `state` into one leaf of a two-level `tree`, beyond the 20-option flat default

@@ -142,6 +142,16 @@ KNOWN = {"server": {"url"},
          "systemone": {"url", "model"}}
 
 
+#: `[routes]` warnings already printed, per (file, mtime and size): once is enough, and an edited
+#: file that still has the table is worth saying again.
+_WARNED: set[tuple[str, tuple[int, int]]] = set()
+
+
+def _stamp(path: Path) -> tuple[int, int]:
+    st = path.stat()
+    return (st.st_mtime_ns, st.st_size)
+
+
 def _read(found: Path) -> dict[str, Any]:
     import tomllib  # 6.4 ms, and only when there is a file to read
 
@@ -152,10 +162,13 @@ def _read(found: Path) -> dict[str, Any]:
     if "routes" in loaded:
         import sys
 
-        print(f"verdict: {found} has a [routes] table, which is no longer read: verdict "
-              "answers and never dispatches. Delete the table to silence this.",
-              file=sys.stderr)
         del loaded["routes"]
+        seen = (str(found), _stamp(found))
+        if seen not in _WARNED:
+            _WARNED.add(seen)
+            print(f"verdict: {found} has a [routes] table, which is no longer read: verdict "
+                  "answers and never dispatches. Delete the table to silence this.",
+                  file=sys.stderr)
     for section, value in loaded.items():
         if section not in KNOWN:
             raise ConfigError(f"{found}: unknown section [{section}]; there are "
@@ -173,24 +186,53 @@ def config_files(path: Path | None = None) -> list[Path]:
     """The files that apply, least specific first: `path` alone when given, else every existing
     file on the search path, so ./verdict.toml layers over the user config key by key."""
     if path is not None:
-        return [path] if path.is_file() else []
+        if not path.is_file():
+            raise ConfigError(f"{path} is not a file; a config path given by flag or environment "
+                              "must exist")
+        return [path]
     return [p for p in reversed(CONFIG_PATHS) if p.is_file()]
+
+
+#: The last resolution, keyed on everything that can change it: the working directory, the
+#: VERDICT_* and TYPESAFE_* environment, and each applicable file's mtime and size. An unchanged
+#: state is parsed once per process; an edit or an env change is still seen.
+_CACHE: dict[Any, "Settings"] = {}
 
 
 def load(path: Path | None = None) -> Settings:
     """Resolve settings. `path` forces one file; otherwise every file on the search path applies,
-    the more specific overriding the less, key by key."""
+    the more specific overriding the less, key by key. Memoised on the state above."""
+    import copy
+
     files = config_files(path)
+    key = (os.getcwd(), tuple(sorted((k, v) for k, v in os.environ.items()
+                                     if k.startswith(("VERDICT_", "TYPESAFE_")))),
+           tuple((str(f), *_stamp(f)) for f in files))
+    cached = _CACHE.get(key)
+    if cached is None:
+        cached = _CACHE[key] = _load(files)
+        if len(_CACHE) > 16:
+            _CACHE.pop(next(iter(_CACHE)))
+    out = copy.copy(cached)   # callers get their own tables
+    out.sources = dict(cached.sources)
+    out.extra_checkpoints = dict(cached.extra_checkpoints)
+    return out
+
+
+def _load(files: list[Path]) -> Settings:
     #: Only a file that exists: a `path` that is not a file applies nothing.
     found = files[-1] if files else None
     loaded: dict[str, Any] = {}
-    sources: dict[tuple[str, str], str] = {}
+    sources: dict[tuple[str, ...], str] = {}
     for f in files:   # least specific first, so the last file to set a key is the winner
         read = _read(f)
         loaded = _merge(loaded, read)
         for section, table in read.items():
-            for key in table:
+            for key, value in table.items():
                 sources[(section, key)] = str(f)
+                if isinstance(value, dict):   # a merged table: each entry has its own file
+                    for entry in value:
+                        sources[(section, key, entry)] = str(f)
 
     data = _merge(DEFAULTS, loaded)
     defaulted = tuple(k for k in DEFAULTS if k not in loaded)
@@ -232,10 +274,17 @@ def explain(path: Path | None = None) -> list[dict[str, Any]]:
               ("model", "extra"): settings.extra_checkpoints,
               ("systemone", "url"): settings.systemone_url,
               ("systemone", "model"): settings.systemone_model}
-    rows = [{"key": f"{section}.{key}", "value": value,
-             "source": settings.sources.get((section, key), "default")}
+    def source(section: str, key: str, value) -> str:
+        whole = settings.sources.get((section, key), "default")
+        if isinstance(value, dict):
+            files = {settings.sources.get((section, key, e)) for e in value}
+            if len(files) > 1:   # a table merged from several files: say which entry came from where
+                return "; ".join(f"{e}: {settings.sources.get((section, key, e), whole)}"
+                                 for e in value)
+        return whole
+
+    return [{"key": f"{section}.{key}", "value": value, "source": source(section, key, value)}
             for (section, key), value in values.items()]
-    return rows
 
 
 class ConfigError(ValueError):

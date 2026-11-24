@@ -161,7 +161,7 @@ one, and with no server the error says `no_server` instead of quietly loading 80
 owns a backend it passes in. The refusals are the CLI's and the HTTP API's, through the same code
 (`library.ask`): a question refused by the default checks raises `VerdictError` with `status` 422 and `code`
 `"refused"`, and `allow_unmeasured=True` asks anyway. Codes: `refused`, `no_server`,
-`server_timeout`, `server_error`, `upstream` (502), `unknown_model` (400) and `invalid_question`.
+`server_timeout`, `server_error`, `upstream` (502), `config`, `unknown_model` (400) and `invalid_question`.
 Score `legend` and `probabilities` are keyed by strings, as on the wire. `v.models()` lists what can
 answer and `v.capabilities(model=None)` returns the backend's limits and confidence semantics
 (`family`, option and level caps), over HTTP or from the backend you passed.
@@ -260,10 +260,12 @@ are omitted over HTTP, rather than becoming fabricated zeros. Choice/Score confi
 provider-specific; thresholds do not transfer between Laya and Jev. `max_probability()` has a
 consistent mathematical definition across backends, but still requires calibration on your data.
 
-`GET /v1/models` forwards the upstream list; an unavailable or malformed listing becomes an empty
-list. Inference failures never become empty answers: transport failures and transient statuses
-(408, 429, 500, 502, 503, 504, 529) retry with exponential backoff, honoring `Retry-After` seconds
-or HTTP dates. Authentication and validation failures are not retried. Responses must contain
+`GET /v1/models` forwards the upstream list; when the upstream fails the server answers with its
+own fixed cards and the header `X-Verdict-Models: fallback`, so a client can tell. Inference failures never become empty answers. A request that was provably not processed
+(a connect error or connect timeout, and 408, 429, 503, 529) retries with exponential backoff,
+honoring `Retry-After` seconds or HTTP dates; a read timeout or a 500, 502 or 504 is not re-sent,
+because the upstream may have completed (and billed) it. The `bench` client re-sends after a
+read timeout only, because a model that is still loading times out. Authentication and validation failures are not retried. Responses must contain
 exactly the requested answer IDs and types, finite probabilities matching the criteria, normalized
 distributions (allowing four-decimal rounding), valid selections, and scores consistent with their
 rubric and probabilities. Malformed responses and exhausted retries raise `UpstreamError`, a
@@ -326,7 +328,7 @@ one-off question and an eyeballed guess at whether it's "close enough".
 
 | endpoint | does |
 |---|---|
-| `GET /healthz` | `{"status": "ok", "backend": "laya-mlx:..."}`. A backend of `uniform` means no model: it reports `{"status": "no_model", "ready": false}` (still 200), and the client treats it as absent, never as "unsure" |
+| `GET /healthz` | `{"status": "ok", "backend": "laya-mlx:..."}`. A backend of `uniform` means no model: it reports `{"status": "no_model", "ready": false, "reason": ...}` (still 200), as does a closed backend, and the client treats it as absent, never as "unsure" |
 | `POST /v1/route` | `{"prompt": ...}` in, the big-or-small branch out ([routing.md](../design/routing.md)) |
 | `POST /v1/route/batch` | `{"prompts": [...]}` in, one result per prompt with its `index`; at most 512. If a prompt fails after others were routed the status is 207: the results so far are kept, the failed index carries `error`, and every later index carries `error: "not attempted: ..."` |
 

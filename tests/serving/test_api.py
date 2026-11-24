@@ -17,7 +17,8 @@ def test_healthz():
     # 200 still (a probe that only checks reachability keeps working), but a bare `uvicorn
     # verdict.api:app` says it has no model behind it.
     assert uniform_client().get("/healthz").json() == {
-        "status": "no_model", "backend": "uniform", "ready": False}
+        "status": "no_model", "backend": "uniform", "ready": False,
+        "reason": "the uniform backend has no model behind it"}
 
 
 def test_decide_returns_one_answer_per_question():

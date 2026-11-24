@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from contextlib import contextmanager
 from typing import Optional
 
@@ -161,7 +162,11 @@ def create_app(backend: Backend | None = None) -> FastAPI:
         # Still 200 for a uniform backend (a bare `uvicorn verdict.api:app`): the process is up.
         # `ready` says whether it can answer anything useful, so a supervisor can tell.
         if backend.name == "uniform":
-            return {"status": "no_model", "backend": backend.name, "ready": False}
+            return {"status": "no_model", "backend": backend.name, "ready": False,
+                    "reason": "the uniform backend has no model behind it"}
+        if getattr(backend, "_closed", False):
+            return {"status": "closed", "backend": backend.name, "ready": False,
+                    "reason": "the backend has been closed"}
         return {"status": "ok", "backend": backend.name, "ready": True}
 
     @app.post("/v1/decide", response_model=DecideResponse, response_model_exclude={"usage"},
@@ -209,6 +214,9 @@ def create_app(backend: Backend | None = None) -> FastAPI:
         if backend.name == "uniform":
             response.headers["X-Verdict-Backend"] = "uniform"   # the client reads it as no server
         own = listed_models(backend)
+        if own is None and hasattr(backend, "models"):
+            # A proxy whose upstream failed: the cards below are laya's fixed ones, not its.
+            response.headers["X-Verdict-Models"] = "fallback"
         if own is not None:
             #: A proxied backend (SystemOneBackend) has its own real model list; the cards below
             #: describe laya/Jev's fixed vocabulary and would misdescribe whatever this actually
@@ -227,7 +235,8 @@ def create_app(backend: Backend | None = None) -> FastAPI:
             cards.append(ModelCard(name="multilingual", release_date=date,
                                    description=f"laya's multilingual checkpoint, "
                                                f"{backend.multilingual_id}; loaded on first use."))
-        for name in sorted(known - {"multilingual"}):
+        shown = {c.name for c in cards}   # an extra named like a built-in card is not shown twice
+        for name in sorted(known - shown):
             cards.append(ModelCard(name=name, release_date=date,
                                    description=f"{backend.extra_checkpoints[name]}; "
                                                "loaded on first use. [model.extra] in verdict.toml."))
@@ -291,14 +300,26 @@ def create_app(backend: Backend | None = None) -> FastAPI:
         status, as for `/v1/route`. A batch that succeeds has exactly the shape above.
         """
         results = []
+        # No disconnect check between prompts: `Request.is_disconnected` is a coroutine and this
+        # endpoint is sync (it runs in a worker thread), so a client that timed out leaves the
+        # loop running to the end of the batch.
         for i, prompt in enumerate(request.prompts):
             try:
                 with _backend_errors():
                     branch = BIG_SMALL.decide(_answers_for(prompt))
-            except (HTTPException, Refused) as exc:
+            except Exception as exc:   # not BaseException: Ctrl-C and SystemExit pass through
                 if not results:
                     raise
-                message = exc.detail if isinstance(exc, HTTPException) else str(exc)
+                if isinstance(exc, HTTPException):
+                    message = exc.detail
+                elif isinstance(exc, Refused):
+                    message = str(exc)
+                else:
+                    # An engine error, OOM or tokenizer failure: keep the earlier results rather
+                    # than lose them to a 500, and leave the traceback in the server log.
+                    logging.getLogger("verdict.api").exception(
+                        "route/batch: prompt %d failed", i)
+                    message = f"{type(exc).__name__}: {exc}"
                 results.append(BatchRouteItem(index=i, error=str(message)))
                 results.extend(BatchRouteItem(index=j, error="not attempted: an earlier prompt failed")
                                for j in range(i + 1, len(request.prompts)))

@@ -109,6 +109,15 @@ class SystemOneClient:
     No clipping, question rewriting, fallback to a different model, or fabricated confidence.
     Use as a context manager, or call close() when finished. profile='jev' is an explicit opt-in
     for a Jev gateway; only api.typesafe.ai is recognized automatically.
+
+    `retry_unsafe=True` re-sends a POST after a read timeout (a model still loading), and nothing
+    else beyond the default retries: a 500/502/504 answer is never re-sent, because the upstream
+    processed it.
+
+    Worst case wait: up to `attempts` requests of `timeout` seconds each, plus the backoff between
+    them (`backoff * 2**n`, or the upstream's Retry-After, each capped at MAX_RETRY_WAIT). With the
+    defaults (5 attempts, 30 s, 1 s backoff) that is about 5 x 30 + 1 + 2 + 4 + 8 = 165 s; raising
+    `attempts` or `timeout` multiplies it, so size them for the caller's own deadline.
     """
 
     def __init__(self, base_url: str, model: str, key: str, *, attempts: int = 5,
@@ -126,8 +135,9 @@ class SystemOneClient:
             raise ValueError("profile must be 'jev' or 'systemone'")
         self.base_url, self.model = base_url.rstrip("/"), model
         self.attempts, self.backoff = attempts, backoff
-        # True: re-send a POST after a read timeout or a 500/502/504 too. For offline measurement
-        # (`bench`), where a model that is still loading times out and a repeated call costs nothing.
+        # True: also re-send a POST after a read timeout, and only that: a cold start (the model is
+        # still loading) answers nothing. Never after a 500/502/504 or another error once the
+        # request left: the upstream answered, so the call may have been processed and billed.
         self.retry_unsafe = retry_unsafe
         self.http = httpx.Client(base_url=self.base_url, timeout=timeout, transport=transport,
                                  headers={"Authorization": f"Bearer {key}"})
@@ -148,7 +158,7 @@ class SystemOneClient:
             raise UpstreamError(f"{self.base_url}{path}: the client is closed; make a new "
                                 "SystemOneClient (or keep it open with a `with` block)")
         for attempt in range(self.attempts):
-            response = None
+            response, transport_error = None, None
             try:
                 response = self.http.request(method, path, **kwargs)
                 if response.status_code not in {408, 429, 500, 502, 503, 504, 529}:
@@ -156,13 +166,16 @@ class SystemOneClient:
                         raise UpstreamError(f"{self.base_url}{path} answered {response.status_code}")
                     return response
                 reason = f"answered {response.status_code}"
-                if method != "GET" and not self.retry_unsafe and response.status_code in {500, 502, 504}:
+                if method != "GET" and response.status_code in {500, 502, 504}:
                     raise UpstreamError(f"{self.base_url}{path} {reason}; the request may have "
                                         "been processed, so it was not re-sent")
             except httpx.TransportError as exc:
+                transport_error = exc
                 reason = exc.__class__.__name__
-                if method != "GET" and not self.retry_unsafe and not isinstance(
-                        exc, (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout)):
+                safe = (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout)
+                if self.retry_unsafe:   # a cold start: the read timed out, nothing was answered
+                    safe += (httpx.TimeoutException,)
+                if method != "GET" and not isinstance(exc, safe):
                     raise UpstreamError(f"{self.base_url}{path} {reason}; the request may have "
                                         "been processed, so it was not re-sent") from exc
             if attempt == self.attempts - 1:
@@ -174,7 +187,9 @@ class SystemOneClient:
                 if after is not None:
                     delay = max(delay, after)
             delay = min(delay, MAX_RETRY_WAIT)
-            print(f"verdict: {self.base_url}{path} {reason}; it may still be loading -- "
+            loading = isinstance(transport_error, (httpx.TimeoutException, httpx.ConnectError))
+            print(f"verdict: {self.base_url}{path} {reason}"
+                  f"{'; it may still be loading' if loading else ''} -- "
                   f"retrying ({attempt + 2}/{self.attempts})", file=sys.stderr)
             if delay:
                 time.sleep(delay)
