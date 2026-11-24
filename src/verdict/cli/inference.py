@@ -52,22 +52,29 @@ def _resolved_model(flag: str | None, settings) -> str:
 
 def _answer(state, questions: dict, url: str, model_path: str, model: str | None = None,
             budget: int | None = None, server_only: bool = False, bits: int = 16,
-            flags: dict | None = None) -> dict:
+            flags: dict | None = None, pin: tuple[str, int] | None = None) -> dict:
     """Ask the server, or load the model here if none answers. `model` is laya's checkpoint name
-    (`multilingual`), passed through to the server, or `model_path` is loaded in-process."""
+    (`multilingual`), passed through to the server, or `model_path` is loaded in-process.
+    `pin` is `(source, row)` once a run's first row was answered: `"in-process"` never asks the
+    server again, `"server"` never falls back, and a server lost at `row` is an error."""
     t = time.perf_counter()
     try:
+        if pin and pin[0] == "in-process":
+            raise client.NoServer("this run is pinned to in-process")
         payload = client.decide(state, questions, url, model=model, **(flags or {}))
         source = f"server {url}"
     except client.NoServer as exc:
         if server_only:
             raise client.NoServer(f"{exc}; start `verdict serve` or check --url") from exc
+        if pin and pin[0] == "server":
+            raise client.NoServer(f"row {pin[1]}: {exc}; this run was pinned to the server by its "
+                                  "first answer, so it does not fall back to another model") from exc
         from ..schema import laya_questions
 
         # Validated and filled in as the server does, before paying for a model load.
         laya = laya_questions(questions)
         key = (model_path, bits)
-        if key not in _ENGINES:
+        if key not in _ENGINES and not pin:
             print(f"verdict: {exc}; loading the model in this process (a few seconds and about "
                   "800 MB of GPU memory; `verdict serve` keeps one loaded)", file=sys.stderr)
             # A cached Hub checkpoint still draws a "Fetching 6 files" bar on stderr.
@@ -113,6 +120,9 @@ class _Asker:
         self._reasked = False
         #: Where and with what the first answer came, so a switch mid-run is said once.
         self._first: tuple[str, str] | None = None
+        #: Rows asked so far, and the source the first answer pinned the rest of the run to.
+        self._rows = 0
+        self._pin: str | None = None
         #: Every checkpoint that answered this run.
         self.models: set[str] = set()
         #: `--model` only chooses what loads locally; a server answers with its own checkpoint.
@@ -154,7 +164,13 @@ class _Asker:
                    if self.warn_clipped else None)
         if clipped:
             self.warn(clipped)
+        self._rows += 1
         result = self._ask(state, questions)
+        if self._pin is None:
+            self._pin = "server" if str(result.get("source", "")).startswith("server") else "in-process"
+            if self._pin == "in-process" and not self.server_only:
+                self.warn("this run is pinned to in-process: a server that starts later is ignored, "
+                          "so every row is answered by the same model")
         self._note_source(result)
         if result.get("source") == "in-process":
             # The server went away and laya answered here: its rules apply from the next row, and
@@ -194,10 +210,12 @@ class _Asker:
     def _ask(self, state, questions: dict) -> dict:
         from .. import inputs
 
+        pin = (self._pin, self._rows) if self._pin else None
+
         if self.lang == "multi":
             return _answer(state, questions, self.url, self.settings.multilingual_path,
                            "multilingual", self.settings.prompt_token_budget,
-                           server_only=self.server_only, flags=self._flags())
+                           server_only=self.server_only, flags=self._flags(), pin=pin)
         if self.lang == "auto":
             info = inputs.language(state)
             if info and not info["is_english"]:
@@ -206,7 +224,7 @@ class _Asker:
                           "reliably; add --lang multi to use laya's multilingual one")
         return _answer(state, questions, self.url, self.main_path,
                        budget=self.settings.prompt_token_budget, server_only=self.server_only,
-                       bits=self.settings.bits, flags=self._flags())
+                       bits=self.settings.bits, flags=self._flags(), pin=pin)
 
     def _flags(self) -> dict:
         """The opt-outs the server needs to answer as this CLI call asked: only those set, so a

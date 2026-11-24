@@ -94,32 +94,6 @@ def test_calibrate_records_bits_and_budget(monkeypatch, tmp_path):
 
 # 2. the checkpoint changing mid-run
 
-def test_a_server_that_disappears_mid_run_is_flagged(monkeypatch, capsys):
-    calls = []
-
-    def decide(state, questions, url=None, model=None, **flags):
-        calls.append(state)
-        if len(calls) > 1:
-            raise client.NoServer("gone")
-        return {"model": "served", "answers": typed(questions, lambda k: noul(0.5))}
-
-    class Eng:
-        name = "local"
-
-        def clip_state(self, state, budget):
-            return state
-
-        def predict(self, state, questions):
-            return typed(questions, lambda k: noul(0.5))
-
-    monkeypatch.setattr(client, "decide", decide)
-    monkeypatch.setattr(inference, "load", lambda *a, **k: Eng())
-    monkeypatch.setattr(inference, "_ENGINES", {})
-    monkeypatch.setattr("sys.stdin", __import__("io").StringIO('{"kind": "a"}\n{"kind": "b"}\n'))
-    assert cli.main(["decide", "--jsonl", "-q", BANK]) == 0
-    assert "answers switched from server (served) to in-process (local)" in capsys.readouterr().err
-
-
 def test_calibrate_fails_on_mixed_models_before_printing_fits(monkeypatch, tmp_path, capsys):
     n = []
 
@@ -139,49 +113,6 @@ def test_calibrate_fails_on_mixed_models_before_printing_fits(monkeypatch, tmp_p
 
 
 # 3. the proxy probe after a flap
-
-def test_a_proxy_that_appears_after_a_flap_is_recognised(monkeypatch):
-    import argparse
-
-    probes = iter([None, None, "jev"])   # down, down (re-ask), then up once the server returned
-    state = {"i": 0}
-
-    def capabilities(url=None, model=None, timeout=None):
-        fam = next(probes)
-        if fam is None:
-            raise client.NoServer("down")
-        return {"family": fam}
-
-    seq = ["server", "server", "local", "server", "server"]
-
-    class Eng:
-        name = "local"
-
-        def clip_state(self, s, b):
-            return s
-
-        def predict(self, s, q):
-            return typed(q, lambda k: noul(0.5))
-
-    def decide(s, q, url=None, model=None, **f):
-        kind = seq[state["i"]]
-        if kind == "local":
-            raise client.NoServer("gone")
-        return {"model": "m", "answers": typed(q, lambda k: noul(0.5))}
-
-    monkeypatch.setattr(client, "capabilities", capabilities)
-    monkeypatch.setattr(client, "decide", decide)
-    monkeypatch.setattr(inference, "load", lambda *a, **k: Eng())
-    monkeypatch.setattr(inference, "_ENGINES", {})
-    ns = argparse.Namespace(url=None, model=None, lang=None, server_only=False,
-                            allow_unmeasured=True, yesno=False, warn_clipped=False)
-    ask = inference._Asker(ns)
-    bank = json.loads(BANK)
-    for i in range(5):
-        state["i"] = i
-        ask({"kind": "x"}, bank)
-    assert ask._family == "jev"
-
 
 # 5. examples with only labelled files
 
