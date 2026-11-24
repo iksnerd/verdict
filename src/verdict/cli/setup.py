@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
@@ -83,8 +84,12 @@ def _run(uvicorn, app, args: argparse.Namespace) -> int:
         uvicorn.run(app, host=args.host, port=args.port, log_level=args.log_level)
     except SystemExit as exc:
         if exc.code not in (0, None):
-            print(f"verdict: the server stopped without serving (exit {exc.code}); "
-                  f"is {args.host}:{args.port} taken?", file=sys.stderr)
+            # Uvicorn exits 1 for a lost bind and also for a failure in startup; name the port
+            # only when it really is not bindable.
+            why = (f"; is {args.host}:{args.port} taken?" if not _port_free(args.host, args.port)
+                   else "; the port is free, so see the lines above for why")
+            print(f"verdict: the server stopped without serving (exit {exc.code}){why}",
+                  file=sys.stderr)
             return 2
     return 0
 
@@ -164,16 +169,22 @@ def _port_free(host: str, port: int) -> bool:
     to 127.0.0.1 succeeds while a 0.0.0.0 listener holds the port, so also try to connect."""
     import socket
 
-    probe = socket.socket()
+    try:
+        # The family follows the host: an AF_INET socket cannot bind `::1`.
+        family, _, _, _, addr = socket.getaddrinfo(
+            host or None, port, type=socket.SOCK_STREAM, flags=socket.AI_PASSIVE)[0]
+    except (OSError, IndexError):
+        family, addr = socket.AF_INET, (host, port)  # the bind below reports what is wrong
+    probe = socket.socket(family, socket.SOCK_STREAM)
     probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     try:
-        probe.bind((host, port))
+        probe.bind(addr)
     except OSError:
         return False
     finally:
         probe.close()
     if port:
-        target = "127.0.0.1" if host in ("", "0.0.0.0") else host
+        target = {"": "127.0.0.1", "0.0.0.0": "127.0.0.1", "::": "::1"}.get(host, host)
         try:
             with socket.create_connection((target, port), timeout=0.5):
                 return False
@@ -207,6 +218,18 @@ def _config_cmd(args: argparse.Namespace) -> int:
     return 0
 
 
+def _load_files_only(path: Path | None):
+    """`config.load` without the environment: a new file is written from the files on disk, so a
+    `$VERDICT_URL` set for one shell is not frozen into every later one."""
+    from .. import config
+
+    saved = {v: os.environ.pop(v) for v in config.ENV_OVERRIDES.values() if v in os.environ}
+    try:
+        return config.load(path)
+    finally:
+        os.environ.update(saved)
+
+
 def _init_cmd(args: argparse.Namespace) -> int:
     """Write a config from what this machine actually has.
 
@@ -218,7 +241,7 @@ def _init_cmd(args: argparse.Namespace) -> int:
 
     # The file being rewritten is the one whose settings to keep, wherever --out points.
     target = Path(args.out).expanduser()
-    current = config.load(target) if target.is_file() else config.load()
+    current = _load_files_only(target if target.is_file() else None)
     total = 3
     print(f"verdict init: writing {args.out}")
     if current.source:
@@ -252,9 +275,14 @@ def _init_cmd(args: argparse.Namespace) -> int:
     if not _port_free(host, port) and _verdict_listens(f"http://{host}:{port}"):
         print(f"  {port} is held by a running verdict server; keeping it")
     elif not _port_free(host, port):
-        free = next((p for p in range(port, port + 40) if _port_free(host, p)), port)
-        print(f"  {port} is taken (`lsof -nP -iTCP:{port} -sTCP:LISTEN` names it); {free} is free")
-        port = free
+        free = next((p for p in range(port, port + 40) if _port_free(host, p)), None)
+        taken = f"{port} is taken (`lsof -nP -iTCP:{port} -sTCP:LISTEN` names it)"
+        if free is None:
+            print(f"  {taken}, and so is every port up to {port + 39}; keeping {port}: "
+                  "pass --port to `verdict serve`, or edit the url below")
+        else:
+            print(f"  {taken}; {free} is free")
+            port = free
     url = _ask("url", f"http://{host}:{port}", args.yes)
     print()
 

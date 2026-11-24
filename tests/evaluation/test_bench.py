@@ -165,8 +165,26 @@ def toy_bench(monkeypatch, tmp_path):
         "target": "positive", "per_class": 5, "seed": 0}]}))
     monkeypatch.setattr(bench, "SUITES_FILE", suites)
     monkeypatch.setattr(bench, "fetch", lambda s: ROWS)
-    monkeypatch.setattr(client, "decide",
-                        lambda state, questions, url=None, model=None, **flags: fake_noul(state, questions))
+    # In-process: a scorecard stamped from a server's answers is refused (the server does not
+    # report its bits or budget), so the command under test must be answered by this process.
+    from verdict.cli import inference
+
+    def no_server(*a, **k):
+        raise client.NoServer("no server in this test")
+
+    class Eng:
+        name = "toy"
+
+        def clip_state(self, state, budget):
+            return state
+
+        def predict(self, state, questions):
+            return fake_noul(state, questions)["answers"]
+
+    monkeypatch.setattr(client, "decide", no_server)
+    monkeypatch.setattr(client, "capabilities", no_server)
+    monkeypatch.setattr(inference, "load", lambda *a, **k: Eng())
+    monkeypatch.setattr(inference, "_ENGINES", {})
     return tmp_path
 
 

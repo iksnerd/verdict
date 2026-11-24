@@ -289,6 +289,9 @@ def _serve_locally(monkeypatch, host):
     from verdict.cli import inference, support
 
     class FakeSocket:
+        def __init__(self, *a):
+            pass
+
         def setsockopt(self, *a):
             pass
 

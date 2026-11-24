@@ -18,22 +18,46 @@ repo=$(git rev-parse --show-toplevel)
 cd "$repo"
 
 snapshot=""
-cleanup() { [ -n "$snapshot" ] && rm -rf "$snapshot"; return 0; }
+pytest_pid=""
+cleanup() {
+  if [ -n "$pytest_pid" ]; then kill "$pytest_pid" 2>/dev/null || true; pytest_pid=""; fi
+  if [ -n "$snapshot" ]; then rm -rf "$snapshot"; snapshot=""; fi
+  return 0
+}
 trap cleanup EXIT
-trap 'cleanup; exit 130' INT
-trap 'cleanup; exit 143' TERM
-trap 'cleanup; exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
+trap 'exit 129' HUP
 
-# The one read of the index. Everything below uses $tree.
+# POSIX sh has no pipefail, and a pipeline's status is its last command's: a failed `git diff-tree`
+# or `git archive` would pass as an empty diff or a short export. So each git command writes to a
+# file, its own exit status is checked, and only then does grep, gitleaks or tar read the file.
+snapshot=$(mktemp -d "${TMPDIR:-/tmp}/verdict-precommit.XXXXXX")
+work="$snapshot/.precommit"
+mkdir "$work"
+die() { echo "pre-commit: $1" >&2; exit 1; }
+
+read_head() {
+  if git rev-parse --verify -q HEAD >/dev/null; then
+    git rev-parse HEAD
+  else
+    git hash-object -t tree /dev/null
+  fi
+}
+
+# The one read of the index. Everything below uses $tree. HEAD is read first, then the index, and
+# once more if a commit landed between the two, so $base is never older than $tree.
+base=$(read_head)
 tree=$(git write-tree)
-if git rev-parse --verify -q HEAD >/dev/null; then
-  base=$(git rev-parse HEAD)
-else
-  base=$(git hash-object -t tree /dev/null)
+again=$(read_head)
+if [ "$again" != "$base" ]; then
+  base="$again"
+  tree=$(git write-tree)
 fi
 
-forbidden=$(git diff-tree -r --name-only --no-commit-id --diff-filter=ACMR "$base" "$tree" |
-  grep -E '^(data|models|runs|experiments)/|(^|/)\.env($|\.)|(^|/)apol\.db$' || true)
+git diff-tree -r --name-only --no-commit-id --diff-filter=ACMR "$base" "$tree" >"$work/names" ||
+  die "git diff-tree failed, so the staged paths cannot be checked"
+forbidden=$(grep -E '^(data|models|runs|experiments)/|(^|/)\.env($|\.)|(^|/)apol\.db$' "$work/names" || true)
 if [ -n "$forbidden" ]; then
   echo "pre-commit: these must never be committed (see CLAUDE.md, Constraints):" >&2
   echo "$forbidden" | sed 's/^/  /' >&2
@@ -43,10 +67,10 @@ fi
 
 if command -v gitleaks >/dev/null 2>&1; then
   # Scan the snapshot's diff from stdin, not `--staged`, which would read the index again.
-  if ! git diff-tree -p --no-color --no-commit-id "$base" "$tree" |
-      gitleaks stdin --no-banner --redact >/dev/null 2>&1; then
-    git diff-tree -p --no-color --no-commit-id "$base" "$tree" |
-      gitleaks stdin --no-banner --redact >&2 || true
+  git diff-tree -p --no-color --no-commit-id "$base" "$tree" >"$work/staged.diff" ||
+    die "git diff-tree failed, so the staged changes cannot be scanned for secrets"
+  if ! gitleaks stdin --no-banner --redact <"$work/staged.diff" >/dev/null 2>&1; then
+    gitleaks stdin --no-banner --redact <"$work/staged.diff" >&2 || true
     echo "pre-commit: gitleaks found a secret in the staged changes" >&2
     exit 1
   fi
@@ -66,11 +90,16 @@ if ! "$python" -c 'import importlib.util as u, sys; sys.exit(0 if all(u.find_spe
   echo "  are skipped. Restore them: uv sync --extra mlx --extra laya --extra jev" >&2
   echo "pre-commit: SKIPPED mlx/laya tests: extras missing from .venv" >&2
 fi
-snapshot=$(mktemp -d "${TMPDIR:-/tmp}/verdict-precommit.XXXXXX")
-git archive "$tree" | tar -x -C "$snapshot"
-# PYTHONPATH beats the editable install, which would otherwise import the working tree.
-if ! (cd "$snapshot" && PYTHONPATH="$snapshot/src" "$python" -m pytest -q -p no:cacheprovider \
-      >"$snapshot/.pytest.log" 2>&1); then
+git archive "$tree" >"$work/tree.tar" || die "git archive failed, so the snapshot cannot be exported"
+tar -x -C "$snapshot" -f "$work/tree.tar" || die "could not unpack the snapshot"
+# PYTHONPATH beats the editable install, which would otherwise import the working tree. Pytest runs
+# in the background and is waited on, so a TERM or INT to this shell runs the trap, which kills it.
+(cd "$snapshot" && exec env PYTHONPATH="$snapshot/src" "$python" -m pytest -q -p no:cacheprovider \
+  >"$snapshot/.pytest.log" 2>&1) &
+pytest_pid=$!
+if wait "$pytest_pid"; then status=0; else status=$?; fi
+pytest_pid=""
+if [ "$status" -ne 0 ]; then
   tail -25 "$snapshot/.pytest.log" >&2
   echo "pre-commit: tests fail on the staged snapshot" >&2
   exit 1

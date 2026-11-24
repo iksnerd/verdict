@@ -133,26 +133,22 @@ def test_a_baseline_message_names_the_models_it_did_find(tmp_path, capsys):
     assert "laya-mlx" in err and "verdict-v1-mlx" in err and "baseline" in err
 
 
-def test_a_server_that_appears_mid_run_is_asked_what_it_fronts(server, monkeypatch):
-    """No server answered the first probe, so laya's rules stood. When a server then answers a row,
-    the next row must ask what it fronts: a proxy must not get laya's rewrite and option cap for
-    the rest of the command. One more probe only: a server with no capabilities is not re-asked
-    on every row."""
+def test_a_server_that_cannot_say_what_it_fronts_is_asked_once_more(server, monkeypatch):
+    """The first probe got no family and a server answered the row. The next row must ask what it
+    fronts: a proxy must not get laya's rewrite and option cap for the rest of the command. One
+    more probe only: a server with no capabilities is not re-asked on every row. (A run that the
+    first row pinned in-process never asks again: tests/cli/test_cli_audit4.py.)"""
     import argparse
     from verdict.cli import inference
 
     server["family"] = None
-    sources = iter(["in-process", "server http://127.0.0.1:8799", "server http://127.0.0.1:8799",
-                    "server http://127.0.0.1:8799"])
     monkeypatch.setattr(inference, "_answer", lambda state, questions, *a, **k: {
-        "model": "m", "source": next(sources), "answers": {"q": noul(0.8, 0.6)}})
+        "model": "m", "source": "server http://127.0.0.1:8799", "answers": {"q": noul(0.8, 0.6)}})
     asker = inference._Asker(argparse.Namespace(url=None, model=None, lang="en", server_only=False))
     asker({"message": "a"}, json.loads(YESNO))
-    assert asker._family is None and server["probes"] == 1
+    assert server["probes"] == 1 and asker._family is inference._UNASKED
     server["family"] = "jev"
-    asker({"message": "b"}, json.loads(YESNO))      # a server answered: ask again next row
-    assert asker._family is inference._UNASKED
-    asker({"message": "c"}, json.loads(YESNO))
+    asker({"message": "b"}, json.loads(YESNO))      # asked again now
     assert asker._family == "jev" and server["probes"] == 2
 
 

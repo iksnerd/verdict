@@ -134,6 +134,23 @@ def _bench_cmd(args: argparse.Namespace) -> int:
                      + (f"  auc {r['auc']:.3f}" if "auc" in r else ""))
             print(f"{s.name:<12} {r['metric']} {r['value']:.3f} "
                   f"[{r['ci'][0]:.3f}, {r['ci'][1]:.3f}]  n={r['n']}{extra}")
+        if not args.systemone:
+            used = [a for a in (asker, *askers.values()) if a.sources]
+            if len({frozenset(a.sources) for a in used}) > 1:
+                print("verdict: the suites were not all answered by the same source (a server for "
+                      "some, this process for others), so their numbers are not one measurement",
+                      file=sys.stderr)
+            served = sorted({m for a in used if "server" in a.sources for m in a.models})
+            if served and args.out:
+                # The server's own bits and prompt budget are not reported (`/v1/capabilities`
+                # carries a model id and its token limit only), so this client's settings would
+                # stamp the card with numbers that may not be what answered, and `bench.verify`
+                # trusts that stamp.
+                return support._fail(
+                    f"the rows were answered by the server at {asker.url} ({', '.join(served)}), "
+                    "which does not report its bits or prompt budget, so no scorecard was written: "
+                    "stamping it from this machine's settings could describe another model. Run "
+                    "it in-process: stop `verdict serve` and do not pass --server-only")
         doc = {"version": version("verdict"), "model": model_name, "budget": budget, "bits": bits,
                "date": time.strftime("%Y-%m-%d"), "suites": results,
                "timing": _timing(spent, tokens)}

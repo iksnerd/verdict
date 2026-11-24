@@ -50,7 +50,7 @@ def test_a_server_that_dies_at_row_3_fails_that_row_and_keeps_the_printed_ones(m
     out = capsys.readouterr()
     got = rows(out.out)
     assert [r["index"] for r in got] == [0, 1] and {r["model"] for r in got} == {"served"}
-    assert "row 3" in out.err and "pinned to the server" in out.err
+    assert "call 3" in out.err and "pinned to the server" in out.err
 
 
 def test_a_server_that_appears_at_row_3_is_ignored_with_one_note(monkeypatch, capsys):

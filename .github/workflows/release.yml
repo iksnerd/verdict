@@ -17,6 +17,12 @@ on:
 permissions:
   contents: write
 
+# One run per tag at a time, and a second run waits instead of cancelling the first: two runs
+# for one tag could otherwise delete each other's draft mid-upload.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   test-build-release:
     runs-on: macos-26
@@ -76,9 +82,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          leftover=$(gh release list --limit 200 --json tagName,isDraft \
-            --jq ".[] | select(.tagName == \"$GITHUB_REF_NAME\" and .isDraft) | .tagName")
-          if [ -n "$leftover" ]; then
+          # Looked up by tag, not in a capped list. A tag with no release at all also fails the view.
+          draft=$(gh release view "$GITHUB_REF_NAME" --json isDraft --jq .isDraft 2>/dev/null || true)
+          if [ "$draft" = "true" ]; then
             gh release delete "$GITHUB_REF_NAME" --yes
           fi
           gh release create "$GITHUB_REF_NAME" --draft --verify-tag --title "verdict $GITHUB_REF_NAME" --notes-file "docs/release-notes/$GITHUB_REF_NAME.md"

@@ -48,11 +48,19 @@ def _run(argv: list[str], cwd: Path | None = None) -> tuple[int, str]:
 def _server_up() -> bool | None:
     """Whether a verdict server answers, or None when that cannot be known (the settings do not
     load). This runs after an update has finished, so it must not be able to fail one."""
+    import json
     import urllib.request
 
     try:
         with urllib.request.urlopen(f"{support._settings().url}/healthz", timeout=0.3) as r:
-            return r.status == 200
+            if r.status != 200:
+                return False
+            try:
+                body = json.loads(r.read())
+            except ValueError:
+                return True  # a 200 that is not JSON still answered; only `ready: false` says no
+            # A server that is up but still loading says so; no `ready` key means ready.
+            return not (isinstance(body, dict) and body.get("ready") is False)
     except OSError:
         return False
     except Exception:
@@ -105,6 +113,8 @@ def _released(url: str) -> set[tuple[int, ...]] | None:
         return None
     out = set()
     for rel in releases:
+        if not isinstance(rel, dict):
+            continue
         m = re.fullmatch(r"v(\d+)\.(\d+)\.(\d+)", str(rel.get("tag_name", "")))
         if m and not rel.get("draft") and not rel.get("prerelease"):
             out.add(tuple(int(p) for p in m.groups()))
@@ -158,10 +168,14 @@ def _update_tool(args: argparse.Namespace) -> int:
             code, out = _run(install[:3] + ["--refresh-package", "verdict"] + install[3:])
     except KeyboardInterrupt:
         # The old install may already be gone; put it back before leaving.
-        print(f"verdict: interrupted. {_restore(pin, extras)}", file=sys.stderr)
+        print(f"verdict: interrupted. {_restore_guarded(pin, extras)[0]}", file=sys.stderr)
         return 130
     if code != 0:
-        return support._fail(f"`uv tool install {spec}` failed:\n{out}\n{_restore(pin, extras)}")
+        note, interrupted = _restore_guarded(pin, extras)
+        if interrupted:
+            print(f"verdict: `uv tool install {spec}` failed:\n{out}\n{note}", file=sys.stderr)
+            return 130
+        return support._fail(f"`uv tool install {spec}` failed:\n{out}\n{note}")
     print(f"updated {current} -> {newest}")
     _note_server()
     return 0
@@ -170,6 +184,18 @@ def _update_tool(args: argparse.Namespace) -> int:
 #: What uv prints when its cached clone of the repo lacks a commit it just resolved: a tag pushed
 #: seconds ago. Both were seen releasing 0.7.0; a refresh fixes either.
 STALE_CACHE = ("Could not parse object", "unable to read tree")
+
+
+def _restore_guarded(version: str | None, extras: list[str]) -> tuple[str, bool]:
+    """`_restore`, but a second Ctrl-C during it ends in a plain message, not a bare exit 130:
+    the old install may be gone, and the line to bring it back is the one thing to print."""
+    try:
+        return _restore(version, extras), False
+    except KeyboardInterrupt:
+        spec = _tool_spec(extras, version or "X.Y.Z")
+        return ("interrupted again while restoring, so the old install may be missing and `verdict` "
+                f"may not run. Reinstall it with:\n  {_tool_install_cmd(spec)}"
+                + ("  (a release tag)" if version is None else "")), True
 
 
 def _restore(version: str | None, extras: list[str]) -> str:
@@ -185,7 +211,9 @@ def _restore(version: str | None, extras: list[str]) -> str:
     install = _tool_install_argv(spec)
     code, _ = _run(install)
     if code == 0:
-        return f"restored v{version}, so `verdict` still works; the update did not happen"
+        return (f"restored v{version} by reinstalling it, so `verdict` works again. The failed "
+                "install may have changed the tool before it stopped: `verdict --version` says "
+                "which version is installed")
     return (f"v{version} could not be restored either, so `verdict` may be missing. Reinstall it with:\n"
             f"  {_tool_install_cmd(spec)}")
 

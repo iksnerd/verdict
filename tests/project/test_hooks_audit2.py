@@ -62,7 +62,7 @@ def _run(repo, e, **kw):
 
 def test_hook_takes_one_index_snapshot():
     code = "\n".join(l for l in HOOK.read_text().splitlines() if not l.lstrip().startswith("#"))
-    assert code.count("git write-tree") == 1
+    assert code.count("git write-tree") == 2  # once, and once more if HEAD moved in between
     for banned in ("--cached", "--pre-commit --staged", "gitleaks git", "checkout-index"):
         assert banned not in code
 
@@ -169,7 +169,7 @@ def test_release_rerun_deletes_only_a_draft():
     run = _steps()[_idx(_steps(), "gh release create")]["run"]
     assert "isDraft" in run
     assert run.index("gh release delete") < run.index("gh release create")
-    assert "select(.tagName" in run and ".isDraft" in run  # delete is guarded by the draft filter
+    assert '= "true"' in run  # delete is guarded by the draft check
     assert "--cleanup-tag" not in run
 
 

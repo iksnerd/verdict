@@ -75,6 +75,11 @@ def decide_many(
             t = time.perf_counter()
             results = client.route_batch(prompts, url)
             ms = (time.perf_counter() - t) * 1000
+            for i, r in enumerate(results):
+                # A 207 batch carries a failed item as `error` with no `branch`.
+                if "branch" not in r:
+                    raise client.ServerError(
+                        207, f"item {r.get('index', i)} failed: {r.get('error', 'no branch in the answer')}")
             branches = [Branch(r["branch"], r["reason"], r.get("scores", {})) for r in results]
             return branches, ms, f"server {url or client.server_url()}"
         except client.NoServer as exc:

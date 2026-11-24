@@ -35,10 +35,15 @@ def write_atomic(path, text: str) -> None:
     killed run leaves the old file or the new one, never half of one (a scorecard gates a release)."""
     from pathlib import Path
 
-    target = Path(path)
+    # Through a symlink to the real file (a dotfiles repo), so the link survives; the mode of the
+    # file being replaced is kept, since a new temp file would otherwise reset it.
+    target = Path(os.path.realpath(path))
     tmp = target.with_name(f".{target.name}.{os.getpid()}.tmp")
     try:
+        mode = target.stat().st_mode & 0o7777 if target.exists() else None
         tmp.write_text(text)
+        if mode is not None:
+            os.chmod(tmp, mode)
         os.replace(tmp, target)
     finally:
         tmp.unlink(missing_ok=True)
@@ -72,15 +77,16 @@ def _answer(state, questions: dict, url: str, model_path: str, model: str | None
         if server_only:
             raise client.NoServer(f"{exc}; start `verdict serve` or check --url") from exc
         if pin and pin[0] == "server":
-            raise client.NoServer(f"row {pin[1]}: {exc}; this run was pinned to the server by its "
+            raise client.NoServer(f"call {pin[1]}: {exc}; this run was pinned to the server by its "
                                   "first answer, so it does not fall back to another model") from exc
         from ..schema import laya_questions
 
         # Validated and filled in as the server does, before paying for a model load.
         laya = laya_questions(questions)
         key = (model_path, bits)
-        if key not in _ENGINES and not pin:
-            _say_local(exc)
+        if key not in _ENGINES:
+            if not pin:
+                _say_local(exc)
             # A cached Hub checkpoint still draws a "Fetching 6 files" bar on stderr.
             os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
             _ENGINES[key] = load(model_path, bits=bits) if bits != 16 else load(model_path)
@@ -129,6 +135,9 @@ class _Asker:
         self._pin: str | None = None
         #: Every checkpoint that answered this run.
         self.models: set[str] = set()
+        #: `"server"` and `"in-process"`: who answered. A scorecard is stamped from this, not from
+        #: the client's own settings, which describe only what would load here.
+        self.sources: set[str] = set()
         #: `--model` only chooses what loads locally; a server answers with its own checkpoint.
         self.model_flag = getattr(args, "model", None)
 
@@ -137,6 +146,10 @@ class _Asker:
         verdict). Laya's yes/no rewrite and option cap are about laya's token budget, so they apply
         only when laya is what answers: with no server, or one that cannot say, laya's rules stand.
         One cheap loopback GET per command, never per row."""
+        if self._pin == "in-process":
+            # Pinned: laya answers every row of this run, so laya's rules apply and a server that
+            # appears later is not asked what it fronts.
+            return False
         if self._family is _UNASKED:
             try:
                 self._family = client.capabilities(self.url).get("family")
@@ -179,6 +192,8 @@ class _Asker:
         if result.get("source") == "in-process":
             # The server went away and laya answered here: its rules apply from the next row, and
             # a server that comes back gets one fresh probe (`_reasked` is spent per appearance).
+            # Once the run is pinned in-process `_proxied` never probes, so this only matters for
+            # a run pinned to a server.
             self._reasked = False
             if proxied:
                 self._family = _UNASKED
@@ -204,6 +219,7 @@ class _Asker:
         kind = "server" if str(result.get("source", "")).startswith("server") else "in-process"
         model = str(result.get("model", ""))
         self.models.add(model)
+        self.sources.add(kind)
         if self._first is None:
             self._first = (kind, model)
         elif (kind, model) != self._first:
