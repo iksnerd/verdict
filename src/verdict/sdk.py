@@ -168,8 +168,7 @@ class Verdict:
             raise VerdictError(str(exc), status=502, code="upstream") from exc
 
     def _served(self, request: DecideRequest) -> DecideResponse:
-        flags = {k: True for k, on in (("allow_unmeasured", self.allow_unmeasured),
-                                       ("yesno", self.yesno)) if on}
+        flags = _http.opt_flags(self.allow_unmeasured, self.yesno)
         questions = {qid: q.model_dump(exclude_none=True) for qid, q in request.questions.items()}
         with _served_errors():
             raw = _http.decide(request.state, questions, url=self._url, model=request.model, **flags)

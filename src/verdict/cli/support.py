@@ -38,6 +38,17 @@ def _fail(error: str | BaseException, code: str | None = None, **extra) -> int:
     return 2
 
 
+def _warn(message: str) -> None:
+    """One `verdict:` line on stderr, no exit code. `sys.stderr` is read at call time, so a test
+    that swaps it (capsys) still catches the line."""
+    print(f"verdict: {message}", file=sys.stderr)
+
+
+def _stdin_is_terminal() -> bool:
+    """Whether stdin is a terminal; a stdin without `isatty` (a test double) is not."""
+    return getattr(sys.stdin, "isatty", lambda: False)()
+
+
 def _suggest(name: str, choices, end: str = ".") -> str:
     """"; did you mean X?" for a near miss, else `end`, so a sentence closes either way."""
     import difflib

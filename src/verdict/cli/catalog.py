@@ -42,7 +42,7 @@ def _validate_cmd(args: argparse.Namespace) -> int:
             # The shared envelope, plus `valid` for callers that read it.
             code = support._CODES.get(type(exc).__name__, "usage")
             print(json.dumps({"valid": False, "error": {"code": code, "message": str(exc)}}))
-            print(f"verdict: {exc}", file=sys.stderr)
+            support._warn(str(exc))
             return 2
         return support._fail(exc)
     if args.json:
@@ -50,7 +50,7 @@ def _validate_cmd(args: argparse.Namespace) -> int:
     else:
         print(f"Valid: {len(questions)} question(s)")
         for warning in warnings:
-            print(f"verdict: {warning}", file=sys.stderr)
+            support._warn(warning)
     return 0
 
 

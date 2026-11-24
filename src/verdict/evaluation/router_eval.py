@@ -25,6 +25,7 @@ from typing import Any, Iterable, Sequence
 
 from .metrics import auc, bootstrap_ci
 from ..backends.engine import PROMPT_TOKEN_BUDGET
+from ..inputs import read_jsonl
 from ..pipeline.store import write_json_atomic
 from ..judge.router import BIG, ROUTER_BANK, SMALL, T_DIFFICULTY, T_SENSITIVE, route
 
@@ -49,7 +50,7 @@ COST_RATIO = 3.0
 
 
 def load_prompts(path: Path = EVALS) -> list[dict]:
-    rows = [json.loads(line) for line in Path(path).read_text().splitlines() if line.strip()]
+    rows = read_jsonl(path)
     if not rows:
         raise ValueError(f"{path} is empty")
     return rows

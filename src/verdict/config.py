@@ -375,10 +375,10 @@ def _systemone_model(value) -> str:
 LOOPBACK = ("127.0.0.1", "localhost", "::1")
 
 
-def systemone_key(url: str) -> str:
-    """The key for a /v1/systemone server: $TYPESAFE_API_KEY, or a placeholder for loopback,
-    where a local server (verdict itself, Kev) ignores it. Never read from a file: `verdict init`
-    writes the config and people commit it."""
+def systemone_key_or_none(url: str) -> str | None:
+    """The key for a /v1/systemone server, or None when there is none to use: $TYPESAFE_API_KEY,
+    or a placeholder for loopback, where a local server (verdict itself, Kev) ignores it. Never
+    read from a file: `verdict init` writes the config and people commit it."""
     from urllib.parse import urlsplit
 
     key = os.environ.get("TYPESAFE_API_KEY")
@@ -386,6 +386,14 @@ def systemone_key(url: str) -> str:
         return key
     if (urlsplit(url).hostname or url) in LOOPBACK:
         return "local"
+    return None
+
+
+def systemone_key(url: str) -> str:
+    """`systemone_key_or_none`, or a ConfigError that says the key is missing."""
+    key = systemone_key_or_none(url)
+    if key is not None:
+        return key
     raise ConfigError(f"{url} needs $TYPESAFE_API_KEY. Every state asked about is sent to that "
                       "service and billed per input token")
 

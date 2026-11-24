@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import sys
 import time
 from pathlib import Path
@@ -73,16 +72,12 @@ def _correct(answer: dict, expected) -> bool:
 
 
 def _systemone_ask(args: argparse.Namespace):
-    from urllib.parse import urlparse
-
     from ..evaluation import bench
 
     from .. import config
 
     config.check_systemone_url(args.systemone)  # a ConfigError is a ValueError: reported, exit 2
-    host = urlparse(args.systemone).hostname or args.systemone
-    key = os.environ.get("TYPESAFE_API_KEY") or ("local" if host in ("127.0.0.1", "localhost")
-                                                 else None)
+    key = config.systemone_key_or_none(args.systemone)
     if key is None:
         raise ValueError(f"--systemone {args.systemone} needs TYPESAFE_API_KEY; the examples are "
                          "invented, but each row is sent to that service and billed")

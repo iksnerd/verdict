@@ -46,7 +46,7 @@ def _serve_cmd(args: argparse.Namespace) -> int:
 
     from ..backends.mlx import MlxBackend
 
-    budget = args.budget if args.budget is not None else settings.prompt_token_budget
+    budget = inference._budget(args, settings)
     bits = args.bits or settings.bits
     backend = MlxBackend(args.model, multilingual_id=settings.multilingual_path,
                          extra_checkpoints=settings.extra_checkpoints, budget=budget or None,
@@ -69,7 +69,7 @@ def _serve_cmd(args: argparse.Namespace) -> int:
 
 
 def _port_taken(args: argparse.Namespace) -> int:
-    print(f"verdict: cannot serve on {args.host}:{args.port}: the port is in use", file=sys.stderr)
+    support._warn(f"cannot serve on {args.host}:{args.port}: the port is in use")
     print(f"  something else is listening. `lsof -nP -iTCP:{args.port} -sTCP:LISTEN` names it.",
           file=sys.stderr)
     print("  pick another with --port, and point clients at it with $VERDICT_URL.",
@@ -88,8 +88,7 @@ def _run(uvicorn, app, args: argparse.Namespace) -> int:
             # only when it really is not bindable.
             why = (f"; is {args.host}:{args.port} taken?" if not _port_free(args.host, args.port)
                    else "; the port is free, so see the lines above for why")
-            print(f"verdict: the server stopped without serving (exit {exc.code}){why}",
-                  file=sys.stderr)
+            support._warn(f"the server stopped without serving (exit {exc.code}){why}")
             return 2
     return 0
 

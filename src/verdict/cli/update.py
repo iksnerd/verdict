@@ -6,7 +6,6 @@ from __future__ import annotations
 import argparse
 import os
 import re
-import sys
 from pathlib import Path
 
 from . import setup, support
@@ -104,12 +103,12 @@ def _released(url: str) -> set[tuple[int, ...]] | None:
         with urllib.request.urlopen(request, timeout=10) as r:
             releases = json.loads(r.read())
     except (OSError, ValueError) as exc:
-        print(f"verdict: could not read published releases from GitHub ({exc}); "
-              "the published-release filter was skipped, so any vX.Y.Z tag counts", file=sys.stderr)
+        support._warn(f"could not read published releases from GitHub ({exc}); "
+                      "the published-release filter was skipped, so any vX.Y.Z tag counts")
         return None
     if not isinstance(releases, list):
-        print("verdict: GitHub's release list had an unexpected shape; the published-release "
-              "filter was skipped, so any vX.Y.Z tag counts", file=sys.stderr)
+        support._warn("GitHub's release list had an unexpected shape; the published-release "
+                      "filter was skipped, so any vX.Y.Z tag counts")
         return None
     out = set()
     for rel in releases:
@@ -168,12 +167,12 @@ def _update_tool(args: argparse.Namespace) -> int:
             code, out = _run(install[:3] + ["--refresh-package", "verdict"] + install[3:])
     except KeyboardInterrupt:
         # The old install may already be gone; put it back before leaving.
-        print(f"verdict: interrupted. {_restore_guarded(pin, extras)[0]}", file=sys.stderr)
+        support._warn(f"interrupted. {_restore_guarded(pin, extras)[0]}")
         return 130
     if code != 0:
         note, interrupted = _restore_guarded(pin, extras)
         if interrupted:
-            print(f"verdict: `uv tool install {spec}` failed:\n{out}\n{note}", file=sys.stderr)
+            support._warn(f"`uv tool install {spec}` failed:\n{out}\n{note}")
             return 130
         return support._fail(f"`uv tool install {spec}` failed:\n{out}\n{note}")
     print(f"updated {current} -> {newest}")
@@ -192,10 +191,8 @@ def _restore_guarded(version: str | None, extras: list[str]) -> tuple[str, bool]
     try:
         return _restore(version, extras), False
     except KeyboardInterrupt:
-        spec = _tool_spec(extras, version or "X.Y.Z")
         return ("interrupted again while restoring, so the old install may be missing and `verdict` "
-                f"may not run. Reinstall it with:\n  {_tool_install_cmd(spec)}"
-                + ("  (a release tag)" if version is None else "")), True
+                f"may not run. Reinstall it with:\n  {_reinstall_line(extras, version)}"), True
 
 
 def _restore(version: str | None, extras: list[str]) -> str:
@@ -206,7 +203,7 @@ def _restore(version: str | None, extras: list[str]) -> str:
     if version is None:
         return ("the previous version is not a release tag, so it was not restored and `verdict` "
                 "may be missing. Reinstall it by hand with:\n"
-                f"  {_tool_install_cmd(_tool_spec(extras, 'X.Y.Z'))}  (a release tag)")
+                f"  {_reinstall_line(extras, None)}")
     spec = _tool_spec(extras, version)
     install = _tool_install_argv(spec)
     code, _ = _run(install)
@@ -215,7 +212,15 @@ def _restore(version: str | None, extras: list[str]) -> str:
                 "install may have changed the tool before it stopped: `verdict --version` says "
                 "which version is installed")
     return (f"v{version} could not be restored either, so `verdict` may be missing. Reinstall it with:\n"
-            f"  {_tool_install_cmd(spec)}")
+            f"  {_reinstall_line(extras, version)}")
+
+
+def _reinstall_line(extras: list[str], version: str | None) -> str:
+    """The `uv tool install` line to bring `version` back; a placeholder tag, marked as such, when
+    the previous version was not a release."""
+    if version is None:
+        return f"{_tool_install_cmd(_tool_spec(extras, 'X.Y.Z'))}  (a release tag)"
+    return _tool_install_cmd(_tool_spec(extras, version))
 
 
 def _tool_spec(extras: list[str], tag: str) -> str:

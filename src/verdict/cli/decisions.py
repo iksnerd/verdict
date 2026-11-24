@@ -42,9 +42,8 @@ def _read_fits(path: str | None) -> dict:
 
 def _warn_empty_fits(path: str | None, fits: dict) -> None:
     if path and not fits:
-        print(f"verdict: {path} holds no fits (\"questions\" is empty), so nothing is calibrated; "
-              "`cascade --check --fit` writes an empty file when no question had a fit",
-              file=sys.stderr)
+        support._warn(f"{path} holds no fits (\"questions\" is empty), so nothing is calibrated; "
+                      "`cascade --check --fit` writes an empty file when no question had a fit")
 
 
 def _check_fit_identity(ask, meta: dict, result: dict, path: str | None) -> None:
@@ -73,7 +72,7 @@ def _decide_cmd(args: argparse.Namespace) -> int:
     if args.jsonl and args.state is not None:
         return support._fail("--jsonl reads states from stdin, one per line; drop the state "
                              "argument, or drop --jsonl to ask about this one state")
-    if args.jsonl and getattr(sys.stdin, "isatty", lambda: False)():
+    if args.jsonl and support._stdin_is_terminal():
         return support._fail("--jsonl reads states from stdin, and stdin is a terminal; pipe or "
                              "redirect a file: verdict decide --jsonl -q BANK < states.jsonl")
     try:
@@ -91,8 +90,7 @@ def _decide_cmd(args: argparse.Namespace) -> int:
         if args.jsonl:
             # A generator, not a list: a live pipe never reaches EOF, and each line is answered
             # as it arrives. Each state keeps its input line number, blank lines included.
-            states = _jsonl_states(sys.stdin, warn=lambda line: print(f"verdict: {line}",
-                                                                      file=sys.stderr))
+            states = _jsonl_states(sys.stdin, warn=support._warn)
         elif args.state is not None:
             states = [(None, inputs.read_state(args.state))]
         else:
@@ -138,7 +136,7 @@ def _decide_cmd(args: argparse.Namespace) -> int:
         return support._fail("no states on stdin; pipe one JSON state (or text) per line")
     if args.jsonl:
         for line in _spread_report(seen):
-            print(f"verdict: {line}", file=sys.stderr)
+            support._warn(line)
     return 0
 
 
@@ -344,7 +342,7 @@ def _cascade_cmd(args: argparse.Namespace) -> int:
 
     if args.check:
         try:
-            rows = [json.loads(line) for line in Path(args.check).read_text().splitlines() if line.strip()]
+            rows = inputs.read_jsonl(args.check)
             states = [r["state"] for r in rows]
             labels = []
             for i, r in enumerate(rows):
@@ -361,8 +359,7 @@ def _cascade_cmd(args: argparse.Namespace) -> int:
         if args.out:
             inference.write_atomic(args.out, json.dumps(
                 {"questions": {q: r["fit"] for q, r in report.items() if r["fit"]}}, indent=2) + "\n")
-            print(f"verdict: wrote the fitted cuts to {args.out}; use them with --calibration",
-                  file=sys.stderr)
+            support._warn(f"wrote the fitted cuts to {args.out}; use them with --calibration")
         if args.json:
             print(json.dumps(report, indent=2))
             return 0
@@ -382,13 +379,12 @@ def _cascade_cmd(args: argparse.Namespace) -> int:
             print("escalating helps for every question checked.")
         return 0
 
-    if getattr(sys.stdin, "isatty", lambda: False)():
+    if support._stdin_is_terminal():
         return support._fail("cascade reads states from stdin, one JSON state per line, and stdin "
                              "is a terminal; pipe or redirect a file: verdict cascade -q BANK "
                              "--escalate URL < states.jsonl")
     try:
-        numbered = list(_jsonl_states(sys.stdin, warn=lambda line: print(f"verdict: {line}",
-                                                                         file=sys.stderr)))
+        numbered = list(_jsonl_states(sys.stdin, warn=support._warn))
     except ValueError as exc:
         return support._fail(exc)
     if not numbered:
@@ -400,11 +396,11 @@ def _cascade_cmd(args: argparse.Namespace) -> int:
     # Sent means a request was made: a state whose escalation failed still left the machine.
     sent, lost = result.states_sent, len(result.failed)
     outcome = f" ({sent - lost} answered, {lost} failed)" if lost else ""
-    print(f"verdict: escalated {result.escalated} of {result.answers} answers to {second_url}: "
-          f"{sent} of {len(numbered)} states were sent there{outcome}, {len(numbered) - sent} "
-          "stayed on the primary", file=sys.stderr)
+    support._warn(f"escalated {result.escalated} of {result.answers} answers to {second_url}: "
+                  f"{sent} of {len(numbered)} states were sent there{outcome}, {len(numbered) - sent} "
+                  "stayed on the primary")
     if result.failed:
-        print(f"verdict: {lost} state(s) were sent but could not be escalated and kept the primary "
-              f"answer (first: {result.failed[0][1]})", file=sys.stderr)
+        support._warn(f"{lost} state(s) were sent but could not be escalated and kept the primary "
+                      f"answer (first: {result.failed[0][1]})")
         return 1
     return 0

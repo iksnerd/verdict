@@ -118,9 +118,15 @@ def fields_named(questions: dict[str, Any]) -> list[str]:
     """Every `field` the questions refer to, in first-seen order."""
     seen: dict[str, None] = {}
     for q in questions.values():
-        for f in _FIELD.findall(q.get("instructions", "")):
+        for f in _FIELD.findall(instruction_text(q)):
             seen.setdefault(f, None)
     return list(seen)
+
+
+def read_jsonl(path) -> list:
+    """Every non-blank line of a JSON Lines file, parsed. A bad line raises ValueError and an
+    unreadable file OSError; the caller words the failure."""
+    return [json.loads(line) for line in Path(path).read_text().splitlines() if line.strip()]
 
 
 def instruction_text(q: Any) -> str:

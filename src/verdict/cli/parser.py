@@ -512,6 +512,17 @@ def _seconds(text: str) -> float:
     return value
 
 
+def pause_flag(p: argparse.ArgumentParser) -> None:
+    """`--pause` between calls, for the commands that make many."""
+    p.add_argument("--pause", type=_seconds, default=0.05, metavar="SEC",
+                   help="between calls (default: 0.05)")
+
+
+def systemone_model_flag(p: argparse.ArgumentParser) -> None:
+    p.add_argument("--systemone-model", default="jev-latest", metavar="NAME",
+                   help="the model field sent with --systemone (default: jev-latest)")
+
+
 class _Parser(argparse.ArgumentParser):
     """argparse, plus "did you mean" on a mistyped command or choice."""
 
@@ -728,8 +739,7 @@ def main(argv: list[str] | None = None) -> int:
     c.add_argument("--heldout", type=float, default=0.3, help="fraction held out (default: 0.3)")
     c.add_argument("--seed", type=int, default=0,
                    help="seed for --limit's sample and the held-out split (default: 0)")
-    c.add_argument("--pause", type=_seconds, default=0.05, metavar="SEC",
-                   help="between calls (default: 0.05)")
+    pause_flag(c)
     yesno_flag(c)
     server_flags(c)
     c.set_defaults(fn=evaluation._calibrate_cmd)
@@ -742,14 +752,12 @@ def main(argv: list[str] | None = None) -> int:
     b.add_argument("--verify", metavar="SCORECARD",
                    help="compare this scorecard with the newest older one beside it; no model")
     b.add_argument("--against", metavar="SCORECARD", help="with --verify, compare with this one")
-    b.add_argument("--pause", type=_seconds, default=0.05, metavar="SEC",
-                   help="between calls (default: 0.05)")
+    pause_flag(b)
     b.add_argument("--systemone", metavar="URL",
                    help="score a TypeSafe-compatible /v1/systemone endpoint instead of verdict: "
                         "https://api.typesafe.ai for Jev (needs TYPESAFE_API_KEY), or a "
                         "`verdict serve` URL")
-    b.add_argument("--systemone-model", default="jev-latest", metavar="NAME",
-                   help="the model field sent with --systemone (default: jev-latest)")
+    systemone_model_flag(b)
     server_flags(b)
     b.set_defaults(fn=evaluation._bench_cmd)
 
@@ -759,14 +767,12 @@ def main(argv: list[str] | None = None) -> int:
     ex.add_argument("--path", action="store_true",
                     help="print each named example's directory instead of running it, so an "
                          "installed copy's bank can be passed to -q")
-    ex.add_argument("--pause", type=_seconds, default=0.05, metavar="SEC",
-                    help="between calls (default: 0.05)")
+    pause_flag(ex)
     ex.add_argument("--systemone", metavar="URL",
                     help="score with a TypeSafe-compatible /v1/systemone endpoint instead of "
                          "verdict: a `verdict serve`, a Kev server, or https://api.typesafe.ai "
                          "(needs TYPESAFE_API_KEY)")
-    ex.add_argument("--systemone-model", default="jev-latest", metavar="NAME",
-                    help="the model field sent with --systemone (default: jev-latest)")
+    systemone_model_flag(ex)
     quality_flag(ex)
     yesno_flag(ex)
     server_flags(ex)

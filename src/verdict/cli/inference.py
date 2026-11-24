@@ -9,12 +9,12 @@ from __future__ import annotations
 
 import argparse
 import os
-import sys
 import time
 
 from .. import client
 from ..backends.engine import load
 from ..errors import QuestionError
+from . import support
 
 #: What `/v1/capabilities` reports for a server fronting something other than laya.
 PROXY_FAMILIES = ("jev", "systemone")
@@ -26,8 +26,8 @@ _ENGINES: dict[str, object] = {}
 
 
 def _say_local(exc: Exception) -> None:
-    print(f"verdict: {exc}; loading the model in this process (a few seconds and about 800 MB "
-          "of GPU memory; `verdict serve` keeps one loaded)", file=sys.stderr)
+    support._warn(f"{exc}; loading the model in this process (a few seconds and about 800 MB "
+                  "of GPU memory; `verdict serve` keeps one loaded)")
 
 
 def write_atomic(path, text: str) -> None:
@@ -56,8 +56,25 @@ def _resolved_model(flag: str | None, settings) -> str:
 
     model, warning = config.resolve_model(flag or settings.model_path, explicit=bool(flag))
     if warning:
-        print(f"verdict: {warning}", file=sys.stderr)
+        support._warn(warning)
     return model
+
+
+def _kind(result: dict) -> str:
+    """Who answered, as `Asker.sources` records it: "server", or "in-process" for anything else."""
+    return "server" if str(result.get("source", "")).startswith("server") else "in-process"
+
+
+def _url(args: argparse.Namespace, settings) -> str:
+    """The `--url` flag (checked), else the configured server."""
+    from .. import config
+
+    return config.check_url(args.url, "--url") if args.url else settings.url
+
+
+def _budget(args: argparse.Namespace, settings) -> int | None:
+    """The `--budget` flag when given (0 included), else the configured budget."""
+    return args.budget if args.budget is not None else settings.prompt_token_budget
 
 
 def _answer(state, questions: dict, url: str, model_path: str, model: str | None = None,
@@ -115,7 +132,7 @@ class _Asker:
         from .. import config
 
         self.settings = config.load()
-        self.url = config.check_url(args.url, "--url") if args.url else self.settings.url
+        self.url = _url(args, self.settings)
         self.lang = getattr(args, "lang", None) or self.settings.lang
         self.server_only = getattr(args, "server_only", False)
         self.allow_unmeasured = getattr(args, "allow_unmeasured", False)
@@ -160,7 +177,7 @@ class _Asker:
     def warn(self, line: str) -> None:
         if line not in self._warned:
             self._warned.add(line)
-            print(f"verdict: {line}", file=sys.stderr)
+            support._warn(line)
 
     def __call__(self, state, questions: dict) -> dict:
         from .. import inputs
@@ -183,12 +200,13 @@ class _Asker:
             self.warn(clipped)
         self._rows += 1
         result = self._ask(state, questions)
+        kind = _kind(result)
         if self._pin is None:
-            self._pin = "server" if str(result.get("source", "")).startswith("server") else "in-process"
+            self._pin = kind
             if self._pin == "in-process" and not self.server_only:
                 self.warn("this run is pinned to in-process: a server that starts later is ignored, "
                           "so every row is answered by the same model")
-        self._note_source(result)
+        self._note_source(result, kind)
         if result.get("source") == "in-process":
             # The server went away and laya answered here: its rules apply from the next row, and
             # a server that comes back gets one fresh probe (`_reasked` is spent per appearance).
@@ -212,11 +230,10 @@ class _Asker:
         result["answers"] = library.as_yesno(result["answers"], rewritten)
         return result
 
-    def _note_source(self, result: dict) -> None:
+    def _note_source(self, result: dict, kind: str) -> None:
         """Say once on stderr when a run changes checkpoint between rows: a server that appears or
         goes away mid-run answers the rest with another model, and a fit or a spread taken over
         both mixes two."""
-        kind = "server" if str(result.get("source", "")).startswith("server") else "in-process"
         model = str(result.get("model", ""))
         self.models.add(model)
         self.sources.add(kind)
@@ -249,8 +266,7 @@ class _Asker:
     def _flags(self) -> dict:
         """The opt-outs the server needs to answer as this CLI call asked: only those set, so a
         call without them looks as it always has."""
-        return {k: True for k, on in (("allow_unmeasured", self.allow_unmeasured),
-                                      ("yesno", self.yesno)) if on}
+        return client.opt_flags(self.allow_unmeasured, self.yesno)
 
 
 def _refusal(problems: list[str]) -> str:

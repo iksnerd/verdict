@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import sys
 import time
 from pathlib import Path
@@ -73,8 +72,7 @@ def _bench_cmd(args: argparse.Namespace) -> int:
         except config.ConfigError as exc:
             return support._fail(exc)
         host = urlparse(args.systemone).hostname or args.systemone
-        key = os.environ.get("TYPESAFE_API_KEY") or (
-            "local" if host in ("127.0.0.1", "localhost") else None)
+        key = config.systemone_key_or_none(args.systemone)
         if key is None:
             return support._fail(f"--systemone {args.systemone} needs TYPESAFE_API_KEY; the datasets are "
                          "public, but each item is sent to that service and billed")
@@ -137,9 +135,8 @@ def _bench_cmd(args: argparse.Namespace) -> int:
         if not args.systemone:
             used = [a for a in (asker, *askers.values()) if a.sources]
             if len({frozenset(a.sources) for a in used}) > 1:
-                print("verdict: the suites were not all answered by the same source (a server for "
-                      "some, this process for others), so their numbers are not one measurement",
-                      file=sys.stderr)
+                support._warn("the suites were not all answered by the same source (a server for "
+                              "some, this process for others), so their numbers are not one measurement")
             served = sorted({m for a in used if "server" in a.sources for m in a.models})
             if served and args.out:
                 # The server's own bits and prompt budget are not reported (`/v1/capabilities`
@@ -207,7 +204,7 @@ def _calibrate_cmd(args: argparse.Namespace) -> int:
     except ValueError as exc:
         return support._fail(exc)
     try:
-        rows = [json.loads(line) for line in Path(args.examples).read_text().splitlines() if line.strip()]
+        rows = inputs.read_jsonl(args.examples)
     except (ValueError, OSError) as exc:
         return support._fail(f"{args.examples}: {exc}")
     if args.limit is not None and args.limit < 0:

@@ -169,6 +169,12 @@ def route_batch(
     return sorted(results, key=lambda r: r["index"])
 
 
+def opt_flags(allow_unmeasured: bool = False, yesno: bool = False) -> dict[str, bool]:
+    """The CLI's opt-outs that are set, as `decide` keywords, in the order they go on the query:
+    only those on, so a call without them looks as it always has."""
+    return {k: True for k, on in (("allow_unmeasured", allow_unmeasured), ("yesno", yesno)) if on}
+
+
 def decide(
     state: Any, questions: dict[str, Any], url: str | None = None, timeout: float | None = None,
     model: str | None = None, allow_unmeasured: bool = False, yesno: bool = False,
@@ -185,7 +191,7 @@ def decide(
         body["model"] = model
     # The server refuses and rewrites as the CLI does (library.prepare), so the CLI's opt-outs
     # travel with the call. An older server ignores unknown query parameters.
-    flags = [f for f, on in (("allow_unmeasured", allow_unmeasured), ("yesno", yesno)) if on]
+    flags = list(opt_flags(allow_unmeasured, yesno))
     path = "/v1/decide" + ("?" + "&".join(f"{f}=true" for f in flags) if flags else "")
     return _post(_base(url), path, body, timeout,
                  frozenset({"answers"}))

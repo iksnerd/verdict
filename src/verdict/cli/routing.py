@@ -123,12 +123,10 @@ def _batch_cmd(args: argparse.Namespace) -> int:
 
 
 def _route_cmd(args: argparse.Namespace) -> int:
-    from .. import config
-
     settings = support._settings()
     args.model = inference._resolved_model(args.model, settings)
-    args.url = config.check_url(args.url, "--url") if args.url else settings.url
-    args.budget = args.budget if args.budget is not None else settings.prompt_token_budget
+    args.url = inference._url(args, settings)
+    args.budget = inference._budget(args, settings)
 
     if args.batch:
         return _batch_cmd(args)
