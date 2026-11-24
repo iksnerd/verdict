@@ -125,6 +125,21 @@ def measured_on(model: str) -> bool:
     return Path(str(model)).name == MEASURED_ON
 
 
+def served_checkpoint(backend: Any, name: str | None) -> str:
+    """The checkpoint a request's `model` name selects on `backend`: a path or Hub id, which is
+    what `measured_on` reads. `None`, `english` and the Jev alias are the served one;
+    `multilingual` and `[model.extra]` names are the ones the backend maps them to; anything else
+    is returned as given (an unknown name is refused by the backend, a literal path is a path)."""
+    from .backends.base import model_id_of
+
+    served = str(model_id_of(backend, backend.name))
+    if name is None or name in ("english", "jev-latest"):
+        return served
+    if name == "multilingual" and getattr(backend, "multilingual_id", None):
+        return str(backend.multilingual_id)
+    return str(getattr(backend, "extra_checkpoints", {}).get(name, name))
+
+
 def as_choice(questions: dict[str, Any], keep_measured: bool = True
               ) -> tuple[dict[str, Any], set[str]]:
     """Each yes/no rewritten as a choice between `no` and `yes`, and the ids rewritten.
@@ -210,7 +225,7 @@ def ask(backend: Any, request: Any, *, allow_unmeasured: bool = False, yesno: bo
     yes/no rewrite and no 20-option cap, since Jev takes 255. A refused question never reaches the
     upstream. Raises `QuestionError` for a refusal.
     """
-    from .backends.base import is_proxy, model_id_of
+    from .backends.base import is_proxy
     from .schema import DecideRequest, DecideResponse, NoulAnswer, laya_questions
 
     if is_proxy(backend):
@@ -221,7 +236,7 @@ def ask(backend: Any, request: Any, *, allow_unmeasured: bool = False, yesno: bo
         return backend.decide(request)
     questions, rewritten, _ = prepare(
         request.state, laya_questions(request.questions),
-        model=request.model or model_id_of(backend, backend.name),
+        model=served_checkpoint(backend, request.model),
         allow_unmeasured=allow_unmeasured, yesno=yesno, opt_out=opt_out)
     out = backend.decide(DecideRequest(state=request.state, questions=questions,
                                        model=request.model))

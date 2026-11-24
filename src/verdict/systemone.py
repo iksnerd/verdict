@@ -132,6 +132,12 @@ class SystemOneClient:
                                   noul_confidence="provider_defined"))
 
     def _request(self, method: str, path: str, **kwargs) -> httpx.Response:
+        # Note on retries: a POST is re-sent on 408/429/5xx and on a transport error, so an
+        # upstream that completed the first attempt (and billed it) before failing the response
+        # is asked again. Left as is on purpose; a caller who cannot afford it passes attempts=1.
+        if self.http.is_closed:
+            raise UpstreamError(f"{self.base_url}{path}: the client is closed; make a new "
+                                "SystemOneClient (or keep it open with a `with` block)")
         for attempt in range(self.attempts):
             response = None
             try:

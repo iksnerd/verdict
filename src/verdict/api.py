@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Response
 from fastapi.responses import JSONResponse
 
 from pydantic import BaseModel, field_validator
@@ -32,6 +32,7 @@ from .schema import (
     Usage,
     laya_questions,
 )
+from .systemone import UpstreamError
 
 
 #: Cap on one batch request. Each prompt is a separate forward pass (the port has no cross-state
@@ -95,14 +96,21 @@ def _model_name(name: str | None, backend: Backend | None) -> str | None:
     return None if name in _LOCAL_ALIASES and name not in known else name
 
 
+#: The card's date when the checkpoint is not on disk to be dated.
+UNDATED = "1970-01-01"
+
+
 def _release_date(backend: Backend) -> str:
-    """The checkpoint's date on disk, or today when it is not a local path (a Hub id, uniform)."""
+    """The checkpoint's date on disk, or a fixed placeholder when it is not a local path (a Hub id,
+    uniform). Not today's date: a card that changes between calls looks like a new release."""
     import datetime
     from pathlib import Path
 
-    path = Path(str(model_id_of(backend, "")))
-    stamp = path.stat().st_mtime if path.exists() else datetime.datetime.now().timestamp()
-    return datetime.date.fromtimestamp(stamp).isoformat()
+    model_id = model_id_of(backend, None)
+    path = Path(str(model_id)) if model_id else None
+    if path is None or not path.exists():
+        return UNDATED
+    return datetime.date.fromtimestamp(path.stat().st_mtime).isoformat()
 
 
 class Refused(Exception):
@@ -120,9 +128,10 @@ def _backend_errors():
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except QuestionError as exc:
         raise Refused(str(exc)) from exc
-    except ValueError as exc:
+    except UpstreamError as exc:
         # A SystemOneBackend's upstream (Kev, Von, another verdict) didn't answer: we are a
-        # proxy here, so its failure is a bad gateway, not our own 500 with a traceback.
+        # proxy here, so its failure is a bad gateway, not our own 500 with a traceback. Any other
+        # error (a validation failure, a config error, a bug here) is ours, and stays a 500.
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
@@ -145,7 +154,11 @@ def create_app(backend: Backend | None = None) -> FastAPI:
 
     @app.get("/healthz")
     def healthz():
-        return {"status": "ok", "backend": backend.name}
+        # Still 200 for a uniform backend (a bare `uvicorn verdict.api:app`): the process is up.
+        # `ready` says whether it can answer anything useful, so a supervisor can tell.
+        if backend.name == "uniform":
+            return {"status": "no_model", "backend": backend.name, "ready": False}
+        return {"status": "ok", "backend": backend.name, "ready": True}
 
     @app.post("/v1/decide", response_model=DecideResponse, response_model_exclude={"usage"},
               response_model_exclude_none=True,
@@ -186,7 +199,9 @@ def create_app(backend: Backend | None = None) -> FastAPI:
                                  usage=out.usage or Usage(input_tokens=0))
 
     @app.get("/v1/models", response_model=ModelList)
-    def models() -> ModelList:
+    def models(response: Response) -> ModelList:
+        if backend.name == "uniform":
+            response.headers["X-Verdict-Backend"] = "uniform"   # the client reads it as no server
         own = listed_models(backend)
         if own is not None:
             #: A proxied backend (SystemOneBackend) has its own real model list; the cards below

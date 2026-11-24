@@ -17,7 +17,6 @@ Nothing here imports `laya_mlx` or `transformers`, so the server path never pays
 from __future__ import annotations
 
 import json
-import os
 import urllib.error
 import urllib.request
 from typing import Any
@@ -34,7 +33,12 @@ CONNECT_TIMEOUT = 0.35
 
 
 def server_url() -> str:
-    return os.environ.get("VERDICT_URL", DEFAULT_URL).rstrip("/")
+    """The configured server: $VERDICT_URL, else `[server].url` in verdict.toml, else the default,
+    the same resolution `verdict config` reports. An empty variable has no say, and a bad value
+    raises `ConfigError`, so a malformed URL is named once instead of failing inside a request."""
+    from . import config  # not at the top: config never imports this module, but keep it lazy
+
+    return config.load().url
 
 
 class NoServer(Exception):
@@ -83,13 +87,15 @@ BATCH_TIMEOUT_PER_PROMPT = 0.5
 def _post(
     base: str, path: str, body: dict[str, Any], timeout: float, expect: frozenset[str]
 ) -> dict[str, Any]:
-    request = urllib.request.Request(
-        f"{base}{path}",
-        data=json.dumps(body).encode(),
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
     try:
+        # Inside the try: a base with no scheme makes Request raise a bare ValueError, which is
+        # "no server here" to a caller deciding whether to fall back.
+        request = urllib.request.Request(
+            f"{base}{path}",
+            data=json.dumps(body).encode(),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
         with urllib.request.urlopen(request, timeout=timeout) as response:
             payload = json.loads(response.read())
     except urllib.error.HTTPError as exc:
@@ -98,7 +104,7 @@ def _post(
         if exc.code in _NOT_VERDICT:
             raise NoServer(f"{base} has no {path} ({exc.code})") from exc
         raise _server_error(exc) from exc
-    except (urllib.error.URLError, OSError, json.JSONDecodeError) as exc:
+    except (urllib.error.URLError, OSError, ValueError) as exc:  # JSONDecodeError is a ValueError
         if _timed_out(exc):
             raise ServerTimeout(base, timeout) from exc
         reason = getattr(exc, "reason", exc)
@@ -195,10 +201,12 @@ def capabilities(url: str | None = None, model: str | None = None,
         if exc.code in _NOT_VERDICT:
             raise NoServer(f"{base} does not expose capability discovery") from exc
         raise _server_error(exc) from exc
-    except (urllib.error.URLError, OSError, json.JSONDecodeError) as exc:
+    except (urllib.error.URLError, OSError, ValueError) as exc:
         raise NoServer(f"capability discovery unavailable at {base}") from exc
     if not isinstance(payload, dict) or not {"family", "model"} <= payload.keys():
         raise NoServer(f"{base} returned invalid capability metadata")
+    if payload.get("family") == "uniform" or payload.get("model") == "uniform":
+        raise NoServer(f"the server at {base} is running the uniform backend, which has no model")
     return payload
 
 
@@ -209,12 +217,16 @@ def models(url: str | None = None, timeout: float = CONNECT_TIMEOUT) -> list[dic
     try:
         with urllib.request.urlopen(base + "/v1/models", timeout=timeout) as response:
             payload = json.loads(response.read())
+            served = getattr(response, "headers", None)
+            uniform = served is not None and served.get("X-Verdict-Backend") == "uniform"
     except urllib.error.HTTPError as exc:
         if exc.code in _NOT_VERDICT:
             raise NoServer(f"{base} does not list models") from exc
         raise _server_error(exc) from exc
-    except (urllib.error.URLError, OSError, json.JSONDecodeError) as exc:
+    except (urllib.error.URLError, OSError, ValueError) as exc:
         raise NoServer(f"no model list at {base}") from exc
+    if uniform:
+        raise NoServer(f"the server at {base} is running the uniform backend, which has no model")
     listed = payload.get("models") if isinstance(payload, dict) else None
     if not isinstance(listed, list):
         raise NoServer(f"{base} returned an invalid model list")

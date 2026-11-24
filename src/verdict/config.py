@@ -80,13 +80,16 @@ class Settings:
 
     __slots__ = ("url", "model_path", "prompt_token_budget", "multilingual_path", "source",
                  "defaulted", "bits", "lang", "extra_checkpoints", "systemone_url",
-                 "systemone_model")
+                 "systemone_model", "sources")
 
     def __init__(self, url, model_path, prompt_token_budget,
                  multilingual_path=DEFAULTS["model"]["multilingual"], source=None, defaulted=(),
                  bits=16, lang="auto", extra_checkpoints=None, systemone_url=None,
-                 systemone_model=DEFAULTS["systemone"]["model"]):
+                 systemone_model=DEFAULTS["systemone"]["model"], sources=None):
         self.url = url
+        #: Where each key's value won from, as `(section, key) -> "$VAR" | file path`; a key not
+        #: here is the built-in default. `explain` reads this rather than re-deriving it.
+        self.sources = dict(sources) if sources else {}
         #: Which checkpoint reads the state: auto (English, warn on other languages), en, multi.
         self.lang = lang
         #: 16 is the checkpoint as shipped; 8 quantizes it at load (FINDINGS §36).
@@ -178,10 +181,16 @@ def load(path: Path | None = None) -> Settings:
     """Resolve settings. `path` forces one file; otherwise every file on the search path applies,
     the more specific overriding the less, key by key."""
     files = config_files(path)
-    found = files[-1] if files else (path if path is not None else None)
+    #: Only a file that exists: a `path` that is not a file applies nothing.
+    found = files[-1] if files else None
     loaded: dict[str, Any] = {}
-    for f in files:
-        loaded = _merge(loaded, _read(f))
+    sources: dict[tuple[str, str], str] = {}
+    for f in files:   # least specific first, so the last file to set a key is the winner
+        read = _read(f)
+        loaded = _merge(loaded, read)
+        for section, table in read.items():
+            for key in table:
+                sources[(section, key)] = str(f)
 
     data = _merge(DEFAULTS, loaded)
     defaulted = tuple(k for k in DEFAULTS if k not in loaded)
@@ -190,9 +199,14 @@ def load(path: Path | None = None) -> Settings:
         value = _env(section, key)
         if value is not None:
             data[section][key] = value
+            sources[(section, key)] = f"${ENV_OVERRIDES[(section, key)]}"
+
+    def where(section: str, key: str) -> str:
+        return (sources[(section, key)] if sources.get((section, key), "").startswith("$")
+                else f"[{section}].{key}")
 
     return Settings(
-        url=_url(data["server"]["url"]),
+        url=_url(data["server"]["url"], where("server", "url")),
         model_path=str(data["model"]["path"]),
         prompt_token_budget=_budget(data["model"]["prompt_token_budget"]),
         multilingual_path=str(data["model"]["multilingual"]),
@@ -201,8 +215,9 @@ def load(path: Path | None = None) -> Settings:
         bits=_bits(data["model"]["bits"]),
         lang=_lang(data["model"]["lang"]),
         extra_checkpoints=_extra(data["model"]["extra"]),
-        systemone_url=_systemone_url(data["systemone"]["url"]),
+        systemone_url=_systemone_url(data["systemone"]["url"], where("systemone", "url")),
         systemone_model=_systemone_model(data["systemone"]["model"]),
+        sources=sources,
     )
 
 
@@ -210,8 +225,6 @@ def explain(path: Path | None = None) -> list[dict[str, Any]]:
     """Every setting as `load` resolves it, with where it came from: `$VAR`, the file's path, or
     "default". Flags are per command, so they are not in this list."""
     settings = load(path)
-    #: Most specific first, so the first file that sets a key is the one that won.
-    files = [(f, _read(f)) for f in reversed(config_files(path))]
     values = {("server", "url"): settings.url, ("model", "path"): settings.model_path,
               ("model", "prompt_token_budget"): settings.prompt_token_budget,
               ("model", "multilingual"): settings.multilingual_path,
@@ -219,15 +232,9 @@ def explain(path: Path | None = None) -> list[dict[str, Any]]:
               ("model", "extra"): settings.extra_checkpoints,
               ("systemone", "url"): settings.systemone_url,
               ("systemone", "model"): settings.systemone_model}
-    rows = []
-    for (section, key), value in values.items():
-        var = ENV_OVERRIDES.get((section, key))
-        if _env(section, key) is not None:
-            source = f"${var}"
-        else:
-            source = next((str(f) for f, data in files if key in data.get(section, {})),
-                          "default")
-        rows.append({"key": f"{section}.{key}", "value": value, "source": source})
+    rows = [{"key": f"{section}.{key}", "value": value,
+             "source": settings.sources.get((section, key), "default")}
+            for (section, key), value in values.items()]
     return rows
 
 
@@ -245,8 +252,7 @@ def _url(value, where: str | None = None) -> str:
     `int()` or `unknown url type` traceback wherever the port or the request is first built."""
     from urllib.parse import urlsplit
 
-    where = where or ("$VERDICT_URL" if os.environ.get("VERDICT_URL") == value
-                      else "[server].url")
+    where = where or "[server].url"
     url = str(value).rstrip("/")
     parts = urlsplit(url)
     if parts.scheme not in ("http", "https") or not parts.hostname:
@@ -292,8 +298,7 @@ def _systemone_url(value, where: str | None = None) -> str | None:
 
     if not value:
         return None
-    where = where or ("$VERDICT_SYSTEMONE_URL" if os.environ.get("VERDICT_SYSTEMONE_URL") == value
-                      else "[systemone].url")
+    where = where or "[systemone].url"
     url = str(value).rstrip("/")
     parts = urlsplit(url)
     if parts.scheme not in ("http", "https") or not parts.hostname:
@@ -435,7 +440,8 @@ LEGACY_LOCAL = "models/verdict-v1-mlx"
 
 def _is_local(path: str) -> bool:
     """A filesystem path rather than a Hugging Face id."""
-    return path.startswith(("/", ".", "~")) or path == LEGACY_LOCAL or path.count("/") != 1
+    return (path.startswith(("/", ".", "~")) or path == LEGACY_LOCAL or path.count("/") != 1
+            or Path(path).expanduser().exists())   # a `foo/bar` directory here is not a Hub id
 
 
 def resolve_model(path: str, explicit: bool = False) -> tuple[str, str | None]:

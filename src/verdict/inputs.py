@@ -188,8 +188,8 @@ def language(state: Any) -> dict[str, Any] | None:
     if _lang is None:
         try:
             _lang = _laya_file("lang")
-        except (ValueError, OSError):
-            return None
+        except (ValueError, OSError, ImportError, SyntaxError):
+            return None   # absent, or a laya whose lang.py this verdict cannot execute
     info = _lang.analyse(state)
     # laya guesses a Latin-script language from word frequencies, and shell reads as Portuguese or
     # French to it: 41 of 3,000 real commands were flagged. A non-Latin script is unambiguous, so
