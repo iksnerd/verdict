@@ -113,13 +113,18 @@ def _answer(state, questions: dict, url: str, model_path: str, model: str | None
         if key not in _ENGINES:
             if not pin:
                 _say_local(exc)
-            note = config.max_len_note(max_len, budget)
-            if note:
-                support._warn(note)
             # A cached Hub checkpoint still draws a "Fetching 6 files" bar on stderr.
             os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
             opts = {**({"bits": bits} if bits != 16 else {}), **({"max_len": max_len} if max_len else {})}
             _ENGINES[key] = load(model_path, **opts)
+            # Judged against the checkpoint's own limit, known once its agent is loaded: the
+            # multilingual one reads 1024, so 768 raises nothing there.
+            if max_len:
+                getattr(_ENGINES[key], "agent", None)
+                native = getattr(_ENGINES[key], "native_max_len", None) or 512
+                note = config.max_len_note(max_len, budget, native)
+                if note:
+                    support._warn(note)
         eng = _ENGINES[key]
         # Clip as the server does, so the two paths never answer the same call differently.
         clipped = eng.clip_state(state, budget)

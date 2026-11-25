@@ -248,3 +248,20 @@ def test_a_fit_made_at_another_length_warns_and_an_old_fit_is_the_default():
     ask.settings.max_len = 0
     decisions._check_fit_identity(ask, {"model": "m", "bits": 16}, {"model": "m"}, "fit.json")
     assert warned == []
+
+
+def test_the_local_warning_judges_against_the_loaded_checkpoint_not_512(monkeypatch, tmp_path, capsys):
+    """A multilingual checkpoint reads 1024, so 768 behind a 128 budget is still moot but 768
+    behind a 2048 budget, or 1024 with room, must not warn about being above a 512 limit."""
+    from fakes import FakeEngine
+
+    isolated(monkeypatch, tmp_path)
+    eng = FakeEngine()
+    eng.native_max_len = 1024
+    monkeypatch.setattr(inference, "_ENGINES", {})
+    monkeypatch.setattr(inference, "load", lambda path, **kw: eng)
+    monkeypatch.setattr(inference.client, "decide",
+                        lambda *a, **k: (_ for _ in ()).throw(inference.client.NoServer("none")))
+    q = {"q": {"type": "noul", "instructions": "?"}}
+    inference._answer("s", q, "http://127.0.0.1:1", "m", budget=128, max_len=768)
+    assert "no effect" not in capsys.readouterr().err
