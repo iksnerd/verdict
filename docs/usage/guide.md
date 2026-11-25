@@ -33,13 +33,13 @@ what).
 verdict runs on Apple Silicon with Python 3.11:
 
 ```sh
-uv tool install --python 3.11 'verdict[mlx,laya] @ git+https://github.com/iksnerd/verdict.git@v0.10.3'
+uv tool install --python 3.11 'verdict[mlx,laya] @ git+https://github.com/iksnerd/verdict.git@v0.11.0'
 verdict init      # writes ~/.config/verdict/config.toml
 verdict --version
 ```
 
 Add hosted Jev (TypeSafe's SDK) by reinstalling with the `jev` extra:
-`uv tool install --force --python 3.11 'verdict[mlx,laya,jev] @ git+https://github.com/iksnerd/verdict.git@v0.10.3'`.
+`uv tool install --force --python 3.11 'verdict[mlx,laya,jev] @ git+https://github.com/iksnerd/verdict.git@v0.11.0'`.
 `verdict update` keeps it once it is installed. verdict is installed from GitHub, never `pip install
 verdict`: that name on PyPI is an unrelated project.
 
