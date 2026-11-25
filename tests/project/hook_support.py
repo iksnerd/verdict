@@ -14,12 +14,16 @@ ROOT = Path(__file__).resolve().parents[2]
 HOOK = ROOT / ".githooks" / "pre-commit"
 WORKFLOW = ROOT / ".github" / "workflows" / "release.yml"
 SYSTEM_PATH = "/usr/bin:/bin"
+_GIT_LOCAL = {"GIT_INDEX_FILE", "GIT_DIR", "GIT_WORK_TREE", "GIT_PREFIX", "GIT_OBJECT_DIRECTORY"}
 
 
 def git(cwd, *args):
+    # A hook runs with GIT_INDEX_FILE and GIT_DIR set when the commit used a private index: these
+    # throwaway repos must not inherit them, or `git add` writes into the real commit's index.
+    clean = {k: v for k, v in os.environ.items() if k not in _GIT_LOCAL}
     subprocess.run(
         ["git", *args], cwd=cwd, check=True, capture_output=True,
-        env={**os.environ, "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t",
+        env={**clean, "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t",
              "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t"},
     )
 
