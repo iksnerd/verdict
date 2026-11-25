@@ -11,7 +11,7 @@ import pytest
 import uvicorn
 
 import verdict.backends.mlx as backend_mlx
-from verdict import cli, config
+from verdict import cli
 from fakes import REPO_ROOT
 
 ROOT = REPO_ROOT
@@ -58,7 +58,6 @@ def test_the_scan_catches_the_hints_that_shipped_and_allows_the_git_form():
 
 def test_serve_without_the_sdk_prints_a_command_that_installs_this_project(monkeypatch, capsys, tmp_path):
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(config, "CONFIG_PATHS", ())
     monkeypatch.setenv("TYPESAFE_API_KEY", "sk-test")
     monkeypatch.setitem(sys.modules, "verdict.backends.jev", None)         # the import raises
     monkeypatch.setattr(backend_mlx, "MlxBackend", lambda *a, **k: pytest.fail("no local model"))

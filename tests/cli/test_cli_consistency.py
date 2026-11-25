@@ -252,13 +252,12 @@ def test_a_plain_text_refusal_is_one_sentence_for_the_whole_bank(monkeypatch, ca
         assert qid in err
 
 
-def test_library_routing_defaults_to_the_public_model(monkeypatch):
+def test_library_routing_defaults_to_the_public_model():
     import importlib
 
     from verdict.backends import engine
     from verdict.cli import routing
 
-    monkeypatch.delenv("VERDICT_MODEL", raising=False)
     assert importlib.reload(routing).DEFAULT_MODEL == engine.DEFAULT_MODEL
 
 

@@ -10,6 +10,7 @@ import pytest
 
 from verdict.judge import cascade
 from verdict.errors import QuestionError
+from fakes import sure_noul
 
 BANK = {
     "spam": {"type": "noul", "instructions": "Is this spam?"},
@@ -18,7 +19,7 @@ BANK = {
 
 
 def answers(spam, dept_billing):
-    return {"spam": {"type": "noul", "noul": spam, "confidence": max(spam, 1 - spam)},
+    return {"spam": sure_noul(spam),
             "dept": {"type": "choice", "choice": "billing" if dept_billing >= .5 else "tech",
                      "probabilities": {"billing": dept_billing, "tech": 1 - dept_billing}, "confidence": 0.5}}
 
@@ -155,7 +156,7 @@ import math  # noqa: E402
 
 
 def noul_row(p):
-    return {"model": "laya", "answers": {"spam": {"type": "noul", "noul": p, "confidence": max(p, 1 - p)}}}
+    return {"model": "laya", "answers": {"spam": sure_noul(p)}}
 
 
 def spam_primary(table):

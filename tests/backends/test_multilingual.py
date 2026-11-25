@@ -14,14 +14,12 @@ from verdict import cli, client
 from conftest import typed
 from verdict.api import create_app
 from verdict.backends.mlx import MlxBackend
-from fakes import noul
-
-Q = {"urgent": {"type": "noul", "instructions": "?"}}
+from fakes import URGENT_BANK, noul
 
 
 def test_default_request_uses_the_main_checkpoint_and_never_loads_the_other(fake_laya):
     backend = MlxBackend("main", multilingual_id="multi")
-    r = TestClient(create_app(backend)).post("/v1/decide", json={"state": "hi", "questions": Q})
+    r = TestClient(create_app(backend)).post("/v1/decide", json={"state": "hi", "questions": URGENT_BANK})
     assert r.status_code == 200
     assert r.json()["model"] == "laya-mlx:main"
     assert set(fake_laya) == {"main"}
@@ -30,14 +28,14 @@ def test_default_request_uses_the_main_checkpoint_and_never_loads_the_other(fake
 def test_model_multilingual_loads_it_once_and_answers_from_it(fake_laya):
     app = TestClient(create_app(MlxBackend("main", multilingual_id="multi")))
     for _ in range(2):
-        r = app.post("/v1/decide", json={"state": "hola", "questions": Q, "model": "multilingual"})
+        r = app.post("/v1/decide", json={"state": "hola", "questions": URGENT_BANK, "model": "multilingual"})
         assert r.json()["model"] == "laya-mlx:multi"
     assert fake_laya["multi"].calls == 2
 
 
 def test_multilingual_without_a_configured_checkpoint_is_a_400(fake_laya):
     r = TestClient(create_app(MlxBackend("main"))).post(
-        "/v1/decide", json={"state": "hola", "questions": Q, "model": "multilingual"})
+        "/v1/decide", json={"state": "hola", "questions": URGENT_BANK, "model": "multilingual"})
     assert r.status_code == 400
 
 
@@ -45,7 +43,7 @@ def test_unknown_model_name_is_rejected():
     """`model` is a plain string now (config decides the valid set, not a fixed Literal), so a
     typo like this is refused by the backend (400, UnknownModel) rather than by pydantic (422)."""
     r = TestClient(create_app(MlxBackend("main"))).post(
-        "/v1/decide", json={"state": "x", "questions": Q, "model": "klingon"})
+        "/v1/decide", json={"state": "x", "questions": URGENT_BANK, "model": "klingon"})
     assert r.status_code == 400
 
 

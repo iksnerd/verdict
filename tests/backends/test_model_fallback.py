@@ -13,6 +13,7 @@ import pytest
 from verdict import cli, config
 from verdict.cli import inference, support
 from verdict.backends.engine import DEFAULT_MODEL
+from fakes import fake_mlx_serve
 
 
 def test_an_existing_checkpoint_is_used_as_is(tmp_path):
@@ -59,19 +60,7 @@ def test_ask_falls_back_and_warns_once(monkeypatch, capsys, tmp_path):
 def test_serve_falls_back_instead_of_failing(monkeypatch, capsys, tmp_path):
     missing = str(tmp_path / "gone")
     monkeypatch.setattr(support, "_settings", lambda: settings_with(missing))
-    loaded = {}
-
-    class FakeBackend:
-        def __init__(self, model_id, **kw):
-            loaded["model"] = model_id
-            self.name = f"fake:{model_id}"
-            self.engine = argparse.Namespace(agent=None, tokenizer=None)
-
-    import uvicorn
-
-    import verdict.backends.mlx as backend_mlx
-    monkeypatch.setattr(backend_mlx, "MlxBackend", FakeBackend)
-    monkeypatch.setattr(uvicorn, "run", lambda *a, **k: None)
+    built = fake_mlx_serve(monkeypatch)
     assert cli.main(["serve", "--port", "0"]) == 0
-    assert loaded["model"] == DEFAULT_MODEL
+    assert built[-1][0] == DEFAULT_MODEL
     assert "base laya" in capsys.readouterr().err

@@ -18,28 +18,18 @@ from verdict.cli import inference
 from fakes import Agent, fake_transformers, install_laya
 
 
-def isolated(monkeypatch, tmp_path, toml=None):
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.delenv("VERDICT_MAX_LEN", raising=False)
-    if toml is None:
-        monkeypatch.setattr(config, "CONFIG_PATHS", ())
-    else:
-        f = tmp_path / "verdict.toml"
-        f.write_text(toml)
-        monkeypatch.setattr(config, "CONFIG_PATHS", (f,))
-
-
 # ---- the setting ---------------------------------------------------------------------------------
 
 def test_default_is_zero_and_explain_says_default(monkeypatch, tmp_path):
-    isolated(monkeypatch, tmp_path)
+    monkeypatch.chdir(tmp_path)
     assert config.load().max_len == 0
     row = next(r for r in config.explain() if r["key"] == "model.max_len")
     assert row["value"] == 0 and row["source"] == "default"
 
 
-def test_file_then_env_then_flag(monkeypatch, tmp_path):
-    isolated(monkeypatch, tmp_path, "[model]\nmax_len = 1024\n")
+def test_file_then_env_then_flag(monkeypatch, tmp_path, config_files):
+    monkeypatch.chdir(tmp_path)
+    config_files("[model]\nmax_len = 1024\n")
     assert config.load().max_len == 1024
     rows = {r["key"]: r for r in config.explain()}
     assert rows["model.max_len"]["source"].endswith("verdict.toml")
@@ -54,43 +44,43 @@ def test_file_then_env_then_flag(monkeypatch, tmp_path):
 
 @pytest.mark.parametrize("bad", ["-1", "abc", "2.5", "8193", "5", "true"])
 def test_a_bad_environment_value_is_a_config_error(monkeypatch, tmp_path, bad):
-    isolated(monkeypatch, tmp_path)
+    monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("VERDICT_MAX_LEN", bad)
     with pytest.raises(config.ConfigError, match="max_len"):
         config.load()
 
 
 @pytest.mark.parametrize("bad", ["true", "2.5", '"abc"', "-1", "8193", "[512]"])
-def test_a_bad_file_value_is_a_config_error_naming_the_key(monkeypatch, tmp_path, bad):
-    isolated(monkeypatch, tmp_path, f"[model]\nmax_len = {bad}\n")
+def test_a_bad_file_value_is_a_config_error_naming_the_key(monkeypatch, tmp_path, config_files, bad):
+    monkeypatch.chdir(tmp_path)
+    config_files(f"[model]\nmax_len = {bad}\n")
     with pytest.raises(config.ConfigError, match=r"\[model\]\.max_len"):
         config.load()
 
 
-def test_zero_is_the_default_and_8192_is_the_ceiling(monkeypatch, tmp_path):
-    isolated(monkeypatch, tmp_path, "[model]\nmax_len = 8192\n")
+def test_zero_is_the_default_and_8192_is_the_ceiling(monkeypatch, tmp_path, config_files):
+    monkeypatch.chdir(tmp_path)
+    config_files("[model]\nmax_len = 8192\n")
     assert config.load().max_len == 8192
-    isolated(monkeypatch, tmp_path, "[model]\nmax_len = 0\n")
+    config_files("[model]\nmax_len = 0\n")
     assert config.load().max_len == 0
 
 
 def test_a_bad_flag_is_a_one_line_error_exit_2(monkeypatch, tmp_path, capsys):
-    isolated(monkeypatch, tmp_path)
+    monkeypatch.chdir(tmp_path)
     assert cli.main(["serve", "--max-len", "9000"]) == 2
     err = capsys.readouterr().err
     assert err.startswith("verdict: ") and "--max-len" in err and "8192" in err
     assert "Traceback" not in err and err.count("\n") == 1
 
 
-def test_init_writes_no_key_when_unset_and_round_trips_when_set(monkeypatch, tmp_path):
-    isolated(monkeypatch, tmp_path)
+def test_init_writes_no_key_when_unset_and_round_trips_when_set(monkeypatch, tmp_path, config_files):
+    monkeypatch.chdir(tmp_path)
     text = config.to_toml(config.load())
     assert not any(line.startswith("max_len") for line in text.splitlines())
     s = config.load()
     s.max_len = 2048
-    again = tmp_path / "again.toml"
-    again.write_text(config.to_toml(s))
-    monkeypatch.setattr(config, "CONFIG_PATHS", (again,))
+    config_files(config.to_toml(s), name="again.toml")
     assert config.load().max_len == 2048
 
 
@@ -215,7 +205,7 @@ def test_note_when_the_budget_makes_it_moot():
 def test_a_local_load_passes_max_len_and_warns_once(monkeypatch, tmp_path, capsys):
     from fakes import FakeEngine
 
-    isolated(monkeypatch, tmp_path)
+    monkeypatch.chdir(tmp_path)
     seen = []
     monkeypatch.setattr(inference, "_ENGINES", {})
     monkeypatch.setattr(inference, "load", lambda path, **kw: seen.append(kw) or FakeEngine())
@@ -255,7 +245,7 @@ def test_the_local_warning_judges_against_the_loaded_checkpoint_not_512(monkeypa
     behind a 2048 budget, or 1024 with room, must not warn about being above a 512 limit."""
     from fakes import FakeEngine
 
-    isolated(monkeypatch, tmp_path)
+    monkeypatch.chdir(tmp_path)
     eng = FakeEngine()
     eng.native_max_len = 1024
     monkeypatch.setattr(inference, "_ENGINES", {})

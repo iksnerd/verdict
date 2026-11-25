@@ -525,8 +525,7 @@ def test_verify_fails_when_a_suite_changed_its_metric():
 
 # ---- max_len: recorded only when set, compared with absent == default ----------------------------
 
-def test_a_default_run_writes_no_max_len(toy_bench, monkeypatch):
-    monkeypatch.delenv("VERDICT_MAX_LEN", raising=False)
+def test_a_default_run_writes_no_max_len(toy_bench):
     out = toy_bench / "v0.5.0.json"
     assert cli.main(["bench", "--out", str(out), "--pause", "0"]) == 0
     assert "max_len" not in json.loads(out.read_text())

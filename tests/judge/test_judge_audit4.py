@@ -7,13 +7,10 @@ import pytest
 
 from verdict.errors import QuestionError
 from verdict.judge import calibrate, cascade, hierarchy, rank
+from fakes import sure_noul
 
 BANK = {"spam": {"type": "noul", "instructions": "Is this spam?"},
         "dept": {"type": "choice", "instructions": "?", "criteria": {"a": "x", "b": "y"}}}
-
-
-def noul(p):
-    return {"type": "noul", "noul": p, "confidence": max(p, 1 - p)}
 
 
 def choice(pa):
@@ -22,8 +19,8 @@ def choice(pa):
 
 
 def test_a_flat_secondary_answer_keeps_the_primary_and_counts_as_failed():
-    primary = lambda s, q: {"answers": {"spam": noul(0.6), "dept": choice(0.9)}}
-    secondary = lambda s, q: {"answers": {"spam": noul(0.5), "dept": choice(0.99)}}
+    primary = lambda s, q: {"answers": {"spam": sure_noul(0.6), "dept": choice(0.9)}}
+    secondary = lambda s, q: {"answers": {"spam": sure_noul(0.5), "dept": choice(0.99)}}
     out = cascade.run(["s"], BANK, primary, secondary, share=1.0)
     row = out.rows[0]
     assert row["answers"]["spam"]["tier"] == "primary" and row["answers"]["spam"]["noul"] == 0.6
@@ -35,8 +32,8 @@ def test_a_flat_secondary_answer_keeps_the_primary_and_counts_as_failed():
 
 def test_check_orders_a_flat_primary_first_like_run():
     labels = [{"spam": False}, {"spam": True}, {"spam": True}]
-    first = {"a": noul(0.5), "b": noul(0.46), "c": noul(0.9)}
-    second = {"a": noul(0.0), "b": noul(1.0), "c": noul(1.0)}
+    first = {"a": sure_noul(0.5), "b": sure_noul(0.46), "c": sure_noul(0.9)}
+    second = {"a": sure_noul(0.0), "b": sure_noul(1.0), "c": sure_noul(1.0)}
     primary = lambda s, q: {"answers": {"spam": first[s]}}
     secondary = lambda s, q: {"answers": {"spam": second[s]}}
     bank = {"spam": BANK["spam"]}
@@ -66,8 +63,8 @@ def test_flat_stage_two_gives_no_label():
 
 
 def test_rank_does_not_treat_a_missing_dimension_as_zero():
-    rows = [{"state": "a", "answers": {"m": noul(0.9)}},
-            {"state": "b", "answers": {"m": noul(0.1)}},
+    rows = [{"state": "a", "answers": {"m": sure_noul(0.9)}},
+            {"state": "b", "answers": {"m": sure_noul(0.1)}},
             {"state": "err", "answers": {}}]
     out = rank.rank(rows, {"m": 1.0})
     assert [r["state"] for r in out] == ["a", "b", "err"]
@@ -76,9 +73,9 @@ def test_rank_does_not_treat_a_missing_dimension_as_zero():
 
 
 def test_rank_percentiles_ignore_the_rows_without_the_dimension():
-    rows = [{"state": "a", "answers": {"m": noul(0.9)}},
+    rows = [{"state": "a", "answers": {"m": sure_noul(0.9)}},
             {"state": "err", "answers": {}},
-            {"state": "b", "answers": {"m": noul(0.1)}}]
+            {"state": "b", "answers": {"m": sure_noul(0.1)}}]
     out = {r["state"]: r for r in rank.rank(rows, {"m": 1.0})}
     assert out["b"]["score"] == 0.0 and out["a"]["score"] == 1.0
 
@@ -86,6 +83,6 @@ def test_rank_percentiles_ignore_the_rows_without_the_dimension():
 @pytest.mark.parametrize("fit,key", [({"cut": 0.5}, "type"), ({"type": "noul"}, "cut"),
                                      ({"type": "choice"}, "temperature")])
 def test_a_malformed_fit_names_the_qid_and_the_missing_key(fit, key):
-    ans = {"q": noul(0.7)} if fit.get("type") != "choice" else {"q": choice(0.7)}
+    ans = {"q": sure_noul(0.7)} if fit.get("type") != "choice" else {"q": choice(0.7)}
     with pytest.raises(QuestionError, match=rf"q.*{key}"):
         calibrate.apply(ans, {"q": fit})

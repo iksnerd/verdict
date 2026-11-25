@@ -12,40 +12,31 @@ import pytest
 from verdict import cli, config
 from verdict.backends import engine
 from verdict.cli import inference, support
-from fakes import FakeEngine, install_laya
+from fakes import FakeEngine, fake_mlx_serve, install_laya
 
 
-def test_bits_default_to_full_precision(monkeypatch):
-    monkeypatch.delenv("VERDICT_BITS", raising=False)
-    monkeypatch.setattr(config, "CONFIG_PATHS", ())
+def test_bits_default_to_full_precision():
     assert config.load().bits == 16
 
 
 def test_bits_come_from_the_environment(monkeypatch):
-    monkeypatch.setattr(config, "CONFIG_PATHS", ())
     monkeypatch.setenv("VERDICT_BITS", "8")
     assert config.load().bits == 8
 
 
-def test_bits_come_from_the_file(monkeypatch, tmp_path):
-    monkeypatch.delenv("VERDICT_BITS", raising=False)
-    f = tmp_path / "verdict.toml"
-    f.write_text('[model]\nbits = 8\n')
-    monkeypatch.setattr(config, "CONFIG_PATHS", (f,))
+def test_bits_come_from_the_file(config_files):
+    config_files('[model]\nbits = 8\n')
     assert config.load().bits == 8
 
 
 @pytest.mark.parametrize("bad", ["4", "7", "32"])
 def test_only_measured_widths_are_accepted(monkeypatch, bad):
-    monkeypatch.setattr(config, "CONFIG_PATHS", ())
     monkeypatch.setenv("VERDICT_BITS", bad)
     with pytest.raises(ValueError, match="§36"):
         config.load()
 
 
-def test_init_writes_the_bits_line(monkeypatch):
-    monkeypatch.setattr(config, "CONFIG_PATHS", ())
-    monkeypatch.delenv("VERDICT_BITS", raising=False)
+def test_init_writes_the_bits_line():
     text = config.to_toml(config.load())
     assert "bits = 16" in text and "§36" in text
 
@@ -142,25 +133,12 @@ def test_quantize_is_what_section_36_measured():
 # ---- wiring ---------------------------------------------------------------------------------------
 
 def test_serve_passes_bits_to_the_backend(monkeypatch):
-    import uvicorn
-
-    import verdict.backends.mlx as backend_mlx
-
     s = config.load()
     s.bits = 8
     monkeypatch.setattr(support, "_settings", lambda: s)
-    seen = {}
-
-    class FakeBackend:
-        def __init__(self, model_id, **kw):
-            seen.update(kw)
-            self.name = "fake"
-            self.engine = types.SimpleNamespace(agent=None, tokenizer=None)
-
-    monkeypatch.setattr(backend_mlx, "MlxBackend", FakeBackend)
-    monkeypatch.setattr(uvicorn, "run", lambda *a, **k: None)
+    built = fake_mlx_serve(monkeypatch)
     assert cli.main(["serve", "--port", "0"]) == 0
-    assert seen["bits"] == 8
+    assert built[-1][1]["bits"] == 8
 
 
 def test_the_in_process_fallback_loads_with_bits(monkeypatch):
@@ -177,7 +155,6 @@ def test_the_in_process_fallback_loads_with_bits(monkeypatch):
 
 
 def test_a_bad_bits_value_is_a_clean_error_not_a_traceback(monkeypatch, capsys):
-    monkeypatch.setattr(config, "CONFIG_PATHS", ())
     monkeypatch.setenv("VERDICT_BITS", "4")
     assert cli.main(["ask", "x", "q?", "--lang", "en"]) == 2
     err = capsys.readouterr().err

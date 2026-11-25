@@ -7,44 +7,33 @@ from __future__ import annotations
 
 import argparse
 
-import pytest
-
 from verdict import cli, client, config
 from conftest import typed
 from fakes import noul
 
 
-@pytest.fixture
-def no_file(monkeypatch):
-    monkeypatch.setattr(config, "CONFIG_PATHS", ())
-    for var in ("VERDICT_LANG", "VERDICT_URL", "VERDICT_MODEL", "VERDICT_BITS"):
-        monkeypatch.delenv(var, raising=False)
-
-
-def test_lang_defaults_to_auto(no_file):
+def test_lang_defaults_to_auto():
     assert config.load().lang == "auto"
 
 
-def test_lang_from_the_environment(no_file, monkeypatch):
+def test_lang_from_the_environment(monkeypatch):
     monkeypatch.setenv("VERDICT_LANG", "multi")
     assert config.load().lang == "multi"
 
 
-def test_lang_from_the_file(monkeypatch, tmp_path, no_file):
-    f = tmp_path / "verdict.toml"
-    f.write_text('[model]\nlang = "multi"\n')
-    monkeypatch.setattr(config, "CONFIG_PATHS", (f,))
+def test_lang_from_the_file(config_files):
+    config_files('[model]\nlang = "multi"\n')
     assert config.load().lang == "multi"
 
 
-def test_a_bad_lang_is_a_clean_error(no_file, monkeypatch, capsys):
+def test_a_bad_lang_is_a_clean_error(monkeypatch, capsys):
     monkeypatch.setenv("VERDICT_LANG", "bulgarian")
     assert cli.main(["ask", "x", "q?", "--server-only"]) == 2
     err = capsys.readouterr().err
     assert err.startswith("verdict: ") and "auto, en or multi" in err
 
 
-def test_init_writes_the_lang_line(no_file):
+def test_init_writes_the_lang_line():
     assert 'lang = "auto"' in config.to_toml(config.load())
 
 
@@ -60,15 +49,15 @@ def asked_model(monkeypatch, argv):
     return seen["model"]
 
 
-def test_the_setting_sends_calls_to_the_multilingual_checkpoint(no_file, monkeypatch):
+def test_the_setting_sends_calls_to_the_multilingual_checkpoint(monkeypatch):
     monkeypatch.setenv("VERDICT_LANG", "multi")
     assert asked_model(monkeypatch, ["ask", "Благодаря ви", "Positive?"]) == "multilingual"
 
 
-def test_the_flag_still_wins_over_the_setting(no_file, monkeypatch):
+def test_the_flag_still_wins_over_the_setting(monkeypatch):
     monkeypatch.setenv("VERDICT_LANG", "multi")
     assert asked_model(monkeypatch, ["ask", "thanks", "Positive?", "--lang", "en"]) is None
 
 
-def test_without_the_setting_nothing_changes(no_file, monkeypatch):
+def test_without_the_setting_nothing_changes(monkeypatch):
     assert asked_model(monkeypatch, ["ask", "thanks", "Positive?", "--lang", "en"]) is None

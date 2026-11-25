@@ -44,6 +44,11 @@ def noul(p, confidence=None):
     return {"type": "noul", "noul": p, "confidence": p if confidence is None else confidence}
 
 
+def sure_noul(p):
+    """A yes/no answer as sure as `p` is far from 0.5: confidence is the likelier side."""
+    return {"type": "noul", "noul": p, "confidence": max(p, 1 - p)}
+
+
 def uniform_client():
     """The decision API over the `uniform` backend: every route answers, no model is loaded."""
     return TestClient(create_app(UniformBackend()))
@@ -81,6 +86,8 @@ class FakeEngine:
 
 
 NOUL_BANK = {"q": {"type": "noul", "instructions": "?"}}
+URGENT_BANK = {"urgent": {"type": "noul", "instructions": "?"}}
+SPAM_BANK = {"spam": {"type": "noul", "instructions": "Is this spam?"}}
 
 #: A one-question yes/no bank as the JSON a `--questions` flag takes, and five states for stdin.
 RISKY_BANK = json.dumps({"risky": {"type": "noul", "instructions": "Is `kind` marked bad?"}})
@@ -208,6 +215,27 @@ def retry_run(first, monkeypatch, **client_kw):
         return calls, None
     except UpstreamError as exc:
         return calls, exc
+
+
+def fake_mlx_serve(monkeypatch, run=None):
+    """Stubs what `verdict serve` loads and starts: `backends.mlx.MlxBackend` becomes a class named
+    `fake:<model_id>` with no model behind it, and `uvicorn.run` calls `run` (default: nothing).
+    Returns the list of `(model_id, kwargs)` the backend was built with."""
+    import uvicorn
+
+    import verdict.backends.mlx as backend_mlx
+
+    built = []
+
+    class FakeMlxBackend:
+        def __init__(self, model_id, **kw):
+            built.append((model_id, kw))
+            self.name = f"fake:{model_id}"
+            self.engine = types.SimpleNamespace(agent=None, tokenizer=None)
+
+    monkeypatch.setattr(backend_mlx, "MlxBackend", FakeMlxBackend)
+    monkeypatch.setattr(uvicorn, "run", run or (lambda *a, **k: None))
+    return built
 
 
 def install_laya(monkeypatch, load):

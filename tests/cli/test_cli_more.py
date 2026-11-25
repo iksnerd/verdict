@@ -10,7 +10,7 @@ import pytest
 
 from verdict import cli, client
 from conftest import typed
-from fakes import noul
+from fakes import fake_mlx_serve, noul
 
 
 def fake_server(monkeypatch, answer_for):
@@ -261,8 +261,6 @@ def test_init_keeps_a_configured_remote_backend(monkeypatch, tmp_path, config_fi
     path, = config_files(config.to_toml(config.Settings(
         "http://127.0.0.1:8799", "org/model", 128,
         systemone_url="http://127.0.0.1:8009", systemone_model="kev-small")), name="config.toml")
-    monkeypatch.delenv("VERDICT_SYSTEMONE_URL", raising=False)
-    monkeypatch.delenv("VERDICT_SYSTEMONE_MODEL", raising=False)
     monkeypatch.setattr(setup, "_port_free", lambda *a: True)
     monkeypatch.chdir(tmp_path)
     assert cli.main(["init", "--yes", "--out", str(path)]) == 0
@@ -273,11 +271,7 @@ def test_init_keeps_a_configured_remote_backend(monkeypatch, tmp_path, config_fi
 def _serve_locally(monkeypatch, host):
     """`verdict serve --host HOST` with the socket, the backend and uvicorn all faked."""
     import socket
-    import types
 
-    import uvicorn
-
-    import verdict.backends.mlx as backend_mlx
     from verdict import config
     from verdict.cli import inference, support
 
@@ -294,18 +288,11 @@ def _serve_locally(monkeypatch, host):
         def close(self):
             pass
 
-    class FakeBackend:
-        name = "fake"
-
-        def __init__(self, model_id, **kw):
-            self.engine = types.SimpleNamespace(agent=None, tokenizer=None)
-
     monkeypatch.setattr(socket, "socket", FakeSocket)
     monkeypatch.setattr(support, "_settings",
                         lambda: config.Settings("http://127.0.0.1:8799", "org/model", 128))
     monkeypatch.setattr(inference, "_resolved_model", lambda flag, settings: "org/model")
-    monkeypatch.setattr(backend_mlx, "MlxBackend", FakeBackend)
-    monkeypatch.setattr(uvicorn, "run", lambda *a, **k: None)
+    fake_mlx_serve(monkeypatch)
     return cli.main(["serve", "--port", "8799", "--host", host])
 
 

@@ -9,9 +9,7 @@ from verdict.errors import QuestionError
 from verdict.judge import calibrate, cascade, hierarchy
 from verdict.judge.router import BIG, is_uniform, route
 
-from fakes import router_answers
-
-BANK = {"spam": {"type": "noul", "instructions": "Is this spam?"}}
+from fakes import SPAM_BANK, noul, router_answers, sure_noul
 
 
 def test_partly_flat_router_answers_route_big():
@@ -27,7 +25,7 @@ def test_flat_sensitive_alone_is_also_no_model():
 
 
 def test_fit_type_mismatch_raises_in_apply():
-    answers = {"spam": {"type": "noul", "noul": 0.7, "confidence": 0.7}}
+    answers = {"spam": noul(0.7)}
     fits = {"spam": {"type": "choice", "temperature": 1.0}}
     with pytest.raises(QuestionError, match="spam.*choice.*noul|spam.*noul.*choice"):
         calibrate.apply(answers, fits)
@@ -35,11 +33,11 @@ def test_fit_type_mismatch_raises_in_apply():
 
 def test_fit_type_mismatch_raises_in_cascade_cuts():
     with pytest.raises(QuestionError, match="spam"):
-        cascade._cuts(BANK, {"spam": {"type": "choice", "temperature": 1.0}})
+        cascade._cuts(SPAM_BANK, {"spam": {"type": "choice", "temperature": 1.0}})
 
 
 def test_apply_gives_no_decision_on_a_flat_noul():
-    out = calibrate.apply({"spam": {"type": "noul", "noul": 0.5, "confidence": 0.5}},
+    out = calibrate.apply({"spam": noul(0.5)},
                           {"spam": {"type": "noul", "cut": 0.2}})
     assert out["spam"]["decision"] is None
 
@@ -48,21 +46,21 @@ def test_cascade_escalates_a_flat_primary_and_never_decides_it():
     seen = []
 
     def primary(state, questions):
-        return {"answers": {"spam": {"type": "noul", "noul": 0.5, "confidence": 0.5}}}
+        return {"answers": {"spam": noul(0.5)}}
 
     def secondary(state, questions):
         seen.append(state)
-        return {"answers": {"spam": {"type": "noul", "noul": 0.9, "confidence": 0.9}}}
+        return {"answers": {"spam": noul(0.9)}}
 
     # cut 0.004 makes 0.5 look far from the cut; it must still be treated as least sure
-    run = cascade.run(["a"], BANK, primary, secondary, share=1.0,
+    run = cascade.run(["a"], SPAM_BANK, primary, secondary, share=1.0,
                       fits={"spam": {"type": "noul", "cut": 0.004}})
     assert run.rows[0]["answers"]["spam"]["tier"] == "escalated"
 
     def keep(state, questions):
-        return {"answers": {"spam": {"type": "noul", "noul": 0.5, "confidence": 0.5}}}
+        return {"answers": {"spam": noul(0.5)}}
 
-    run = cascade.run(["a", "b"], BANK, primary, keep, share=0.5,
+    run = cascade.run(["a", "b"], SPAM_BANK, primary, keep, share=0.5,
                       fits={"spam": {"type": "noul", "cut": 0.004}})
     # one of the two is escalated; whichever is primary-tier must not carry a boolean decision
     for row in run.rows:
@@ -75,25 +73,25 @@ def test_cascade_flat_primary_selected_before_a_confident_one():
 
     def primary(state, questions):
         p = table[state]
-        return {"answers": {"spam": {"type": "noul", "noul": p, "confidence": max(p, 1 - p)}}}
+        return {"answers": {"spam": sure_noul(p)}}
 
     asked = []
 
     def secondary(state, questions):
         asked.append(state)
-        return {"answers": {"spam": {"type": "noul", "noul": 0.9, "confidence": 0.9}}}
+        return {"answers": {"spam": noul(0.9)}}
 
-    cascade.run(["a", "b"], BANK, primary, secondary, share=0.5,
+    cascade.run(["a", "b"], SPAM_BANK, primary, secondary, share=0.5,
                 fits={"spam": {"type": "noul", "cut": 0.004}})
     assert asked == ["a"]
 
 
 def test_secondary_omitting_a_question_fails_that_state_only():
-    bank = {**BANK, "dept": {"type": "choice", "instructions": "?", "criteria": {"a": "", "b": ""}}}
+    bank = {**SPAM_BANK, "dept": {"type": "choice", "instructions": "?", "criteria": {"a": "", "b": ""}}}
 
     def primary(state, questions):
         return {"answers": {
-            "spam": {"type": "noul", "noul": 0.55, "confidence": 0.55},
+            "spam": noul(0.55),
             "dept": {"type": "choice", "choice": "a", "probabilities": {"a": .5, "b": .5}, "confidence": 0.0}}}
 
     calls = []

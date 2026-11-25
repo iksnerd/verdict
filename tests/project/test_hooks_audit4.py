@@ -8,7 +8,7 @@ import time
 
 import pytest
 
-from hook_support import HOOK, create_run, git, run_hook, start_hook, workflow, write_exe
+from hook_support import HOOK, create_run, git, hook_code, run_hook, start_hook, workflow, write_exe
 
 GIT = "/usr/bin/git"
 
@@ -35,8 +35,7 @@ def test_a_failing_git_archive_blocks_the_commit(env):
 
 
 def test_head_is_read_before_the_index_tree():
-    code = [l for l in HOOK.read_text().splitlines() if not l.lstrip().startswith("#")]
-    text = "\n".join(code)
+    text = hook_code()
     assert text.index("rev-parse HEAD") < text.index("git write-tree")
 
 

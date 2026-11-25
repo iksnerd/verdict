@@ -7,12 +7,12 @@ import signal
 
 import pytest
 
-from hook_support import (HOOK, create_run, git, release_steps, run_hook, start_hook, step_index, workflow,
-                          write_exe)
+from hook_support import (HOOK, create_run, git, hook_code, release_steps, run_hook, start_hook, step_index,
+                          workflow, write_exe)
 
 
 def test_hook_takes_one_index_snapshot():
-    code = "\n".join(l for l in HOOK.read_text().splitlines() if not l.lstrip().startswith("#"))
+    code = hook_code()
     assert code.count("git write-tree") == 2  # once, and once more if HEAD moved in between
     for banned in ("--cached", "--pre-commit --staged", "gitleaks git", "checkout-index"):
         assert banned not in code

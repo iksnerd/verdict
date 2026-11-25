@@ -10,17 +10,16 @@ import uvicorn
 from fastapi.testclient import TestClient
 
 import verdict.backends.mlx as backend_mlx
-from verdict import cli, config
+from verdict import cli
 from verdict.cli import support
+from fakes import fake_mlx_serve
 
 
 @pytest.fixture
 def served(monkeypatch, tmp_path):
     """Run `serve` with uvicorn stubbed; returns the app it would have served."""
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(config, "CONFIG_PATHS", ())
-    for var in ("VERDICT_SYSTEMONE_URL", "VERDICT_SYSTEMONE_MODEL", "TYPESAFE_API_KEY"):
-        monkeypatch.delenv(var, raising=False)
+    monkeypatch.delenv("TYPESAFE_API_KEY", raising=False)
     box = {}
 
     def no_mlx(*a, **k):
@@ -75,17 +74,9 @@ def test_a_malformed_url_flag_is_named(served, capsys):
 
 
 def test_without_the_flag_or_a_setting_serve_is_still_local_laya(served, monkeypatch):
-    built = {}
-
-    class FakeMlx:
-        def __init__(self, model_id, **kw):
-            built["model"] = model_id
-            self.name = f"fake:{model_id}"
-            self.engine = type("E", (), {"agent": None, "tokenizer": None})()
-
-    monkeypatch.setattr(backend_mlx, "MlxBackend", FakeMlx)
+    built = fake_mlx_serve(monkeypatch, run=lambda app, **k: served.update(app=app))
     assert cli.main(["serve", "--port", "0"]) == 0
-    assert "model" in built and backend_name(served).startswith("fake:")
+    assert built and backend_name(served).startswith("fake:")
 
 
 def test_a_hosted_backend_will_not_serve_beyond_this_machine(served, monkeypatch, capsys):

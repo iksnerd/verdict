@@ -5,38 +5,37 @@ import pytest
 
 from verdict.errors import QuestionError
 from verdict.judge import calibrate, cascade
-
-BANK = {"spam": {"type": "noul", "instructions": "Is this spam?"}}
+from fakes import SPAM_BANK, noul
 
 
 def ask(state, questions):
-    return {"answers": {"spam": {"type": "noul", "noul": 0.7, "confidence": 0.7}}}
+    return {"answers": {"spam": noul(0.7)}}
 
 
 def test_cuts_names_a_noul_fit_without_a_cut():
     with pytest.raises(QuestionError, match=r"'spam'.*'cut'"):
-        cascade._cuts(BANK, {"spam": {"type": "noul"}})
+        cascade._cuts(SPAM_BANK, {"spam": {"type": "noul"}})
 
 
 def test_cuts_names_a_fit_without_a_type():
     with pytest.raises(QuestionError, match=r"'spam'.*'type'"):
-        cascade._cuts(BANK, {"spam": {"cut": 0.4}})
+        cascade._cuts(SPAM_BANK, {"spam": {"cut": 0.4}})
 
 
 def test_cuts_keeps_its_mismatch_wording():
     with pytest.raises(QuestionError, match="but the question is a noul; fit it on the same type$"):
-        cascade._cuts(BANK, {"spam": {"type": "choice", "temperature": 1.0}})
+        cascade._cuts(SPAM_BANK, {"spam": {"type": "choice", "temperature": 1.0}})
 
 
 def test_check_names_a_noul_fit_without_a_cut():
     with pytest.raises(QuestionError, match=r"'spam'.*'cut'"):
-        cascade.check([{}], BANK, [{"spam": True}], ask, ask, share=0.5,
+        cascade.check([{}], SPAM_BANK, [{"spam": True}], ask, ask, share=0.5,
                       fits={"spam": {"type": "noul"}})
 
 
 def test_check_refuses_a_fit_of_the_wrong_type():
     with pytest.raises(QuestionError, match="'spam'"):
-        cascade.check([{}], BANK, [{"spam": True}], ask, ask, share=0.5,
+        cascade.check([{}], SPAM_BANK, [{"spam": True}], ask, ask, share=0.5,
                       fits={"spam": {"type": "choice", "temperature": 1.0}})
 
 

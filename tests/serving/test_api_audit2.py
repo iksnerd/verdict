@@ -10,23 +10,13 @@ from verdict.backends.base import UnknownModel
 from verdict.config import ConfigError
 from verdict.errors import QuestionError
 from verdict.systemone import UpstreamError
+from fakes import FailsAt
 
 BODY = {"state": {"m": "hi"}, "questions": {"q": {"type": "noul", "instructions": "Is `m` odd?"}}}
 
 
-class Raising:
-    name = "raising"
-    proxy = False
-
-    def __init__(self, exc):
-        self.exc = exc
-
-    def decide(self, request):
-        raise self.exc
-
-
 def _status(exc):
-    client = TestClient(create_app(Raising(exc)), raise_server_exceptions=False)
+    client = TestClient(create_app(FailsAt(exc, fail_at=0)), raise_server_exceptions=False)
     return client.post("/v1/decide", json=BODY).status_code
 
 

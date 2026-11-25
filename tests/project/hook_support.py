@@ -9,12 +9,17 @@ import time
 from pathlib import Path
 
 import yaml
+from fakes import REPO_ROOT
 
-ROOT = Path(__file__).resolve().parents[2]
-HOOK = ROOT / ".githooks" / "pre-commit"
-WORKFLOW = ROOT / ".github" / "workflows" / "release.yml"
+HOOK = REPO_ROOT / ".githooks" / "pre-commit"
+WORKFLOW = REPO_ROOT / ".github" / "workflows" / "release.yml"
 SYSTEM_PATH = "/usr/bin:/bin"
 _GIT_LOCAL = {"GIT_INDEX_FILE", "GIT_DIR", "GIT_WORK_TREE", "GIT_PREFIX", "GIT_OBJECT_DIRECTORY"}
+
+
+def hook_code():
+    """The pre-commit hook's source with its comment lines removed."""
+    return "\n".join(l for l in HOOK.read_text().splitlines() if not l.lstrip().startswith("#"))
 
 
 def git(cwd, *args):
