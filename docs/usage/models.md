@@ -29,6 +29,13 @@ Bold marks a gap whose intervals do not overlap. AUC for yes/no, accuracy for th
 in Laya's training mix, so Laya's figure there is probably flattering; Jev's training data is not
 published. About 0.03 s a call local, about 0.5 s hosted.
 
+## Long states
+
+Laya reads 512 tokens (the multilingual checkpoint 1024). `[model].max_len` raises that, up to
+8192, at about the cost of what it reads (0.09 s a call at 512, 0.41 s at 2048, 3.2 s at 8192). It
+is opt-in: the checkpoint was trained at 512, so accuracy beyond that is unmeasured and calibrated
+cuts do not carry over. `prompt_token_budget` clips first, so raise it too. See the guide.
+
 ## Choosing
 
 - Text stays on the machine, or you have thousands of items: **base Laya**.

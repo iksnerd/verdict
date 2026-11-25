@@ -83,12 +83,14 @@ def _bench_cmd(args: argparse.Namespace) -> int:
         model_name = f"systemone:{args.systemone_model}@{host}"
         budget = None
         bits = None  # not ours to know
+        max_len = 0
     else:
         asker = inference._Asker(args)
         ask = asker
         model_name = Path(str(asker.main_path)).name
         budget = asker.settings.prompt_token_budget
         bits = asker.settings.bits
+        max_len = asker.settings.max_len
     try:
         calls = 0
         askers = {}
@@ -149,6 +151,8 @@ def _bench_cmd(args: argparse.Namespace) -> int:
                     "stamping it from this machine's settings could describe another model. Run "
                     "it in-process: stop `verdict serve` and do not pass --server-only")
         doc = {"version": version("verdict"), "model": model_name, "budget": budget, "bits": bits,
+               # Only when it is not the checkpoint's own, so every existing scorecard stays comparable.
+               **({"max_len": max_len} if max_len else {}),
                "date": time.strftime("%Y-%m-%d"), "suites": results,
                "timing": _timing(spent, tokens)}
         if args.out:
@@ -306,7 +310,8 @@ def _calibrate_cmd(args: argparse.Namespace) -> int:
                 print("  most confused: " + ", ".join(
                     f"{c['true']}->{c['predicted']} x{c['n']}" for c in fit["confusions"][:3]))
     doc = {"model": next(iter(models), None), "examples": args.examples, "questions": fits,
-           "bits": ask.settings.bits, "budget": ask.settings.prompt_token_budget}
+           "bits": ask.settings.bits, "budget": ask.settings.prompt_token_budget,
+           **({"max_len": ask.settings.max_len} if ask.settings.max_len else {})}
     if args.out:
         inference.write_atomic(args.out, json.dumps(doc, indent=2) + "\n")
         print(f"wrote {args.out}; apply it with --calibration {args.out} (decide) "

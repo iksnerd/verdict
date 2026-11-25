@@ -71,7 +71,8 @@ new yes/no is asked as a choice between no and yes and answered as a yes/no (§3
 does the same.
 
 Settings: flag > environment ($VERDICT_URL, $VERDICT_MODEL, $VERDICT_MULTILINGUAL, $VERDICT_BITS,
-$VERDICT_LANG, $VERDICT_SYSTEMONE_URL, $VERDICT_SYSTEMONE_MODEL) > ./verdict.toml >
+$VERDICT_MAX_LEN, $VERDICT_LANG, $VERDICT_SYSTEMONE_URL, $VERDICT_SYSTEMONE_MODEL) >
+./verdict.toml >
 ~/.config/verdict/config.toml > built-in. `verdict init` writes one; `verdict config` shows each
 resolved value and where it came from. `verdict serve --systemone URL` answers with a remote
 /v1/systemone server (Jev) and sends it every state; its key is $TYPESAFE_API_KEY, never a setting.
@@ -588,12 +589,24 @@ def main(argv: list[str] | None = None) -> int:
                             "consequence, difficulty or absence), or about a field the state "
                             "lacks; refused without this")
 
+    def abstain_flag(p):
+        p.add_argument("--abstain-below", metavar="P",
+                       help="mark each answer `abstention`: abstained when its largest probability "
+                            "(max(p, 1-p) for a yes/no) is below P (above 0, at most 1), else "
+                            "passed; unevaluated when no model answered. Reports only, the answer "
+                            "is unchanged. A threshold, not a calibrated probability: pick P with "
+                            "`verdict calibrate` data")
+
     def server_flags(p):
         g = p.add_argument_group("Model and server")
         g.add_argument("--lang", choices=("auto", "en", "multi"), default=None,
                        help="auto warns on non-English state; multi uses laya's multilingual "
                             "checkpoint (loaded on first use); en never checks. Overrides "
                             "model.lang (default auto)")
+        g.add_argument("--max-len", type=int, metavar="TOKENS",
+                       help="tokens the checkpoint reads, up to 8192 (default: the checkpoint's own, 512 English, "
+                            "1024 multilingual). Opt-in: accuracy past 512 is unmeasured and "
+                            "calibration does not carry over; raise the budget too. Overrides model.max_len")
         g.add_argument("--url", help="server to ask; overrides server.url and $VERDICT_URL")
         g.add_argument("--server-only", action="store_true",
                        help="fail if the server is unavailable; never fall back to local inference")
@@ -630,6 +643,7 @@ def main(argv: list[str] | None = None) -> int:
     out.add_argument("--json", action="store_true", help="print the full answer as JSON")
     quality_flag(a)
     yesno_flag(a)
+    abstain_flag(a)
     server_flags(a)
     a.set_defaults(fn=decisions._ask_cmd)
 
@@ -694,6 +708,7 @@ def main(argv: list[str] | None = None) -> int:
                    help="count option tokens exactly to report truncation (about 1.3 s)")
     quality_flag(d)
     yesno_flag(d)
+    abstain_flag(d)
     server_flags(d)
     d.set_defaults(fn=decisions._decide_cmd)
 
@@ -809,6 +824,10 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("--bits", type=int, choices=(16, 8),
                    help="8 quantizes the model at load: about half the GPU memory, the same "
                         "answers on every bench suite (FINDINGS §36); overrides model.bits")
+    s.add_argument("--max-len", type=int, metavar="TOKENS",
+                   help="tokens the checkpoint reads, up to 8192 (default: the checkpoint's own, 512 English, "
+                            "1024 multilingual). Opt-in: accuracy past 512 is unmeasured and "
+                            "calibration does not carry over; raise the budget too. Overrides model.max_len")
     s.add_argument("--systemone", metavar="URL",
                    help="answer with a /v1/systemone server instead of local laya: "
                         "https://api.typesafe.ai for Jev (needs $TYPESAFE_API_KEY). Every state is "

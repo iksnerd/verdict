@@ -244,6 +244,10 @@ def scorecards(directory: Path) -> list[Path]:
 #: predecessor: 8-bit weights or a 512-token read would pass or regress for their own reasons.
 SAME_MEASUREMENT = ("model", "bits", "budget")
 
+#: Recorded only when not the default, so a card without one is the default (0): the checkpoint's
+#: own context length. Compared like `SAME_MEASUREMENT`, but its absence is not an error.
+OPTIONAL_MEASUREMENT = {"max_len": 0}
+
 
 def previous(directory: Path, version: str, model: Optional[str] = None,
              like: Optional[dict] = None) -> Optional[Path]:
@@ -265,6 +269,7 @@ def previous(directory: Path, version: str, model: Optional[str] = None,
                              "one, and treating it as a baseline would skip the regression gate. "
                              "Rerun `verdict bench` to write one that records them")
         want.update({k: like[k] for k in SAME_MEASUREMENT})
+        want.update({k: like.get(k, d) for k, d in OPTIONAL_MEASUREMENT.items()})
     if want:
         kept = []
         for p in older:
@@ -274,7 +279,7 @@ def previous(directory: Path, version: str, model: Optional[str] = None,
                 if lacking:
                     raise ValueError(f"{p.name} has no {', '.join(lacking)}, so it cannot be told apart from "
                                      "the current measurement; add the fields or delete the card")
-            if all(card.get(k) == v for k, v in want.items()):
+            if all(card.get(k, OPTIONAL_MEASUREMENT.get(k)) == v for k, v in want.items()):
                 kept.append(p)
         older = kept
     return older[-1] if older else None

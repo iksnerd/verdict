@@ -217,7 +217,7 @@ def as_yesno(answers: dict[str, Any], rewritten: set[str]) -> dict[str, Any]:
 
 
 def ask(backend: Any, request: Any, *, allow_unmeasured: bool = False, yesno: bool = False,
-        opt_out: str = CLI_OPT_OUT) -> Any:
+        opt_out: str = CLI_OPT_OUT, abstain_below: float | None = None) -> Any:
     """`prepare` around `backend.decide`: what the HTTP API and the Python client both do, so the
     same question gets the same treatment and the same number from either.
 
@@ -225,7 +225,25 @@ def ask(backend: Any, request: Any, *, allow_unmeasured: bool = False, yesno: bo
     question is refused whichever model is behind it, and nothing else of laya's: no clipping, no
     yes/no rewrite and no 20-option cap, since Jev takes 255. A refused question never reaches the
     upstream. Raises `QuestionError` for a refusal.
+
+    `abstain_below` adds the opt-in abstention mark to each answer (`judge/abstain.py`); an invalid
+    value is a `QuestionError` before anything is asked.
     """
+    from .judge import abstain
+
+    if abstain_below is None:
+        return _ask(backend, request, allow_unmeasured, yesno, opt_out)
+    threshold = abstain.validate_threshold(abstain_below)
+    out = _ask(backend, request, allow_unmeasured, yesno, opt_out)
+    marks = abstain.gate({qid: a.model_dump() for qid, a in out.answers.items()}, threshold,
+                         uniform=getattr(backend, "name", None) == "uniform")
+    answers = {qid: a.model_copy(update={"abstention": marks[qid]["abstention"],
+                                         "abstention_threshold": threshold})
+               for qid, a in out.answers.items()}
+    return out.model_copy(update={"answers": answers})
+
+
+def _ask(backend: Any, request: Any, allow_unmeasured: bool, yesno: bool, opt_out: str) -> Any:
     from .backends.base import is_proxy
     from .schema import DecideRequest, DecideResponse, NoulAnswer, laya_questions
 

@@ -2452,3 +2452,26 @@ typed question with no labels. §57's decision holds: no `verdict fit`. The advi
 extends to larger label counts: for one fixed question with a hundred or more labels per class, on
 a task where Laya is weak (many options, prompt injection), a logistic head on an embedding model
 is the better tool, and trees are not needed.
+
+## 64. Reading past 512 tokens: it works, it costs what it reads, and nothing carries over (2026-11-25)
+
+`[model].max_len` sets `agent.cfg["max_len"]` after load. laya-mlx 0.8.1 reads it on every call
+and applies its own check (`head_max_len < max_len <= max_position_embeddings`) only at load, and
+clips silently above 8192, so verdict checks the range itself.
+
+**Cost is about linear in the tokens read.** Per call: 0.09 s at 512, 0.19 s at 1024, 0.41 s at 2048,
+1.0 s at 4096, 3.2 s at 8192. Memory stays near 1.5 to 1.9 GB. No error and no NaN up to 8192.
+
+**What it reads.** A string state keeps its first N tokens and loses the tail. On synthetic threads
+of about 1,500 tokens with the decisive sentence at the end, the model saw it only at 2048, and
+even then the no-items scored 0.77 to 0.87 yes. The checkpoint was trained at 512, so longer reads
+are off distribution. Temperatures and cuts were fitted at the default, so probabilities at a
+longer length are not calibrated, and a 0.5 cut is not to be trusted there.
+
+**Also fixed.** `Engine.max_len` was fixed at construction, and a lazily loaded engine has no agent
+then, so the multilingual checkpoint (really 1024) reported 512 and over-reported `truncated`. It is
+now defined on first use (configured, else the loaded agent's, else 512) and then frozen.
+
+**What this changes.** An opt-in knob, default unchanged. Scorecards and calibration fits record
+`max_len` only when it is set, so every existing one stays comparable. Accuracy beyond 512 is
+unmeasured: recalibrate before gating on it.

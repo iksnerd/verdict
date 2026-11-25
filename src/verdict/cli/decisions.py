@@ -33,7 +33,7 @@ def _read_fits_meta(path: str | None) -> tuple[dict, dict]:
         raise ValueError(f"{path} is not a fits file: it has no \"questions\" key and is not an "
                          "object of fits per question. It looks like a question bank; --calibration "
                          "takes what `verdict calibrate --out` writes")
-    return fits, {k: data[k] for k in ("model", "bits", "budget") if data.get(k) is not None}
+    return fits, {k: data[k] for k in ("model", "bits", "budget", "max_len") if data.get(k) is not None}
 
 
 def _read_fits(path: str | None) -> dict:
@@ -59,6 +59,23 @@ def _check_fit_identity(ask, meta: dict, result: dict, path: str | None) -> None
         if meta.get(key) is not None and now is not None and meta[key] != now:
             ask.warn(f"{path} was fitted at {key} {meta[key]}, but this run uses {key} {now}; "
                      "a cut moved to another setting is a guess")
+    fitted, now = meta.get("max_len", 0), ask.settings.max_len   # absent is the default, 0
+    if fitted != now:
+        ask.warn(f"{path} was fitted at max_len {fitted or 'default'}, but this run uses max_len "
+                 f"{now or 'default'}; probabilities at another length are not calibrated, so a "
+                 "cut moved there is a guess")
+
+
+def _check_abstain(args: argparse.Namespace) -> None:
+    """Refuse a bad `--abstain-below` before anything is read or asked (a ValueError, so exit 2)."""
+    from ..errors import QuestionError
+    from ..judge import abstain
+
+    if getattr(args, "abstain_below", None) is not None:
+        try:
+            args.abstain_below = abstain.parse_threshold(args.abstain_below)
+        except QuestionError as exc:
+            raise ValueError(str(exc)) from None   # a usage error here, not a refused question
 
 
 def _decide_cmd(args: argparse.Namespace) -> int:
@@ -76,6 +93,7 @@ def _decide_cmd(args: argparse.Namespace) -> int:
         return support._fail("--jsonl reads states from stdin, and stdin is a terminal; pipe or "
                              "redirect a file: verdict decide --jsonl -q BANK < states.jsonl")
     try:
+        _check_abstain(args)
         if args.questions:
             questions = inputs.load_questions(args.questions)
         else:
@@ -195,6 +213,7 @@ def _ask_cmd(args: argparse.Namespace) -> int:
     from .. import inputs
 
     try:
+        _check_abstain(args)
         question = inputs.inline_question(args.question, args.options, args.levels,
                                           args.true, args.false)
         cut, fit, fit_meta = None, None, {}

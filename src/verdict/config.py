@@ -38,7 +38,7 @@ DEFAULTS: dict[str, Any] = {
     # to what you start deliberately, not to what a request asked for).
     "model": {"path": "aac6fef/laya-mlx", "prompt_token_budget": 128,
               "multilingual": "aac6fef/laya-multilingual-mlx", "bits": 16, "lang": "auto",
-              "extra": {}},
+              "max_len": 0, "extra": {}},
     # A backend other than local Laya for `verdict serve`: any /v1/systemone server, Jev included.
     # Unset by default, so nothing leaves this machine unless it is named here (or by a flag).
     # The API key is deliberately not a setting: $TYPESAFE_API_KEY only.
@@ -51,6 +51,7 @@ ENV_OVERRIDES = {
     ("model", "path"): "VERDICT_MODEL",
     ("model", "multilingual"): "VERDICT_MULTILINGUAL",
     ("model", "bits"): "VERDICT_BITS",
+    ("model", "max_len"): "VERDICT_MAX_LEN",
     ("model", "lang"): "VERDICT_LANG",
     ("systemone", "url"): "VERDICT_SYSTEMONE_URL",
     ("systemone", "model"): "VERDICT_SYSTEMONE_MODEL",
@@ -80,12 +81,12 @@ class Settings:
 
     __slots__ = ("url", "model_path", "prompt_token_budget", "multilingual_path", "source",
                  "defaulted", "bits", "lang", "extra_checkpoints", "systemone_url",
-                 "systemone_model", "sources")
+                 "systemone_model", "sources", "max_len")
 
     def __init__(self, url, model_path, prompt_token_budget,
                  multilingual_path=DEFAULTS["model"]["multilingual"], source=None, defaulted=(),
                  bits=16, lang="auto", extra_checkpoints=None, systemone_url=None,
-                 systemone_model=DEFAULTS["systemone"]["model"], sources=None):
+                 systemone_model=DEFAULTS["systemone"]["model"], sources=None, max_len=0):
         self.url = url
         #: Where each key's value won from, as `(section, key) -> "$VAR" | file path`; a key not
         #: here is the built-in default. `explain` reads this rather than re-deriving it.
@@ -94,6 +95,9 @@ class Settings:
         self.lang = lang
         #: 16 is the checkpoint as shipped; 8 quantizes it at load (FINDINGS §36).
         self.bits = bits
+        #: Tokens the checkpoint reads; 0 is the checkpoint's own (512 English, 1024 multilingual).
+        #: Opt-in: accuracy past 512 is unmeasured and calibration does not carry over.
+        self.max_len = max_len
         self.model_path = model_path
         self.prompt_token_budget = prompt_token_budget
         self.multilingual_path = multilingual_path
@@ -138,7 +142,7 @@ def _merge(base: dict, over: dict) -> dict:
 
 #: What a config file may set; anything else is a typo that would otherwise be ignored in silence.
 KNOWN = {"server": {"url"},
-         "model": {"path", "prompt_token_budget", "multilingual", "bits", "lang", "extra"},
+         "model": {"path", "prompt_token_budget", "multilingual", "bits", "lang", "max_len", "extra"},
          "systemone": {"url", "model"}}
 
 
@@ -255,6 +259,7 @@ def _load(files: list[Path]) -> Settings:
         source=found,
         defaulted=defaulted,
         bits=_bits(data["model"]["bits"]),
+        max_len=_max_len(data["model"]["max_len"], where("model", "max_len")),
         lang=_lang(data["model"]["lang"]),
         extra_checkpoints=_extra(data["model"]["extra"]),
         systemone_url=_systemone_url(data["systemone"]["url"], where("systemone", "url")),
@@ -271,6 +276,7 @@ def explain(path: Path | None = None) -> list[dict[str, Any]]:
               ("model", "prompt_token_budget"): settings.prompt_token_budget,
               ("model", "multilingual"): settings.multilingual_path,
               ("model", "bits"): settings.bits, ("model", "lang"): settings.lang,
+              ("model", "max_len"): settings.max_len,
               ("model", "extra"): settings.extra_checkpoints,
               ("systemone", "url"): settings.systemone_url,
               ("systemone", "model"): settings.systemone_model}
@@ -422,6 +428,40 @@ def _bits(value) -> int:
     return bits
 
 
+#: laya clips silently above this (its position table), and checks nothing on a changed cfg.
+MAX_LEN_CEILING = 8192
+#: laya requires `4 < head_max_len < max_len`, so no checkpoint takes less than 6. The real floor
+#: is the loaded checkpoint's own `head_max_len`, checked at load (`engine.apply_max_len`).
+MAX_LEN_FLOOR = 6
+
+
+def check_max_len(value, where: str = "[model].max_len (or $VERDICT_MAX_LEN)") -> int:
+    """0 (the checkpoint's own limit) or a whole number of tokens up to 8192. A bool is not a
+    number here, and a float or a non-numeric string is refused rather than rounded."""
+    n = None
+    if isinstance(value, int) and not isinstance(value, bool):
+        n = value
+    elif isinstance(value, str) and value.strip().isdigit():
+        n = int(value)   # the environment and a flag arrive as text
+    if n is None or not (n == 0 or MAX_LEN_FLOOR <= n <= MAX_LEN_CEILING):
+        raise ConfigError(f"{where} is {value!r}; it takes 0 (the checkpoint's own limit) or a whole "
+                          f"number of tokens from {MAX_LEN_FLOOR} to {MAX_LEN_CEILING}, above the "
+                          "checkpoint's head_max_len")
+    return n
+
+
+def _max_len(value, where: str) -> int:
+    return check_max_len(value, where)
+
+
+def max_len_note(max_len: int, budget: int | None, native: int = 512) -> str | None:
+    """One line when `max_len` reads past the checkpoint's own limit but `prompt_token_budget`
+    clips the state first, so nothing changes; else None. A budget of 0 reads the state whole."""
+    if max_len and max_len > native and budget and budget < max_len:
+        return f"max_len {max_len} has no effect while prompt_token_budget is {budget}"
+    return None
+
+
 def _toml_str(value: str) -> str:
     """A TOML basic string, usable as a value or a quoted key (`support.v2` unquoted is a nested
     table). JSON's escapes are TOML's, except that TOML also forbids a raw DEL."""
@@ -436,6 +476,15 @@ def _extra_toml(extra: dict[str, str]) -> str:
                 'are configured.\n# support = "org/support-mlx"')
     lines = "\n".join(f"{_toml_str(name)} = {_toml_str(path)}" for name, path in extra.items())
     return f"[model.extra]\n{lines}"
+
+
+def _max_len_toml(s: Settings) -> str:
+    """`max_len`, only when set: an opt-in that is a comment until someone chooses it."""
+    if not s.max_len:
+        return ("# max_len = 2048  # opt-in: tokens read, up to 8192 (default: the checkpoint's own, 512 "
+                "or 1024).\n# Raise prompt_token_budget too, and recalibrate: see the guide.")
+    return (f"# Tokens the checkpoint reads. Past 512 its accuracy is unmeasured and calibration does "
+            f"not carry over.\nmax_len = {s.max_len}")
 
 
 def _systemone_toml(s: Settings) -> str:
@@ -474,6 +523,7 @@ bits = {s.bits}
 # Bulgarian positive review: "negative 0.72" English, "positive 1.00" multilingual). $VERDICT_LANG
 # and --lang override it.
 lang = {_toml_str(s.lang)}
+{_max_len_toml(s)}
 
 {_extra_toml(s.extra_checkpoints)}
 

@@ -31,11 +31,12 @@ class MlxBackend:
 
     def __init__(self, model_id: str = DEFAULT_MODEL, agent: Any = None,
                  multilingual_id: str | None = None, extra_checkpoints: dict[str, str] | None = None,
-                 budget: int | None = None, bits: int = 16, **load_options: Any):
+                 budget: int | None = None, bits: int = 16, max_len: int = 0,
+                 **load_options: Any):
         # `bits` applies to the fine-tune only: §36 measured it, not the multilingual checkpoint.
         self.engine: Engine = (
-            Engine(model_id, agent=agent, bits=bits, **load_options) if agent is not None
-            else load(model_id, bits=bits, **load_options)
+            Engine(model_id, agent=agent, bits=bits, max_len=max_len, **load_options)
+            if agent is not None else load(model_id, bits=bits, max_len=max_len, **load_options)
         )
         self.model_id = model_id
         self.name = self.engine.name
@@ -44,13 +45,19 @@ class MlxBackend:
         #: separately from `multilingual`, which keeps its own dedicated config key and
         #: lang-detection behaviour; this is plain alternates with neither.
         self.extra_checkpoints = dict(extra_checkpoints) if extra_checkpoints else {}
-        #: Tokens of each `decide` state the model sees; None reads it whole (up to laya's 512).
+        #: Tokens of each `decide` state the model sees; None reads it whole (up to the engine's `max_len`).
         self.budget = budget
         self.load_options = load_options
+        #: `[model].max_len`, for every checkpoint this backend loads, the multilingual one too.
+        self.max_len = max_len
         #: Lazily loaded and cached by name, `multilingual` included: loading any of these at
         #: startup would put a second model on the GPU for traffic that may never ask for it.
         self._loaded: dict[str, Engine] = {}
         self._loaded_lock = threading.Lock()
+
+    def _checkpoint_options(self) -> dict[str, Any]:
+        """What a further checkpoint loads with: `max_len` only when set, like the main one."""
+        return {**self.load_options, "max_len": self.max_len} if self.max_len else self.load_options
 
     def known_models(self) -> set[str]:
         """Names besides the served checkpoint that a request may select."""
@@ -94,10 +101,10 @@ class MlxBackend:
         if checkpoint_id in self._loaded:
             return self._loaded[checkpoint_id]
         if not cache:
-            return load(checkpoint_id, **self.load_options)
+            return load(checkpoint_id, **self._checkpoint_options())
         with self._loaded_lock:
             if checkpoint_id not in self._loaded:
-                self._loaded[checkpoint_id] = load(checkpoint_id, **self.load_options)
+                self._loaded[checkpoint_id] = load(checkpoint_id, **self._checkpoint_options())
             return self._loaded[checkpoint_id]
 
     def decide(self, request: DecideRequest) -> DecideResponse:

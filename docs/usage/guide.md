@@ -12,14 +12,15 @@ where each claim here comes from, [FINDINGS.md](../research/FINDINGS.md). For ru
 2. [First answers: the three question types](#first-answers-the-three-question-types)
 3. [Many items at once](#many-items-at-once)
 4. [Turning a score into a decision](#turning-a-score-into-a-decision)
-5. [Reading the numbers](#reading-the-numbers)
-6. [Which tool for which job](#which-tool-for-which-job)
-7. [Worked recipes](#worked-recipes)
-8. [Running it without cooking the laptop](#running-it-without-cooking-the-laptop)
-9. [Troubleshooting](#troubleshooting)
-10. [Command reference](#command-reference)
-11. [Configuration reference](#configuration-reference)
-12. [Scripts and agents](#scripts-and-agents)
+5. [Marking the unsure answers](#marking-the-unsure-answers)
+6. [Reading the numbers](#reading-the-numbers)
+7. [Which tool for which job](#which-tool-for-which-job)
+8. [Worked recipes](#worked-recipes)
+9. [Running it without cooking the laptop](#running-it-without-cooking-the-laptop)
+10. [Troubleshooting](#troubleshooting)
+11. [Command reference](#command-reference)
+12. [Configuration reference](#configuration-reference)
+13. [Scripts and agents](#scripts-and-agents)
 
 [Concepts](concepts.md) (`verdict docs concepts`) says what a state, a question, an answer and a
 bank are. Three companion pages, in the shape of TypeSafe's docs: `verdict docs patterns` (fan-out,
@@ -136,6 +137,29 @@ can see which options to trust.
 happened after every turn: which tools ran, and which commands were blocked or rejected.
 Conventional-commit prefixes label commit types. A ticket tracker records which items were closed.
 Run a secret scan before using transcripts: one in 2,348 prompts held a live credential.
+
+## Marking the unsure answers
+
+`--abstain-below P` (on `decide`, including `--jsonl`, and on `ask --json`) adds two keys to every
+answer: `abstention` and `abstention_threshold`.
+
+```sh
+verdict decide --jsonl -q bank.json --abstain-below 0.8 < items.jsonl
+# "risky": {"type": "noul", "noul": 0.62, ..., "abstention": "abstained", "abstention_threshold": 0.8}
+```
+
+- `abstained` when the answer's largest probability is below `P`, else `passed`. For a yes/no that
+  is `max(p, 1 - p)`. `P` is above 0 and at most 1; anything else is exit 2.
+- It reports and never changes the answer: the probabilities, the choice and `confidence` stay as
+  the model gave them. Your script decides what an abstained row means.
+- A backend with no model (`uniform`) is marked `unevaluated`, never `passed` or `abstained`: it
+  means "no model", not "unsure", and nothing should gate on it.
+- Without the flag no key is added, so existing output is byte-for-byte what it was.
+- Base Laya is over-confident, so `P` is a threshold and not a calibrated probability: 0.8 does not
+  mean "right 80% of the time". Pick it from labelled data of your own with `verdict calibrate`,
+  and check how many answers it abstains on before relying on it.
+
+Over HTTP the same mark is `POST /v1/decide?abstain_below=P` ([api](api.md)).
 
 ## Reading the numbers
 
@@ -260,6 +284,24 @@ The rules that came out of doing it once:
   quantizes the model as it loads: about 430 MB of GPU memory instead of 800, with the same
   answers on every bench suite (§36). It is no faster, and the download stays 843 MB. 4-bit is not
   offered: it changed too many answers.
+- **Long state?** `max_len` under `[model]` (or `VERDICT_MAX_LEN`, `verdict serve --max-len N`,
+  `--max-len` on the asking commands) raises how many tokens the checkpoint reads: 512 for the
+  English one and 1024 for the multilingual one by default, up to 8192. It is opt-in, and read
+  this first:
+  - It costs about what it reads: per call 0.09 s at 512, 0.19 s at 1024, 0.41 s at 2048, 1.0 s
+    at 4096 and 3.2 s at 8192. Memory stays near 1.5 to 1.9 GB.
+  - The checkpoint was trained at 512. Accuracy beyond that is unmeasured, and the temperatures
+    and cuts from `calibrate` were fitted at the default length, so probabilities at a longer one
+    are not calibrated. Fits record `max_len` and warn when used at another.
+  - `prompt_token_budget` clips the state before the model sees it (128 by default), so `max_len`
+    does nothing until the budget is raised too, or set to 0 to read the whole state. verdict
+    prints one line when that is the case.
+  - The model keeps the first tokens and clips the tail. On a synthetic thread of about 1,500
+    tokens with the decisive sentence at the end, the model saw it only at `max_len` 2048, and
+    even then the no-items scored 0.77 to 0.87 yes. Do not trust a 0.5 cut at a long length:
+    recalibrate on your own labelled states.
+  - A scorecard from `verdict bench` records `max_len` only when it is set, and `--verify`
+    compares only scorecards with the same one, so existing scorecards stay comparable.
 - **Non-English input:** verdict warns, because the English checkpoint stays confident while
   wrong. `--lang multi` loads Laya's multilingual checkpoint on first use (Hindi refund request:
   0.28 on the English checkpoint, 1.00 on the multilingual one). For Cyrillic it is the difference
@@ -356,7 +398,7 @@ reason to load a second copy of the model beside it.
 Settings resolve flag > environment > `./verdict.toml` > `~/.config/verdict/config.toml` >
 built-in default, key by key: a local file that sets only `bits` keeps the user file's `url`.
 `verdict config` shows each value and the file or variable it came from. An unknown section or
-key in either file is an error, not ignored. These seven override a `[section].key` in a file:
+key in either file is an error, not ignored. These eight override a `[section].key` in a file:
 
 | variable | overrides | default |
 |---|---|---|
@@ -364,6 +406,7 @@ key in either file is an error, not ignored. These seven override a `[section].k
 | `VERDICT_MODEL` | `[model].path`, the checkpoint to load | base Laya |
 | `VERDICT_MULTILINGUAL` | `[model].multilingual`, the checkpoint `"model": "multilingual"` answers from | `aac6fef/laya-multilingual-mlx` |
 | `VERDICT_BITS` | `[model].bits`, quantization at load (16 or 8, §36) | 16 |
+| `VERDICT_MAX_LEN` | `[model].max_len`, tokens the checkpoint reads (6 to 8192); 0 is the checkpoint's own, 512 English and 1024 multilingual. Raise `prompt_token_budget` with it | 0 |
 | `VERDICT_LANG` | `[model].lang`, `auto`, `en` or `multi` | `auto` |
 | `VERDICT_SYSTEMONE_URL` | `[systemone].url`, a remote `/v1/systemone` server for `verdict serve` to answer with (https unless loopback). Set but empty, it switches off a URL a config file set, so one run stays local | unset: local Laya |
 | `VERDICT_SYSTEMONE_MODEL` | `[systemone].model`, the model field sent to it | `jev-latest` |

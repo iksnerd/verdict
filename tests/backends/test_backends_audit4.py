@@ -23,14 +23,24 @@ class Cfg(Agent):
         self.cfg = {"max_len": max_len}
 
 
-def test_engine_limit_does_not_change_when_the_agent_loads(monkeypatch):
+def test_engine_limit_is_fixed_at_first_use_and_never_moves_after(monkeypatch):
+    """Defined once, on first use (configured max_len, else the loaded agent's cfg, else 512), then
+    frozen: an earlier audit fixed a limit that moved mid-run."""
     fake_transformers(monkeypatch, [])
     e = Engine("main")
+    e._agent = Cfg(1024)   # what a lazy load does, before anything asked for the limit
     text = "x " * 600
-    assert e.exceeds_context(text) is True
-    e._agent = Cfg(1024)   # what a lazy load does
-    assert e.exceeds_context(text) is True
+    assert e.exceeds_context(text) is False
+    assert e.max_len == 1024
+    e._agent.cfg["max_len"] = 2048   # nothing that happens later changes it
+    assert e.max_len == 1024
+
+
+def test_engine_limit_is_512_when_the_agent_reports_none(monkeypatch):
+    fake_transformers(monkeypatch, [])
+    e = Engine("main", agent=Agent())
     assert e.max_len == LAYA_MAX_LEN
+    assert e.exceeds_context("x " * 600) is True
 
 
 def test_engine_limit_comes_from_an_injected_agent(monkeypatch):

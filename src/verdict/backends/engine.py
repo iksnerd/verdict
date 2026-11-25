@@ -31,6 +31,9 @@ PROMPT_TOKEN_BUDGET = 128
 #: Laya's own context length, used when the loaded agent does not report one.
 LAYA_MAX_LEN = 512
 
+#: The most tokens laya reads; it clips silently above this. Same number as `config.MAX_LEN_CEILING`.
+MAX_LEN_CEILING = 8192
+
 #: `build_sequence` truncates every rendered option to this many tokens, silently. Not ours to
 #: change (it is laya's format), but `Engine.option_overflow` will tell you when you cross it.
 OPTION_TOKEN_CAP = 48
@@ -64,6 +67,24 @@ def maybe_truncated(questions: dict[str, Any]) -> list[str]:
     return out
 
 
+def apply_max_len(agent: Any, max_len: int) -> int:
+    """Set how many tokens a loaded laya agent reads, and return the checkpoint's own limit.
+
+    laya-mlx reads `agent.cfg["max_len"]` on every call and checks `head_max_len < max_len` only
+    when it loads, never on a changed cfg, so the check is repeated here (and the ceiling, since
+    laya clips silently above 8192). The cfg is left untouched when the check fails."""
+    cfg = getattr(agent, "cfg", None)
+    if not isinstance(cfg, dict):
+        raise ValueError(f"max_len {max_len} cannot be applied: the loaded agent has no cfg to set it on")
+    native = cfg.get("max_len") or LAYA_MAX_LEN
+    head = cfg.get("head_max_len")
+    if max_len > MAX_LEN_CEILING or (head is not None and max_len <= head):
+        raise ValueError(f"max_len {max_len} must be above this checkpoint's head_max_len {head} and "
+                         f"at most {MAX_LEN_CEILING}")
+    cfg["max_len"] = max_len
+    return native
+
+
 def quantize(agent: Any, bits: int) -> None:
     """Quantize a loaded laya agent in place, exactly as FINDINGS §36 measured: group 64, every
     layer that supports it except the action head. `DecisionModel` casts its input to
@@ -82,7 +103,8 @@ def quantize(agent: Any, bits: int) -> None:
 class Engine:
     """A loaded checkpoint plus its tokenizer. Construct it with `load`."""
 
-    def __init__(self, model_id: str, agent: Any = None, bits: int = 16, **load_options: Any):
+    def __init__(self, model_id: str, agent: Any = None, bits: int = 16, max_len: int = 0,
+                 **load_options: Any):
         if bits != 16 and load_options.get("compile"):
             raise ValueError("bits and compile together: a compiled forward pass keeps the FP16 "
                              "graph, so the quantization would do nothing")
@@ -90,19 +112,53 @@ class Engine:
         self.bits = bits
         self.load_options = load_options
         self._agent = agent
+        #: `[model].max_len`: 0 leaves the checkpoint's own limit. Applied after load, never passed
+        #: to `laya_mlx.load`, which would not accept it.
+        self.configured_max_len = max_len
+        #: The checkpoint's own limit, known once its agent is: what `max_len` raised from.
+        self.native_max_len: int | None = None
+        if agent is not None:
+            self._adopt(agent)
         #: Only an agent this engine loads is quantized. One handed in is served as it came,
         #: whatever `bits` says, so the name must not claim a width nobody applied.
         self._quantizes = bits != 16 and agent is None
         self._tokenizer: Any = None
         #: Set once the tokenizer failed to load inside `exceeds_context`, so it is not retried.
         self._tokenizer_failed = False
-        #: The one place that says what this engine's context limit is: the injected agent's own
-        #: `max_len`, else laya's 512. Fixed here, never read off an agent loaded later, so the
-        #: answer does not depend on load order.
-        self.max_len: int = (getattr(agent, "cfg", None) or {}).get("max_len") or LAYA_MAX_LEN
+        self._max_len: int | None = None
+        self._max_len_lock = threading.Lock()
         #: One lock per lazy cache: two first requests on the threadpool must not both load.
         self._agent_lock = threading.Lock()
         self._tokenizer_lock = threading.Lock()
+
+    def _adopt(self, agent: Any) -> None:
+        """Apply the configured `max_len` to an agent, or just note its own limit."""
+        if self.configured_max_len:
+            self.native_max_len = apply_max_len(agent, self.configured_max_len)
+        else:
+            self.native_max_len = (getattr(agent, "cfg", None) or {}).get("max_len") or LAYA_MAX_LEN
+
+    @property
+    def max_len(self) -> int:
+        """The one place that says what this engine's context limit is. Defined on first use: the
+        configured `max_len`, else the loaded agent's own (loading it where needed, so the
+        multilingual checkpoint says 1024 and not a guessed 512), else laya's 512. Then frozen: an
+        agent changed or loaded later never moves it mid-run. A load that fails answers 512 for
+        that call and is retried on the next, so a failure is never frozen in."""
+        if self._max_len is None:
+            with self._max_len_lock:
+                if self._max_len is None:
+                    if self.configured_max_len:
+                        self._max_len = self.configured_max_len
+                    else:
+                        try:
+                            agent = self.agent
+                        except Exception as exc:
+                            log.warning("could not load %s to read its context limit (%s); "
+                                        "assuming %d", self.model_id, exc, LAYA_MAX_LEN)
+                            return LAYA_MAX_LEN
+                        self._max_len = (getattr(agent, "cfg", None) or {}).get("max_len") or LAYA_MAX_LEN
+        return self._max_len
 
     @property
     def name(self) -> str:
@@ -121,6 +177,7 @@ class Engine:
                         # Cached only once quantized: if this raises, the next access loads and
                         # tries again instead of serving the FP16 agent under a q8 name.
                         quantize(agent, self.bits)
+                    self._adopt(agent)   # raises before caching: a bad limit never serves
                     self._agent = agent
         return self._agent
 
@@ -244,7 +301,7 @@ class Engine:
         return self.tokenizer.decode(ids[1 : budget + 1], skip_special_tokens=True)
 
 
-def load(model_id: str = DEFAULT_MODEL, bits: int = 16, **load_options: Any) -> Engine:
+def load(model_id: str = DEFAULT_MODEL, bits: int = 16, max_len: int = 0, **load_options: Any) -> Engine:
     """Load a checkpoint.
 
     `load_options` go straight to `laya_mlx.load`: `dtype`, `batch_size`, and the opt-in speed
@@ -253,4 +310,4 @@ def load(model_id: str = DEFAULT_MODEL, bits: int = 16, **load_options: Any) -> 
     unchanged; `batch_size` was measured and does nothing for this workload, since it batches
     across calls rather than across the questions within one (FINDINGS §11).
     """
-    return Engine(model_id, bits=bits, **load_options)
+    return Engine(model_id, bits=bits, max_len=max_len, **load_options)

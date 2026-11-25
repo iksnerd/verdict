@@ -26,6 +26,7 @@ def _serve_cmd(args: argparse.Namespace) -> int:
     from ..api import create_app
 
     settings = support._settings()
+    max_len = inference._max_len(args, settings)   # a bad flag stops before anything binds
     remote = (config.check_systemone_url(args.systemone) if args.systemone
               else settings.systemone_url)
     if remote:
@@ -50,10 +51,14 @@ def _serve_cmd(args: argparse.Namespace) -> int:
     bits = args.bits or settings.bits
     backend = MlxBackend(args.model, multilingual_id=settings.multilingual_path,
                          extra_checkpoints=settings.extra_checkpoints, budget=budget or None,
-                         bits=bits)
+                         bits=bits, max_len=max_len)
     print(f"loading {args.model} ...", flush=True)
     backend.engine.agent
     backend.engine.tokenizer
+    note = max_len and config.max_len_note(
+        max_len, budget, getattr(backend.engine, "native_max_len", None) or 512)
+    if note:
+        support._warn(note)
     # The load took seconds, so the port can have been taken since the first check. Look again
     # before claiming to serve.
     if not _port_free(args.host, args.port):
@@ -290,7 +295,7 @@ def _init_cmd(args: argparse.Namespace) -> int:
     settings = config.Settings(
         url=url.rstrip("/"), model_path=model_path,
         prompt_token_budget=current.prompt_token_budget, multilingual_path=multilingual,
-        bits=current.bits, lang=current.lang, extra_checkpoints=current.extra_checkpoints,
+        bits=current.bits, lang=current.lang, max_len=current.max_len, extra_checkpoints=current.extra_checkpoints,
         systemone_url=current.systemone_url, systemone_model=current.systemone_model,
     )
     out = target

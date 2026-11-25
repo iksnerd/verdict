@@ -75,6 +75,13 @@ It answers as `verdict decide` does, so the same question gets the same number f
   warns against `yes`/`no` keys on a `choice`. The yes/no rewrite uses those keys anyway because
   it measured better than Laya's suggested `A`/`B` keys (§47). Laya's `labels` override is not in
   the laya-mlx port yet, so verdict does not offer it.
+- `?abstain_below=P` (above 0, at most 1) adds two optional fields to every answer, on `/v1/decide`
+  only (`/v1/systemone` and `/v1/route` never carry them, and without the parameter no key is
+  added): `abstention` (`"passed"`, `"abstained"` or `"unevaluated"`) and `abstention_threshold`
+  (`P`). `abstained` means the answer's largest probability, `max(p, 1 - p)` for a yes/no, is below
+  `P`. A backend with no model (`uniform`) gives `unevaluated`, never `passed` or `abstained`. The
+  answer is unchanged; this is a report. A value outside (0, 1] is a 422 with the `refused` body
+  above, a non-number a plain 422. On base Laya `P` is a threshold, not a calibrated probability.
 - A new yes/no is asked as a choice between `no` and `yes` and answered as a `noul`, P(yes), which
   ranked as well or better on every set measured (§38, §40). `?yesno=true` sends it as a plain
   yes/no. A library question keeps the shape it was measured in on the checkpoint it was measured on.

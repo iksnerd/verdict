@@ -177,20 +177,25 @@ def create_app(backend: Backend | None = None) -> FastAPI:
                   "?allow_unmeasured=true asks anyway. A malformed request is also 422, with a "
                   "list `detail` and no `error`.")}})
     def decide(request: DecideRequest, allow_unmeasured: bool = False,
-               yesno: bool = False) -> DecideResponse:
+               yesno: bool = False, abstain_below: Optional[float] = None) -> DecideResponse:
         """Answers as `verdict decide` does: a question about a field the state lacks, or shaped
         like ones that measured at chance, is a 422 unless `allow_unmeasured=true`, and a new
-        yes/no is asked as a no/yes choice unless `yesno=true` (FINDINGS §38)."""
-        with _backend_errors():
-            return _prepared(request, allow_unmeasured=allow_unmeasured, yesno=yesno)
+        yes/no is asked as a no/yes choice unless `yesno=true` (FINDINGS §38).
 
-    def _prepared(request: DecideRequest, *, allow_unmeasured: bool, yesno: bool
-                  ) -> DecideResponse:
+        `abstain_below=P` (above 0, at most 1) adds `abstention` and `abstention_threshold` to each
+        answer: `abstained` when its largest probability is below P, `passed` otherwise, and
+        `unevaluated` on a backend with no model. The answer itself is not changed."""
+        with _backend_errors():
+            return _prepared(request, allow_unmeasured=allow_unmeasured, yesno=yesno,
+                             abstain_below=abstain_below)
+
+    def _prepared(request: DecideRequest, *, allow_unmeasured: bool, yesno: bool,
+                  abstain_below: Optional[float] = None) -> DecideResponse:
         """`library.ask` over HTTP: the one path both endpoints, and the Python client, share."""
         from . import library
 
         return library.ask(backend, request, allow_unmeasured=allow_unmeasured, yesno=yesno,
-                           opt_out=library.HTTP_OPT_OUT)
+                           opt_out=library.HTTP_OPT_OUT, abstain_below=abstain_below)
 
     @app.post("/v1/systemone", response_model=SystemOneResponse, response_model_exclude_none=True)
     def systemone(request: SystemOneRequest) -> SystemOneResponse:

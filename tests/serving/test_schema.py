@@ -65,3 +65,15 @@ def test_usage_input_tokens_is_optional_like_jevs_own_contract():
     assert u.input_tokens is None
     assert u.output_tokens == 0
     assert Usage(output_tokens=None).output_tokens is None
+
+
+def test_abstention_fields_are_left_out_unless_set():
+    from verdict.schema import ChoiceAnswer, NoulAnswer, ScoreAnswer
+
+    answers = [NoulAnswer(noul=0.6, confidence=0.6),
+               ChoiceAnswer(choice="a", probabilities={"a": 1.0}, confidence=1.0),
+               ScoreAnswer(score=0.0, legend={"a": ""}, probabilities={"a": 1.0}, confidence=1.0)]
+    for a in answers:
+        assert not [k for k in a.model_dump_json(exclude_none=True) .split('"') if k.startswith("abstention")]
+        marked = a.model_copy(update={"abstention": "passed", "abstention_threshold": 0.5})
+        assert marked.model_dump(exclude_none=True)["abstention"] == "passed"

@@ -149,12 +149,16 @@ class DecideRequest(BaseModel):
 #: `truncated` is set (true) on every answer of a call whose state was cut to the token budget, and
 #: left out otherwise, so the output of a call that cut nothing is what it always was. It is a
 #: verdict extension: `/v1/systemone` leaves it out, since Jev's answer types are strict.
+#: `abstention` and `abstention_threshold` follow the same rule: set only by `--abstain-below` or
+#: `?abstain_below=` (`judge/abstain.py`), left out of every other answer.
 class ChoiceAnswer(BaseModel):
     type: Literal["choice"] = "choice"
     choice: str
     probabilities: dict[str, float]
     confidence: float
     truncated: Optional[bool] = None
+    abstention: Optional[Literal["passed", "abstained", "unevaluated"]] = None
+    abstention_threshold: Optional[float] = None
 
 
 class ScoreAnswer(BaseModel):
@@ -166,6 +170,8 @@ class ScoreAnswer(BaseModel):
     probabilities: dict[str, float]
     confidence: float
     truncated: Optional[bool] = None
+    abstention: Optional[Literal["passed", "abstained", "unevaluated"]] = None
+    abstention_threshold: Optional[float] = None
 
 
 class NoulAnswer(BaseModel):
@@ -174,6 +180,8 @@ class NoulAnswer(BaseModel):
     #: Laya reports max(p, 1-p); Jev does not report this field. Never synthesize it on proxying.
     confidence: Optional[float] = None
     truncated: Optional[bool] = None
+    abstention: Optional[Literal["passed", "abstained", "unevaluated"]] = None
+    abstention_threshold: Optional[float] = None
     #: "choice" when a yes/no was asked as a no/yes choice (`library.as_yesno`); left out otherwise.
     #: Verdict's own: `/v1/systemone` leaves it out like `truncated`.
     asked_as: Optional[str] = None

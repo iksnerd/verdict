@@ -12,6 +12,7 @@ import os
 import time
 
 from .. import client
+from .. import config
 from ..backends.engine import load
 from ..errors import QuestionError
 from . import support
@@ -77,9 +78,17 @@ def _budget(args: argparse.Namespace, settings) -> int | None:
     return args.budget if args.budget is not None else settings.prompt_token_budget
 
 
+def _max_len(args: argparse.Namespace, settings) -> int:
+    """The `--max-len` flag when given (checked), else the configured `max_len` (0: the
+    checkpoint's own)."""
+    flag = getattr(args, "max_len", None)
+    return config.check_max_len(flag, "--max-len") if flag is not None else settings.max_len
+
+
 def _answer(state, questions: dict, url: str, model_path: str, model: str | None = None,
             budget: int | None = None, server_only: bool = False, bits: int = 16,
-            flags: dict | None = None, pin: tuple[str, int] | None = None) -> dict:
+            flags: dict | None = None, pin: tuple[str, int] | None = None,
+            max_len: int = 0) -> dict:
     """Ask the server, or load the model here if none answers. `model` is laya's checkpoint name
     (`multilingual`), passed through to the server, or `model_path` is loaded in-process.
     `pin` is `(source, row)` once a run's first row was answered: `"in-process"` never asks the
@@ -100,13 +109,17 @@ def _answer(state, questions: dict, url: str, model_path: str, model: str | None
 
         # Validated and filled in as the server does, before paying for a model load.
         laya = laya_questions(questions)
-        key = (model_path, bits)
+        key = (model_path, bits, max_len)
         if key not in _ENGINES:
             if not pin:
                 _say_local(exc)
+            note = config.max_len_note(max_len, budget)
+            if note:
+                support._warn(note)
             # A cached Hub checkpoint still draws a "Fetching 6 files" bar on stderr.
             os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
-            _ENGINES[key] = load(model_path, bits=bits) if bits != 16 else load(model_path)
+            opts = {**({"bits": bits} if bits != 16 else {}), **({"max_len": max_len} if max_len else {})}
+            _ENGINES[key] = load(model_path, **opts)
         eng = _ENGINES[key]
         # Clip as the server does, so the two paths never answer the same call differently.
         clipped = eng.clip_state(state, budget)
@@ -132,11 +145,15 @@ class _Asker:
         from .. import config
 
         self.settings = config.load()
+        #: `--max-len` over `$VERDICT_MAX_LEN` over the file, checked here so a bad one stops the command.
+        self.settings.max_len = _max_len(args, self.settings)
         self.url = _url(args, self.settings)
         self.lang = getattr(args, "lang", None) or self.settings.lang
         self.server_only = getattr(args, "server_only", False)
         self.allow_unmeasured = getattr(args, "allow_unmeasured", False)
         self.yesno = getattr(args, "yesno", False)
+        #: `--abstain-below`, already validated by the command (`abstain.parse_threshold`).
+        self.abstain_below = getattr(args, "abstain_below", None)
         self.warn_clipped = getattr(args, "warn_clipped", True)
         self.main_path = ((args.model or self.settings.model_path) if self.server_only
                           else _resolved_model(args.model, self.settings))
@@ -228,6 +245,12 @@ class _Asker:
                       f"with {served}. --model picks what loads when no server answers; stop the "
                       "server, or pass --url for one serving that model")
         result["answers"] = library.as_yesno(result["answers"], rewritten)
+        if self.abstain_below is not None:
+            from ..judge import abstain
+
+            # After every rewrite, so a yes/no asked as a choice is gated as the yes/no it is.
+            result["answers"] = abstain.gate(result["answers"], float(self.abstain_below),
+                                             uniform=result.get("model") == "uniform")
         return result
 
     def _note_source(self, result: dict, kind: str) -> None:
@@ -252,7 +275,8 @@ class _Asker:
         if self.lang == "multi":
             return _answer(state, questions, self.url, self.settings.multilingual_path,
                            "multilingual", self.settings.prompt_token_budget,
-                           server_only=self.server_only, flags=self._flags(), pin=pin)
+                           server_only=self.server_only, flags=self._flags(), pin=pin,
+                           max_len=self.settings.max_len)
         if self.lang == "auto":
             info = inputs.language(state)
             if info and not info["is_english"]:
@@ -261,7 +285,8 @@ class _Asker:
                           "reliably; add --lang multi to use laya's multilingual one")
         return _answer(state, questions, self.url, self.main_path,
                        budget=self.settings.prompt_token_budget, server_only=self.server_only,
-                       bits=self.settings.bits, flags=self._flags(), pin=pin)
+                       bits=self.settings.bits, flags=self._flags(), pin=pin,
+                       max_len=self.settings.max_len)
 
     def _flags(self) -> dict:
         """The opt-outs the server needs to answer as this CLI call asked: only those set, so a

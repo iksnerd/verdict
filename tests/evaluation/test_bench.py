@@ -521,3 +521,29 @@ def test_verify_fails_when_a_suite_changed_its_metric():
     cur = {"model": "m1", "suites": {"toy": {"metric": "accuracy", "value": 0.95, "ci": [0.9, 1.0]}}}
     problems = bench.verify(cur, prev)
     assert len(problems) == 1 and "metric" in problems[0] and "accuracy" in problems[0]
+
+
+# ---- max_len: recorded only when set, compared with absent == default ----------------------------
+
+def test_a_default_run_writes_no_max_len(toy_bench, monkeypatch):
+    monkeypatch.delenv("VERDICT_MAX_LEN", raising=False)
+    out = toy_bench / "v0.5.0.json"
+    assert cli.main(["bench", "--out", str(out), "--pause", "0"]) == 0
+    assert "max_len" not in json.loads(out.read_text())
+
+
+def test_a_longer_read_is_recorded(toy_bench, monkeypatch):
+    monkeypatch.setenv("VERDICT_MAX_LEN", "2048")
+    out = toy_bench / "v0.5.0.json"
+    assert cli.main(["bench", "--out", str(out), "--pause", "0"]) == 0
+    assert json.loads(out.read_text())["max_len"] == 2048
+
+
+def test_previous_matches_max_len_and_an_absent_one_is_the_default(tmp_path):
+    write_cards(tmp_path, {"0.5.0": card(0.8, 0.7, 0.9),
+                           "0.6.0": {**card(0.8, 0.7, 0.9), "max_len": 2048}})
+    like = card(0.8, 0.7, 0.9)
+    assert bench.previous(tmp_path, "0.7.0", like=like).stem == "v0.5.0"
+    assert bench.previous(tmp_path, "0.7.0", like={**like, "max_len": 2048}).stem == "v0.6.0"
+    assert bench.previous(tmp_path, "0.7.0", like={**like, "max_len": 4096}) is None
+    assert bench.previous(tmp_path, "0.7.0", like={**like, "max_len": 0}).stem == "v0.5.0"
