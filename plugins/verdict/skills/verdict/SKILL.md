@@ -148,6 +148,8 @@ verdict questions --json                                     # the measured libr
 verdict examples --path room-triage                          # an installed example's directory
 verdict calibrate labelled.jsonl -q bank.json --out fit.json
 verdict decide ... --calibration fit.json                    # adds "decision"
+verdict decide ... --abstain-below 0.7                        # marks each answer passed or abstained
+verdict decide ... --max-len 2048                             # read more of a long state (slower)
 ```
 
 **Code written for TypeSafe's Jev runs against verdict.** `verdict serve` also speaks Jev's
@@ -212,6 +214,16 @@ A user asks which of the 1,500 shell commands their agent ran last month touched
 The repo's `examples/secret-commands/` is this procedure with real output.
 
 ## Reading the numbers
+
+- **`--abstain-below P` marks the unsure answers; it does not decide.** Each answer gets
+  `abstention` (`passed` or `abstained`) and `abstention_threshold`, and the answer itself is
+  unchanged: your script decides what an abstained row means. A `uniform` answer ("no model") is
+  `unevaluated`, never `passed`. `P` is a threshold on the largest probability, not a calibrated
+  chance: pick it from labelled data with `verdict calibrate`.
+- **`max_len` (`--max-len`, `[model].max_len`) reads more than the checkpoint's 512 (1024
+  multilingual), up to 8192.** It costs what it reads (0.09 s a call at 512, 3.2 s at 8192) and
+  accuracy past 512 is unmeasured, so leave it at 0 unless a decisive sentence sits late in a long
+  state. `prompt_token_budget` clips first: raise it too (`verdict docs findings 64`).
 
 - **The ordering carries the signal; the absolute value does not.** An `rm -rf`
   scored 0.37 "destructive". Rank, take the top slice, or fit a cut. Never read
