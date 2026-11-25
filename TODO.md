@@ -15,6 +15,19 @@ purpose: `write_jsonl` atomic (inverts a layer and changes the write), `json_dig
 `__enter__`/`__exit__` mixin, and the `sys.stdin` fixture (one line already). The sections after
 'Rejected' are still open.
 
+**Third DRY audit, 2026-11-25, at HEAD b9ba392.** Four read-only agents, then three fix agents on disjoint
+files (suite 1467 passed). Done: one `Abstention` alias, `library.ask` calls `_ask` once, `_dump_answers`,
+`schema.dump_questions`, `inputs._fields_in`, `engine._native_max_len`, one tokenization in `option_overflow`,
+`parser.max_len_flag`, `inference.write_json_atomic`, one `DEFAULT_MODEL` for `router_eval`, `engine.clip_ids`
+(`router.clip` kept as a one-line call), and in the tests the redundant isolation lines, `fake_mlx_serve`,
+`sure_noul`, `URGENT_BANK`/`SPAM_BANK`, `FailsAt` for `Raising`, `hook_code`.
+Left open on purpose: `--systemone` key resolution is still written twice (`cli/evaluation.py`,
+`cli/examples_cmd.py`; the `[x]` under "Needs a decision first" is wrong, the copies differ in wording and
+error path, and unifying widens `[::1]`); `client.DEFAULT_URL` and the `"jev-latest"` default repeat
+`config.DEFAULTS`; `router.clip` is dead (public surface, ask first); the `bench.score` `ci` dict (key order is
+written to disk); `ModelCard` built four times in `api.py`; `_max_len` in `config.py` only forwards;
+four `run(argv, capsys)` test wrappers; two fake-`urlopen` helpers; the `sys.stdin` fixture (about 22 sites).
+
 ## Source, low risk
 
 - [x] `cli/update.py` 195-198, 207-209, 217-218: the reinstall hint
