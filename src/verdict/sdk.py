@@ -42,6 +42,7 @@ from .schema import (
     ScoreQuestion,
     Usage,
     _readable,
+    dump_questions,
 )
 
 
@@ -169,7 +170,7 @@ class Verdict:
 
     def _served(self, request: DecideRequest) -> DecideResponse:
         flags = _http.opt_flags(self.allow_unmeasured, self.yesno)
-        questions = {qid: q.model_dump(exclude_none=True) for qid, q in request.questions.items()}
+        questions = dump_questions(request.questions)
         with _served_errors():
             raw = _http.decide(request.state, questions, url=self._url, model=request.model, **flags)
         try:

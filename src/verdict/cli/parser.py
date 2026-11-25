@@ -519,6 +519,14 @@ def pause_flag(p: argparse.ArgumentParser) -> None:
                    help="between calls (default: 0.05)")
 
 
+def max_len_flag(target) -> None:
+    """`--max-len`, on a parser or an argument group."""
+    target.add_argument("--max-len", type=int, metavar="TOKENS",
+                        help="tokens the checkpoint reads, up to 8192 (default: the checkpoint's own, 512 English, "
+                             "1024 multilingual). Opt-in: accuracy past 512 is unmeasured and "
+                             "calibration does not carry over; raise the budget too. Overrides model.max_len")
+
+
 def systemone_model_flag(p: argparse.ArgumentParser) -> None:
     p.add_argument("--systemone-model", default="jev-latest", metavar="NAME",
                    help="the model field sent with --systemone (default: jev-latest)")
@@ -603,10 +611,7 @@ def main(argv: list[str] | None = None) -> int:
                        help="auto warns on non-English state; multi uses laya's multilingual "
                             "checkpoint (loaded on first use); en never checks. Overrides "
                             "model.lang (default auto)")
-        g.add_argument("--max-len", type=int, metavar="TOKENS",
-                       help="tokens the checkpoint reads, up to 8192 (default: the checkpoint's own, 512 English, "
-                            "1024 multilingual). Opt-in: accuracy past 512 is unmeasured and "
-                            "calibration does not carry over; raise the budget too. Overrides model.max_len")
+        max_len_flag(g)
         g.add_argument("--url", help="server to ask; overrides server.url and $VERDICT_URL")
         g.add_argument("--server-only", action="store_true",
                        help="fail if the server is unavailable; never fall back to local inference")
@@ -824,10 +829,7 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("--bits", type=int, choices=(16, 8),
                    help="8 quantizes the model at load: about half the GPU memory, the same "
                         "answers on every bench suite (FINDINGS §36); overrides model.bits")
-    s.add_argument("--max-len", type=int, metavar="TOKENS",
-                   help="tokens the checkpoint reads, up to 8192 (default: the checkpoint's own, 512 English, "
-                            "1024 multilingual). Opt-in: accuracy past 512 is unmeasured and "
-                            "calibration does not carry over; raise the budget too. Overrides model.max_len")
+    max_len_flag(s)
     s.add_argument("--systemone", metavar="URL",
                    help="answer with a /v1/systemone server instead of local laya: "
                         "https://api.typesafe.ai for Jev (needs $TYPESAFE_API_KEY). Every state is "

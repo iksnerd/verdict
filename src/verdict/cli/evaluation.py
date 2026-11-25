@@ -157,7 +157,7 @@ def _bench_cmd(args: argparse.Namespace) -> int:
                "timing": _timing(spent, tokens)}
         if args.out:
             Path(args.out).parent.mkdir(parents=True, exist_ok=True)
-            inference.write_atomic(args.out, json.dumps(doc, indent=2) + "\n")
+            inference.write_json_atomic(args.out, doc)
             print(f"wrote {args.out}", file=sys.stderr)
         return 0
     finally:
@@ -313,7 +313,7 @@ def _calibrate_cmd(args: argparse.Namespace) -> int:
            "bits": ask.settings.bits, "budget": ask.settings.prompt_token_budget,
            **({"max_len": ask.settings.max_len} if ask.settings.max_len else {})}
     if args.out:
-        inference.write_atomic(args.out, json.dumps(doc, indent=2) + "\n")
+        inference.write_json_atomic(args.out, doc)
         print(f"wrote {args.out}; apply it with --calibration {args.out} (decide) "
               f"or --cut {args.out} (ask)", file=sys.stderr)
     else:

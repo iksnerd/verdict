@@ -8,6 +8,7 @@ Other cli submodules reach these through this module's own attributes (`inferenc
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import time
 
@@ -48,6 +49,11 @@ def write_atomic(path, text: str) -> None:
         os.replace(tmp, target)
     finally:
         tmp.unlink(missing_ok=True)
+
+
+def write_json_atomic(path, doc) -> None:
+    """`write_atomic` of `doc` as indented JSON with a trailing newline."""
+    write_atomic(path, json.dumps(doc, indent=2) + "\n")
 
 
 def _resolved_model(flag: str | None, settings) -> str:

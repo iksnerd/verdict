@@ -116,6 +116,10 @@ def _readable(exc: ValidationError) -> str:
     return "; ".join(out)
 
 
+#: The values of an answer's `abstention` mark; `judge/abstain.py` names the same three strings.
+Abstention = Literal["passed", "abstained", "unevaluated"]
+
+
 def laya_questions(questions: dict[str, Any]) -> dict[str, dict[str, Any]]:
     """Validate a bank and put it in the shape laya reads, for the server and the in-process path
     alike, so a question never works through one and fails through the other. laya-mlx raises on
@@ -128,6 +132,11 @@ def laya_questions(questions: dict[str, Any]) -> dict[str, dict[str, Any]]:
         raise QuestionError(f"invalid questions: {_readable(exc)}") from exc
     return {qid: {"instructions": "", **q.model_dump(exclude_none=True)}
             for qid, q in parsed.items()}
+
+
+def dump_questions(questions: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """A request's questions as plain dicts, unset fields left out: what goes over the wire."""
+    return {qid: q.model_dump(exclude_none=True) for qid, q in questions.items()}
 
 
 class DecideRequest(BaseModel):
@@ -157,7 +166,7 @@ class ChoiceAnswer(BaseModel):
     probabilities: dict[str, float]
     confidence: float
     truncated: Optional[bool] = None
-    abstention: Optional[Literal["passed", "abstained", "unevaluated"]] = None
+    abstention: Optional[Abstention] = None
     abstention_threshold: Optional[float] = None
 
 
@@ -170,7 +179,7 @@ class ScoreAnswer(BaseModel):
     probabilities: dict[str, float]
     confidence: float
     truncated: Optional[bool] = None
-    abstention: Optional[Literal["passed", "abstained", "unevaluated"]] = None
+    abstention: Optional[Abstention] = None
     abstention_threshold: Optional[float] = None
 
 
@@ -180,7 +189,7 @@ class NoulAnswer(BaseModel):
     #: Laya reports max(p, 1-p); Jev does not report this field. Never synthesize it on proxying.
     confidence: Optional[float] = None
     truncated: Optional[bool] = None
-    abstention: Optional[Literal["passed", "abstained", "unevaluated"]] = None
+    abstention: Optional[Abstention] = None
     abstention_threshold: Optional[float] = None
     #: "choice" when a yes/no was asked as a no/yes choice (`library.as_yesno`); left out otherwise.
     #: Verdict's own: `/v1/systemone` leaves it out like `truncated`.

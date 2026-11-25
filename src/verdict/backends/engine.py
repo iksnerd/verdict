@@ -67,6 +67,11 @@ def maybe_truncated(questions: dict[str, Any]) -> list[str]:
     return out
 
 
+def _native_max_len(agent: Any) -> int:
+    """The agent's own context limit, else laya's 512."""
+    return (getattr(agent, "cfg", None) or {}).get("max_len") or LAYA_MAX_LEN
+
+
 def apply_max_len(agent: Any, max_len: int) -> int:
     """Set how many tokens a loaded laya agent reads, and return the checkpoint's own limit.
 
@@ -136,7 +141,7 @@ class Engine:
         if self.configured_max_len:
             self.native_max_len = apply_max_len(agent, self.configured_max_len)
         else:
-            self.native_max_len = (getattr(agent, "cfg", None) or {}).get("max_len") or LAYA_MAX_LEN
+            self.native_max_len = _native_max_len(agent)
 
     @property
     def max_len(self) -> int:
@@ -157,7 +162,7 @@ class Engine:
                             log.warning("could not load %s to read its context limit (%s); "
                                         "assuming %d", self.model_id, exc, LAYA_MAX_LEN)
                             return LAYA_MAX_LEN
-                        self._max_len = (getattr(agent, "cfg", None) or {}).get("max_len") or LAYA_MAX_LEN
+                        self._max_len = _native_max_len(agent)
         return self._max_len
 
     @property
@@ -284,21 +289,27 @@ class Engine:
                      else list(crit) if isinstance(crit, dict) else list(range(len(opts))))
             for i, text in enumerate(opts):
                 label = names[i] if i < len(names) else i
-                n = len(self.tokenizer(" " + text, add_special_tokens=False)["input_ids"])
+                ids = self.tokenizer(" " + text, add_special_tokens=False)["input_ids"]
+                n = len(ids)
                 if n > OPTION_TOKEN_CAP:
                     out.append(
                         f"{qid} option {label!r} is {n} tokens; the model sees the first "
                         f"{OPTION_TOKEN_CAP} and never reads: "
-                        f"{self.tokenizer.decode(self.tokenizer(' ' + text, add_special_tokens=False)['input_ids'][OPTION_TOKEN_CAP:])[:60]!r}"
+                        f"{self.tokenizer.decode(ids[OPTION_TOKEN_CAP:])[:60]!r}"
                     )
         return out
 
     def clip(self, prompt: str, budget: int = PROMPT_TOKEN_BUDGET) -> str:
         """The first `budget` tokens of `prompt`. See PROMPT_TOKEN_BUDGET for why this is a knob."""
-        ids = self.tokenizer(prompt)["input_ids"]
-        if len(ids) <= budget:
-            return prompt
-        return self.tokenizer.decode(ids[1 : budget + 1], skip_special_tokens=True)
+        return clip_ids(self.tokenizer, prompt, budget)
+
+
+def clip_ids(tokenizer: Any, prompt: str, budget: int) -> str:
+    """The first `budget` tokens of `prompt`, decoded; `prompt` itself when it already fits."""
+    ids = tokenizer(prompt)["input_ids"]
+    if len(ids) <= budget:
+        return prompt
+    return tokenizer.decode(ids[1 : budget + 1], skip_special_tokens=True)
 
 
 def load(model_id: str = DEFAULT_MODEL, bits: int = 16, max_len: int = 0, **load_options: Any) -> Engine:

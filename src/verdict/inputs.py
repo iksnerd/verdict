@@ -114,11 +114,15 @@ def preset(name: str) -> dict[str, Any]:
     return getattr(_laya_file("presets"), f"{name}_questions")()
 
 
+def _fields_in(q: Any) -> list[str]:
+    return _FIELD.findall(instruction_text(q))
+
+
 def fields_named(questions: dict[str, Any]) -> list[str]:
     """Every `field` the questions refer to, in first-seen order."""
     seen: dict[str, None] = {}
     for q in questions.values():
-        for f in _FIELD.findall(instruction_text(q)):
+        for f in _fields_in(q):
             seen.setdefault(f, None)
     return list(seen)
 
@@ -165,7 +169,7 @@ def missing_fields(state: Any, questions: dict[str, Any]) -> list[str]:
         # A text state has no fields at all, so a question about `message` is answered from
         # nothing just as surely as a dict without that key. One line for the whole bank: a
         # preset names the same field in every question.
-        asking = {name: _FIELD.findall(instruction_text(q)) for name, q in questions.items()}
+        asking = {name: _fields_in(q) for name, q in questions.items()}
         asking = {name: fields for name, fields in asking.items() if fields}
         if not asking:
             return []
@@ -178,7 +182,7 @@ def missing_fields(state: Any, questions: dict[str, Any]) -> list[str]:
         return []
     out = []
     for name, q in questions.items():
-        missing = [f for f in _FIELD.findall(instruction_text(q)) if f not in state]
+        missing = [f for f in _fields_in(q) if f not in state]
         if missing:
             out.append(f"question {name!r} asks about {', '.join(f'`{f}`' for f in missing)}, "
                        f"which the state does not have (keys: {', '.join(state) or 'none'})")

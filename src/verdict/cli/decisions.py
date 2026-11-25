@@ -376,8 +376,8 @@ def _cascade_cmd(args: argparse.Namespace) -> int:
                                below=below, fits=fits, holdout=0.3 if args.fit else None,
                                errors=errors)
         if args.out:
-            inference.write_atomic(args.out, json.dumps(
-                {"questions": {q: r["fit"] for q, r in report.items() if r["fit"]}}, indent=2) + "\n")
+            inference.write_json_atomic(
+                args.out, {"questions": {q: r["fit"] for q, r in report.items() if r["fit"]}})
             support._warn(f"wrote the fitted cuts to {args.out}; use them with --calibration")
         if args.json:
             print(json.dumps(report, indent=2))

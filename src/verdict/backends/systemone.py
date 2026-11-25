@@ -9,7 +9,7 @@ from __future__ import annotations
 from typing import Any
 
 from .base import BackendClosed
-from ..schema import DecideRequest, DecideResponse, Usage
+from ..schema import DecideRequest, DecideResponse, Usage, dump_questions
 from ..systemone import SystemOneClient, UpstreamError
 
 
@@ -44,7 +44,7 @@ class SystemOneBackend:
     def decide(self, request: DecideRequest) -> DecideResponse:
         if self._closed:
             raise BackendClosed(f"{self.name} is closed")
-        questions = {qid: q.model_dump(exclude_none=True) for qid, q in request.questions.items()}
+        questions = dump_questions(request.questions)
         raw = self._ask(request.state, questions, model=request.model)
         result = DecideResponse.model_validate(raw)
         # Missing counts are unknown, not zero. Local Laya computes its own explicit zeros.

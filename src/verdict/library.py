@@ -231,11 +231,11 @@ def ask(backend: Any, request: Any, *, allow_unmeasured: bool = False, yesno: bo
     """
     from .judge import abstain
 
-    if abstain_below is None:
-        return _ask(backend, request, allow_unmeasured, yesno, opt_out)
-    threshold = abstain.validate_threshold(abstain_below)
+    threshold = None if abstain_below is None else abstain.validate_threshold(abstain_below)
     out = _ask(backend, request, allow_unmeasured, yesno, opt_out)
-    marks = abstain.gate({qid: a.model_dump() for qid, a in out.answers.items()}, threshold,
+    if threshold is None:
+        return out
+    marks = abstain.gate(_dump_answers(out.answers), threshold,
                          uniform=getattr(backend, "name", None) == "uniform")
     answers = {qid: a.model_copy(update={"abstention": marks[qid]["abstention"],
                                          "abstention_threshold": threshold})
@@ -243,13 +243,16 @@ def ask(backend: Any, request: Any, *, allow_unmeasured: bool = False, yesno: bo
     return out.model_copy(update={"answers": answers})
 
 
+def _dump_answers(answers: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    return {qid: a.model_dump() for qid, a in answers.items()}
+
+
 def _ask(backend: Any, request: Any, allow_unmeasured: bool, yesno: bool, opt_out: str) -> Any:
     from .backends.base import is_proxy
-    from .schema import DecideRequest, DecideResponse, NoulAnswer, laya_questions
+    from .schema import DecideRequest, DecideResponse, NoulAnswer, dump_questions, laya_questions
 
     if is_proxy(backend):
-        prepare(request.state, {qid: q.model_dump(exclude_none=True)
-                                for qid, q in request.questions.items()},
+        prepare(request.state, dump_questions(request.questions),
                 model=request.model or backend.name, allow_unmeasured=allow_unmeasured,
                 yesno=True, opt_out=opt_out, max_options=None)
         return backend.decide(request)
@@ -261,7 +264,7 @@ def _ask(backend: Any, request: Any, allow_unmeasured: bool, yesno: bool, opt_ou
                                        model=request.model))
     if not rewritten:
         return out
-    dumped = as_yesno({qid: a.model_dump() for qid, a in out.answers.items()}, rewritten)
+    dumped = as_yesno(_dump_answers(out.answers), rewritten)
     answers = {qid: (NoulAnswer(noul=dumped[qid]["noul"], confidence=dumped[qid].get("confidence"),
                                 truncated=a.truncated,
                                 asked_as=dumped[qid].get("asked_as"))

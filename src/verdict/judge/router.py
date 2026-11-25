@@ -24,7 +24,7 @@ from __future__ import annotations
 from typing import Any, Mapping
 
 from ..answers import field, is_flat
-from ..backends.engine import PROMPT_TOKEN_BUDGET, load
+from ..backends.engine import PROMPT_TOKEN_BUDGET, clip_ids, load
 from .switch import Branch, Switch
 
 SMALL = "small"
@@ -135,10 +135,7 @@ def route(
 
 def clip(prompt: str, tokenizer, budget: int = PROMPT_TOKEN_BUDGET) -> str:
     """Deprecated shim. `Engine.clip` owns this now; kept for callers holding a bare tokenizer."""
-    ids = tokenizer(prompt)["input_ids"]
-    if len(ids) <= budget:
-        return prompt
-    return tokenizer.decode(ids[1 : budget + 1], skip_special_tokens=True)
+    return clip_ids(tokenizer, prompt, budget)
 
 
 def engine_for(model_id: str):

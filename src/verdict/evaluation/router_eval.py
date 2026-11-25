@@ -24,7 +24,7 @@ from pathlib import Path
 from typing import Any, Iterable, Sequence
 
 from .metrics import auc, bootstrap_ci
-from ..backends.engine import PROMPT_TOKEN_BUDGET
+from ..backends.engine import DEFAULT_MODEL, PROMPT_TOKEN_BUDGET
 from ..inputs import read_jsonl
 from ..pipeline.store import write_json_atomic
 from ..judge.router import BIG, ROUTER_BANK, SMALL, T_DIFFICULTY, T_SENSITIVE, route
@@ -36,9 +36,6 @@ EVALS = Path("bench/router_prompts.jsonl")
 #: bank and the token budget it was measured with; an entry whose fingerprint differs, or that has
 #: none (written before fingerprints existed), is measured again. Delete the file to re-measure all.
 CACHE = Path("data/router_probs.json")
-#: Base Laya, what an install runs. The private fine-tune is opt-in with --model; a default that
-#: names weights most users do not have makes the refit fail for them.
-DEFAULT_MODEL = "aac6fef/laya-mlx"
 
 #: `difficulty` runs 0 to 3; `is_sensitive` is a probability.
 D_GRID = [i / 20 for i in range(0, 61)]
